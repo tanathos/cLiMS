@@ -162,3 +162,37 @@ Design consequences:
 
 ## 14. Still open
 1. Whether adding or editing a real file moves `lastscan` and fires `library changed` (would need a real change, for example touching a tag in a test file).
+
+## 15. Implemented (Step 3)
+The index, sync and status described above now exist (`src/Clims.Catalog`, README there). How it came out:
+
+| Decision / measurement | Result |
+|---|---|
+| Persistence | SQLite via `Microsoft.Data.Sqlite`, one file per server UUID in `%LOCALAPPDATA%\cLiMS`, whole index saved in one transaction, schema version 1. Memory is the read model; SQLite only persists. |
+| Tracks synced | Light set: artist, artist id, album id, track number, disc, duration, genre (no file URL: that arrives with an on-view refresh). About 380 KB per 2 000 tracks. |
+| Cost on the Pi | genres + artists + albums about 10 s; tracks 6.8 s per 2 000 with `sort:albumtrack`, so a full sync takes **about 1.5 minutes** (two real syncs in the integration tests: 2 min 58 s for both). |
+| First build | Artists and albums are published after about 10 s, so the Library tab is usable while tracks stream in; visible albums fetch their own tracks (on-view refresh). Nothing partial is written to disk. |
+| Triggers | `lastscan` or any of the four counts differing from the index. A finished scan with no difference is silent. Checked at startup and on `rescan done`, `library changed`, and event-stream reconnects. |
+| Prompting | Never automatic. First build and each new change ask once (Y / Later); Later asks again at next launch. F5 or a click on the status offers resync or cancel at any time. |
+| Cancel / failure | The old index and the file stay as they were; status returns to `Server changed, resync pending` (or `Not synced` on a first build), with the reason shown as a notice. |
+| Scanning | The sync waits (polls `rescanprogress` every 5 s, before each tracks page). |
+| Search | Not part of Step 3 beyond a simple in-memory word-prefix scan so the Search tab works on real data (about 20 000 tracks per keystroke without any index structure); ranking, genres and the mixed server results are Step 4. |
+
+Surprises: the server's counts had moved since section 3 (19 960 tracks, 2 009 albums), so change detection fired on the first run; `artists` includes track-only people; and the genre tag needs an explicit sort (see `jsonrpc-client.md`).
+
+## 16. Implemented (Step 4)
+Ranked search over the local index, with the server filling gaps (`src/Clims.Catalog/Search`, `src/Clims.Tui/Ui/SearchTab.cs`, `ResultsView.cs`).
+
+| Topic | Result |
+|---|---|
+| Matching | Every query word must occur in the (accent- and case-folded, punctuation-normalised) name, in any order, **anywhere in a word**. The server only matches word starts, so `ure` finds The Cure locally and not on the server. Albums match on title + artist, tracks on title + artist + album. Genres are searched too; composers are not. |
+| Ranking | Per item: exact 100, starts with the query 80, every word starts a word 60, words only inside words 30. An album or track that matches only through its artist (or album) scores half of its tier; a title match whose artist also starts with the query gets +5 (the artist boost). Ties: shorter name, then alphabetical. Groups are always listed Artists, Albums, Tracks, Genres. |
+| Counts | Each group keeps its best 50 / 100 / 200 / 30 hits and the total number of matches, so the headers read `Tracks (10 / 220)`; "More…" shows the rest of the kept hits. Default view: 2 artists, 4 albums, 10 tracks, 3 genres. |
+| Speed | On the real saved index (19 960 tracks, 2 009 albums): `iron` 1.8 ms, `the` 7 ms, single letters 13-15 ms (they match almost everything), including ranking. No extra index structure: a scan over precomputed normalised strings. Measured with the opt-in test `Local_search_on_the_real_index_is_well_under_fifty_milliseconds` (`CLIMS_CATALOG_DB=<path to catalog-*.db>`, works on a copy). |
+| Keystrokes | The local answer is computed synchronously on every keystroke, so the old 250 ms debounce is gone. |
+| Mixed sources | `SearchService`: no index at all, every group comes from the server (`artists`, `albums`, `titles` with `search:`, and the global `search` for genres); index without tracks yet (first sync running), only Tracks come from the server. The server request waits 120 ms after the last keystroke, cancels the previous one, and an answer for older text is dropped (sequence number). Server hits are ranked with the same rules. While the answer is pending the screen says `Searching the server for …`. |
+| Offline | An unreachable server keeps the local groups and adds a note; a complete index never asks the server. |
+| Highlights | The matched fragments are drawn in the warning colour, on both lines of a row (`TextFolding.Highlights` maps folded matches back to the original text, so accents do not shift anything). |
+| Thumbnails | Albums and tracks show a 4x2-cell cover (Sixel when available) from the Library's cover cache; artists show an icon block. Lazy and cancelled when scrolled away. |
+
+Findings: LMS returns album titles only when the album tag is requested (found by the first fallback screenshot); server tracks carry their own album title and artwork id because the index may not know them yet; a track hit whose album is not in the index cannot be played (notice) until a sync.

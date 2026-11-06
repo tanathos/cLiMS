@@ -10,11 +10,19 @@
 
   <ItemGroup>
     <Using Include="Terminal.Gui.Drawing.Attribute" Alias="Attribute" />
+    <!-- "Catalog" is both a namespace (Clims.Catalog) and the model type: inside Clims.* the name resolves to the namespace. -->
+    <Using Include="Clims.Catalog.Catalog" Alias="MusicCatalog" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="SkiaSharp" Version="4.154.0" />
     <PackageReference Include="Terminal.Gui" Version="2.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Clims.Lms\Clims.Lms.csproj" />
+    <ProjectReference Include="..\Clims.Catalog\Clims.Catalog.csproj" />
+    <ProjectReference Include="..\Clims.Waveform\Clims.Waveform.csproj" />
   </ItemGroup>
 
 </Project>

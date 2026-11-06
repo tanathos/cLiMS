@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build (warnings are errors)
+        run: dotnet build --configuration Release
+      - name: Test (the opt-in tests need a real server and are skipped here)
+        run: dotnet test --configuration Release --no-build
+      - name: Publish a single-file build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: dotnet publish src/Clims.Tui -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'windows-latest'
+        with:
+          name: clims-win-x64
+          path: publish/Clims.Tui.exe

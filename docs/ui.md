@@ -72,3 +72,26 @@ Always full screen (alternate screen buffer, resize-aware). Three fixed regions:
 4. **Search tab:** what should it show (grouped Artists / Albums / Tracks? one flat list?) and should results play on Enter?
 5. **Multiple players:** show a player selector in the header, or always the one piCorePlayer?
 6. **Footer size:** is 5–6 rows acceptable, or do you want a taller footer for a larger cover and waveform?
+
+## 6. Implemented in Step 3
+- **Left pane:** a one-row header shows the dimension (`Album Artist ▾`, `F6` hint); click it or press `F6` to switch Album Artist, Genre, Year. Each list starts with "All ..." and shows album counts; type-ahead jumps by name (ignoring a leading "The ") or year. The Album Artist list contains only artists with albums (LMS's `artists` also returns track-only people). Genre needs track data, so it fills in as a first sync progresses.
+- **Right pane:** albums of the selection, each with cover, title, total length, `[artist ·] year · genres` and the two-column tracklist, all from the catalogue. While tracks have not arrived the block says `Loading tracks…`; visible albums refresh from the server as they appear. In lists that mix artists (All Artists, Genre, Year) the artist name is part of the detail line. Covers are fetched when a block becomes visible, with a dim `…` placeholder meanwhile (and `♪` for an album without artwork).
+- **Tab strip, right side:** questions and notices. `Library not synced yet (N tracks, M albums). Sync now? [Y Sync now] [L Later]`, `Resync the library now?`, `A sync is running. Cancel it?`, and failure or cancellation reasons. Answer with the key, Enter (first answer), Esc (last answer) or a click. A notice never replaces a question and disappears after 5 s.
+- **Header status:** the six states listed in the README, with sync progress and the age of the index; clicking it equals `F5`.
+- **Empty states:** `Library not synced yet. Press F5 to sync.`, `Syncing the library…`, and `The server cannot be reached and there is no saved library yet. Press F5 to retry.`
+- **Not done:** Space multi-select and a real queue (Step 5), the `a` / `n` actions only show a notice, an A-Z rail (type-ahead covers the jump), and the Folder dimension.
+
+## 7. Implemented in Step 4 (Search tab)
+- **Layout:** four groups, in this order: Artists (2), Albums (4), Tracks (10), Genres (3), each with a header `Name (shown / total)` and a `More …` row that expands it. Artists, albums and tracks are two-line rows with a 4x2 thumbnail on the left (artists: an icon block, since LMS has no portraits); line 1 is the name or title, line 2 (dim) is artist, album or year, the track length is right-aligned. Matched fragments are highlighted in both lines.
+- **Typing:** `/` focuses the search box; every keystroke updates the results at once (local index). While the index is incomplete the server fills in, and a line `Searching the server for …` shows until it answers. `Enter` or `Down` moves to the results.
+- **Results:** arrows, PageUp/PageDown, Home/End and the wheel move through them; `Enter` or a click plays a track or album (fake player until Step 5), opens an artist or genre in the Library tab; `a` / `n` add or play next (stubs until Step 5).
+- **Esc** clears the search and returns to the tab you came from (from the box or from the results).
+- **Not done:** playing a server-only track whose album is not in the index; Space multi-select.
+
+## 8. Implemented in Step 5 (playback, Queue tab, waveform, help)
+- **Footer:** shows what the player really plays (title, artist, album, cover), the seek bar with elapsed and total time (click to seek), transport buttons, volume bar and the waveform of the current track with the played part highlighted. While the waveform is being prepared the line says `Analysing waveform…`; if it cannot be drawn it says why (`No waveform: …`). When there is no player or the server is unreachable the footer's first line says so instead of `Nothing playing`.
+- **Controls:** every control acts on the server at once and is shown immediately; the real answer replaces it a moment later. `Previous` after 3 seconds restarts the track.
+- **Queue tab:** the live queue with a marker on the current track (`▶` playing, `▮` paused), counts and time left. `Enter` plays an entry, `x` / `Delete` removes, `Shift+Up/Down` moves, `c` clears (asks first). `s` saves the queue under a name (a text bar appears at the bottom), `o` lists saved queues: `Enter` replaces the queue (asks first, because the stream restarts), `a` appends, `x` deletes, `Esc` goes back. Saved queues keep file addresses, so they survive a rescan; files that disappeared are skipped and counted in the notice.
+- **Queueing from the library and search:** `a` / `n` add the highlighted track to the end / right after the current track (playback continues without a gap); `A` / `N` do it for the whole album; `Enter` plays and replaces the queue.
+- **Help:** `?` draws the key reference over the tabs; `?` or `Esc` closes it.
+- **Not done:** a player selector, themes and key bindings in a settings file, a first-run screen.

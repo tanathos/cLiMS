@@ -16,6 +16,7 @@ public static class Theme
     public static readonly Color FgDim = Rgb(128, 134, 148);
     public static readonly Color Accent = Rgb(110, 190, 255);
     public static readonly Color Good = Rgb(112, 200, 130);
+    public static readonly Color Bad = Rgb(228, 104, 104);
     public static readonly Color Warn = Rgb(240, 190, 90);
 
     /// <summary>Scheme for stock views (the search TextField); owner-drawn views paint with the attributes below.</summary>

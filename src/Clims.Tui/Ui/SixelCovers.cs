@@ -16,8 +16,18 @@ public sealed record SixelPlacement(CoverImage Image, int Cols, int Rows, Point 
 /// </summary>
 public static class SixelCovers
 {
-    private static readonly Dictionary<object, Dictionary<string, SixelToRender>> Owners = new();
+    private static readonly Dictionary<object, Dictionary<string, Entry>> Owners = new();
     private static readonly Dictionary<(CoverImage, int, int, bool), string> Encoded = new();
+
+    private const int SettleFrames = 4;
+    private static int _nextId;
+
+    private sealed class Entry(SixelToRender item)
+    {
+        public SixelToRender Item { get; } = item;
+
+        public int Settle { get; set; }
+    }
 
     public static IDriver? Driver { get; set; }
 
@@ -38,22 +48,30 @@ public static class SixelCovers
         }
 
         Owners.TryGetValue(owner, out var previous);
-        var next = new Dictionary<string, SixelToRender>();
+        var next = new Dictionary<string, Entry>();
         foreach (var placement in placements)
         {
             if (previous is not null && previous.TryGetValue(placement.Key, out var existing))
             {
-                existing.IsDirty = resend;
+                // A still image is sent again for a few frames after it appears or the queue is rebuilt: the cells
+                // under it are rewritten in the first frames, which would otherwise erase it. After that it stays put.
+                if (resend || existing.Settle > 0)
+                {
+                    existing.Item.IsDirty = true;
+                    existing.Settle = Math.Max(0, existing.Settle - 1);
+                }
+
                 next[placement.Key] = existing;
                 continue;
             }
 
-            next[placement.Key] = new SixelToRender
+            next[placement.Key] = new Entry(new SixelToRender
             {
                 SixelData = Encode(placement),
                 ScreenPosition = placement.Screen,
+                Id = placement.Key + "#" + ++_nextId,
                 IsDirty = true,
-            };
+            }) { Settle = SettleFrames };
         }
 
         var changed = previous is null || !previous.Keys.SequenceEqual(next.Keys);
@@ -98,8 +116,9 @@ public static class SixelCovers
 
         var queue = Driver.GetSixels();
         queue.Clear();
-        foreach (var item in Owners.Values.SelectMany(o => o.Values))
+        foreach (var item in Owners.Values.SelectMany(o => o.Values).Select(e => { e.Settle = SettleFrames; e.Item.IsDirty = true; return e.Item; }))
         {
+
             queue.Enqueue(item);
         }
     }

@@ -17,10 +17,36 @@ public sealed class CoverImage : IDisposable
 
     public string Label { get; }
 
+    /// <summary>Wraps raw pixels (generated demo covers).</summary>
+    public static CoverImage FromPixels(Color[,] pixels, string label)
+    {
+        var width = pixels.GetLength(0);
+        var height = pixels.GetLength(1);
+        var bitmap = new SKBitmap(width, height);
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var c = pixels[x, y];
+                bitmap.SetPixel(x, y, new SKColor((byte)c.R, (byte)c.G, (byte)c.B));
+            }
+        }
+
+        return new CoverImage(bitmap, label);
+    }
+
+    /// <summary>Decodes JPEG, PNG and friends; null when the bytes are not an image (SkiaSharp throws on those, we do not).</summary>
     public static CoverImage? Decode(byte[] data, string label)
     {
-        var bitmap = SKBitmap.Decode(data);
-        return bitmap is null ? null : new CoverImage(bitmap, label);
+        try
+        {
+            var bitmap = SKBitmap.Decode(data);
+            return bitmap is null ? null : new CoverImage(bitmap, label);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Colour of pixel (x, y) when the cover is scaled to <paramref name="cols"/> x <paramref name="pixelRows"/>.</summary>

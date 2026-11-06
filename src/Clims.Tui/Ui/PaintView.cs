@@ -20,6 +20,8 @@ public abstract class PaintView : View
     protected virtual Attribute Base => Theme.Normal;
 
     private readonly List<SixelPlacement> _sixels = new();
+    private readonly HashSet<CoverKey> _wantedCovers = new();
+    private bool _hadCovers;
 
     /// <summary>
     /// True when repainting overwrites the cells under a sixel image, so it must be sent again (scrolling lists).
@@ -27,17 +29,29 @@ public abstract class PaintView : View
     /// </summary>
     protected virtual bool ResendSixelsOnPaint => true;
 
+    /// <summary>Columns on the left that the per-frame clear leaves alone (a still sixel there must not be overwritten, or it is erased).</summary>
+    protected virtual int ClearFromX => 0;
+
+    /// <summary>Terminal.Gui would clear the whole viewport (and erase a still sixel) before painting; the clear is ours.</summary>
+    protected override bool OnClearingViewport() => ClearFromX > 0 || base.OnClearingViewport();
+
+    private HashSet<string> _blanked = new();
+    private HashSet<string> _blankedNow = new();
+
     protected override bool OnDrawingContent(DrawContext? context)
     {
         var started = Stopwatch.GetTimestamp();
         SetAttribute(Base);
         for (var y = 0; y < H; y++)
         {
-            Move(0, y);
-            AddStr(new string(' ', W));
+            var from = Math.Clamp(ClearFromX, 0, W);
+            Move(from, y);
+            AddStr(new string(' ', W - from));
         }
 
         _sixels.Clear();
+        _blankedNow.Clear();
+        _wantedCovers.Clear();
         try
         {
             Paint();
@@ -48,7 +62,18 @@ public abstract class PaintView : View
             CrashLog.Write(ex);
         }
 
+        (_blanked, _blankedNow) = (_blankedNow, _blanked);
         SixelCovers.Publish(this, _sixels, ResendSixelsOnPaint);
+
+        // Tell the cover source what this view shows now, so it fetches those and cancels the ones scrolled away.
+        // Views that draw no covers do not register, which keeps the cover source's bookkeeping small.
+        if (_wantedCovers.Count > 0 || _hadCovers)
+        {
+            CoverArt.Source.Want(this, _wantedCovers.ToArray());
+            _hadCovers = _wantedCovers.Count > 0;
+        }
+
+
         PerfStats.Record(GetType().Name, Stopwatch.GetElapsedTime(started));
         return true;
     }
@@ -120,14 +145,28 @@ public abstract class PaintView : View
     }
 
     /// <summary>Draws a cover in the current <see cref="CoverArt.Mode"/>; cells outside the view are skipped so it scrolls like text.</summary>
-    protected void DrawCover(int x, int y, int cols, int rows, int seed)
+    protected void DrawCover(int x, int y, int cols, int rows, CoverKey key)
     {
+        _wantedCovers.Add(key);
+        var image = CoverArt.Source.TryGet(key);
+        if (image is null)
+        {
+            DrawPlaceholder(x, y, cols, rows, loading: key.ArtworkId is not null);
+            return;
+        }
+
         // A sixel cannot be clipped, so only covers fully inside the view use it; the rest fall back to cells.
         var inside = x >= 0 && y >= 0 && x + cols <= W && y + rows <= H;
         if (inside && CoverArt.UseSixel)
         {
-            FillBlank(x, y, cols, rows);
-            _sixels.Add(new SixelPlacement(CoverArt.ImageFor(seed)!, cols, rows, ViewportToScreen(new System.Drawing.Point(x, y))));
+            var blankKey = $"{x},{y},{cols},{rows}|{image.Label}";
+            _blankedNow.Add(blankKey);
+            if (ResendSixelsOnPaint || !_blanked.Contains(blankKey))
+            {
+                FillBlank(x, y, cols, rows);
+            }
+
+            _sixels.Add(new SixelPlacement(image, cols, rows, ViewportToScreen(new System.Drawing.Point(x, y))));
             return;
         }
 
@@ -147,12 +186,24 @@ public abstract class PaintView : View
                     continue;
                 }
 
-                var (glyph, fg, bg) = CoverArt.Glyph(seed, c, r, cols, rows);
+                var (glyph, fg, bg) = CoverArt.Glyph(image, c, r, cols, rows);
                 SetAttribute(new Attribute(fg, bg));
                 Move(cx, cy);
                 AddStr(glyph);
             }
         }
+    }
+
+    /// <summary>A dim block with a note in the middle: shown while a cover is being fetched, or when an album has none.</summary>
+    private void DrawPlaceholder(int x, int y, int cols, int rows, bool loading)
+    {
+        var attr = new Attribute(loading ? Theme.FgDim : Theme.Rgb(70, 76, 90), Theme.BgAlt);
+        for (var r = 0; r < rows; r++)
+        {
+            FillRow(y + r, x, x + cols, attr);
+        }
+
+        Put(x + cols / 2, y + rows / 2, loading ? "…" : "♪", attr);
     }
 
     private void FillBlank(int x, int y, int cols, int rows)

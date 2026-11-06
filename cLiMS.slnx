@@ -1,9 +1,14 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Clims.Catalog/Clims.Catalog.csproj" />
     <Project Path="src/Clims.Lms/Clims.Lms.csproj" />
     <Project Path="src/Clims.Tui/Clims.Tui.csproj" />
+    <Project Path="src/Clims.Waveform/Clims.Waveform.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Clims.Catalog.Tests/Clims.Catalog.Tests.csproj" />
     <Project Path="tests/Clims.Lms.Tests/Clims.Lms.Tests.csproj" />
+    <Project Path="tests/Clims.Tui.Tests/Clims.Tui.Tests.csproj" />
+    <Project Path="tests/Clims.Waveform.Tests/Clims.Waveform.Tests.csproj" />
   </Folder>
 </Solution>

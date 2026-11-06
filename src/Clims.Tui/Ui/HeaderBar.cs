@@ -1,4 +1,7 @@
+using Clims.Catalog;
 using Clims.Tui.Data;
+using Terminal.Gui.Drawing;
+using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 
@@ -13,7 +16,7 @@ public sealed class HeaderBar : View
 
     private readonly StatusText _status;
 
-    public HeaderBar(IPlayerController player)
+    public HeaderBar(IPlayerController player, Func<SyncStatus> syncStatus)
     {
         CanFocus = true;
         Height = Rows;
@@ -21,22 +24,46 @@ public sealed class HeaderBar : View
 
         var brand = new BrandText { X = Pad, Y = 1, Width = 8, Height = 1 };
         Search = new TextField { X = Pad + 9, Y = 1, Width = SearchWidth, Height = 1 };
-        _status = new StatusText(player) { X = Pad + 9 + SearchWidth + 2, Y = 1, Width = Dim.Fill(Pad), Height = 1 };
+        _status = new StatusText(player, syncStatus) { X = Pad + 9 + SearchWidth + 2, Y = 1, Width = Dim.Fill(Pad), Height = 1 };
+        _status.Clicked += () => SyncClicked?.Invoke();
         Add(new Backdrop { X = 0, Y = 0, Width = Dim.Fill(), Height = Rows });
         Add(brand, Search, _status);
     }
 
     public TextField Search { get; }
 
-    public SyncState Sync
-    {
-        get => _status.Sync;
-        set => _status.Sync = value;
-    }
+    /// <summary>The sync status text was clicked: offer "Resync now" or "Cancel".</summary>
+    public event Action? SyncClicked;
 
     public void Refresh() => _status.SetNeedsDraw();
 
-    private static Attribute OnHeader(Terminal.Gui.Drawing.Color fg) => new(fg, Theme.BgHeader);
+    /// <summary>Symbol, text and colour for a sync status (the five states of search.md section 10, plus demo).</summary>
+    public static (string Symbol, string Label, Color Color) Describe(SyncStatus s, DateTimeOffset now) => s.State switch
+    {
+        SyncState.Syncing => ("◐", "Sync in progress, live search only" + (s.Progress is { Length: > 0 } p ? " · " + p : ""), Theme.Warn),
+        SyncState.Synced => ("●", $"Synced ({Age(s.SyncedAt, now)})", Theme.Good),
+        SyncState.ServerChanged => ("◔", "Server changed, resync pending", Theme.Warn),
+        SyncState.Offline => ("✕", s.HasIndex ? "Offline (using local index)" : "Offline", Theme.Bad),
+        SyncState.Demo => ("◇", "Demo data (no server)", Theme.Accent),
+        _ => ("○", "Not synced", Theme.Warn),
+    };
+
+    /// <summary>Compact age such as "just now", "5 min ago", "2 h ago", "3 d ago".</summary>
+    public static string Age(DateTimeOffset? at, DateTimeOffset now)
+    {
+        if (at is null)
+        {
+            return "unknown age";
+        }
+
+        var d = now - at.Value;
+        return d.TotalMinutes < 1 ? "just now"
+            : d.TotalHours < 1 ? $"{(int)d.TotalMinutes} min ago"
+            : d.TotalDays < 1 ? $"{(int)d.TotalHours} h ago"
+            : $"{(int)d.TotalDays} d ago";
+    }
+
+    private static Attribute OnHeader(Color fg) => new(fg, Theme.BgHeader);
 
     private sealed class Backdrop : PaintView
     {
@@ -57,33 +84,44 @@ public sealed class HeaderBar : View
     private sealed class StatusText : PaintView
     {
         private readonly IPlayerController _player;
+        private readonly Func<SyncStatus> _status;
 
-        public StatusText(IPlayerController player)
+        public StatusText(IPlayerController player, Func<SyncStatus> status)
         {
             _player = player;
+            _status = status;
         }
 
-        public SyncState Sync { get; set; } = SyncState.Synced;
+        public event Action? Clicked;
 
         protected override Attribute Base => OnHeader(Theme.Fg);
 
         protected override void Paint()
         {
-            var (label, color) = Sync switch
-            {
-                SyncState.NotSynced => ("Not synced", Theme.Warn),
-                SyncState.InProgress => ("Sync in progress, live search only", Theme.Warn),
-                _ => ("Synced (2 h ago)", Theme.Good),
-            };
+            var (symbol, label, color) = Describe(_status(), DateTimeOffset.UtcNow);
 
             // Right-aligned. The emoji is two UTF-16 chars but one display cell pair, so it is counted as 2.
             var right = $"  🔊 {_player.Volume}";
-            var text = $"{_player.PlayerName} ● {label}";
-            var x = Math.Max(0, W - text.Length - right.Length);
-            x = Put(x, 0, _player.PlayerName + " ", OnHeader(Theme.Fg));
-            x = Put(x, 0, "● ", OnHeader(color));
+            var name = _player.PlayerName + " ";
+            var room = Math.Max(0, W - right.Length - name.Length - symbol.Length - 1);
+            label = Clip(label, room);
+            var total = name.Length + symbol.Length + 1 + label.Length + right.Length;
+            var x = Math.Max(0, W - total);
+            x = Put(x, 0, name, OnHeader(Theme.Fg));
+            x = Put(x, 0, symbol + " ", OnHeader(color));
             x = Put(x, 0, label, OnHeader(Theme.FgDim));
             Put(x, 0, right, OnHeader(Theme.Fg));
+        }
+
+        protected override bool OnMouseEvent(Mouse mouse)
+        {
+            if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked))
+            {
+                Clicked?.Invoke();
+                return true;
+            }
+
+            return base.OnMouseEvent(mouse);
         }
     }
 }

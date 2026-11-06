@@ -1,4 +1,7 @@
+using Clims.Catalog;
 using Clims.Tui.Data;
+using Clims.Waveform;
+using Terminal.Gui.Drawing;
 using Terminal.Gui.Input;
 
 namespace Clims.Tui.Ui;
@@ -11,46 +14,62 @@ public sealed class FooterView : PaintView
 {
     public const int Rows = 6;
 
-    private const int CoverCols = 10;
-    private const int CoverRows = 5;
+    private const int CoverCols = 12;
+    private const int CoverRows = 6;
     private const string Blocks = " ▁▂▃▄▅▆▇█";
 
     private readonly IPlayerController _player;
+    private readonly WaveformService? _waves;
     private readonly Dictionary<int, float[]> _peaks = new();
     private readonly List<(int X0, int X1, Action Run)> _buttons = new();
     private (int X0, int X1) _seek;
     private (int X0, int X1) _volume;
 
-    public FooterView(IPlayerController player)
+    /// <summary>Creates the footer. With no <paramref name="waves"/> (demo mode) a generated waveform is drawn.</summary>
+    public FooterView(IPlayerController player, WaveformService? waves = null)
     {
         _player = player;
+        _waves = waves;
     }
+
+    private double Fraction(CatalogTrack track) =>
+        track.Duration <= TimeSpan.Zero ? 0 : Math.Clamp(_player.Elapsed / track.Duration, 0, 1);
 
     /// <summary>Set by the main window when the terminal is smaller than 100x30: drop cover/waveform, keep controls.</summary>
     public bool ShowCover { get; set; } = true;
+
+    /// <summary>The cover cells never change between frames, so the sixel is not re-sent every frame (that flickered).</summary>
+    protected override bool ResendSixelsOnPaint => false;
+
+    protected override int ClearFromX => ShowCover ? CoverCols : 0;
 
     public bool ShowWaveform { get; set; } = true;
 
     protected override void Paint()
     {
         _buttons.Clear();
-        var track = _player.Current;
-        if (track is null)
+        const string hint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-3 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
+        if (_player.Current is not { } now)
         {
-            Put(1, 0, "Nothing playing", Theme.Dim);
+            _seek = (0, 0);
+            Put(1, 0, Clip(_player.Problem ?? "Nothing playing", W - 2), _player.Problem is null ? Theme.Dim : new Attribute(Theme.Warn, Theme.Bg));
+            PaintControls(1);
+            Put(1, 5, Clip(hint, W - 2), Theme.Dim);
             return;
         }
 
-        PaintSeekBar(track);
+        var track = now.Track;
+        var album = now.Album;
+        PaintSeekBar(track, ShowCover ? CoverCols + 1 : 1);
 
         var x0 = 1;
-        if (ShowCover && _player.CurrentAlbum is { } album)
+        if (ShowCover)
         {
-            DrawCover(1, 1, CoverCols, CoverRows, album.ArtSeed);
-            x0 = CoverCols + 3;
+            DrawCover(0, 0, CoverCols, CoverRows, new CoverKey(album.ArtworkId, album.Id));
+            x0 = CoverCols + 2;
         }
 
-        Put(x0, 1, Clip($"{track.Artist} – {track.Title}  ·  {track.Album}", W - x0 - 2), Theme.Normal);
+        PaintTitle(now, x0, W - x0 - 2);
 
         if (ShowWaveform)
         {
@@ -58,39 +77,101 @@ public sealed class FooterView : PaintView
         }
 
         PaintControls(x0);
-        Put(x0, 5, Clip("Space play/pause  ←/→ ±10 s  n/p track  +/- volume  / search  1-3 tabs  F2 sync  F3/F4 cover mode/size  Ctrl+Q quit", W - x0 - 1), Theme.Dim);
+        Put(x0, 5, Clip(hint, W - x0 - 1), Theme.Dim);
     }
 
-    private void PaintSeekBar(TrackItem track)
+    /// <summary>The user clicked the artist of the playing track: show that artist in the library.</summary>
+    public event Action<CatalogAlbum>? ArtistClicked;
+
+    /// <summary>The user clicked the album of the playing track: show it in the library, scrolled into view.</summary>
+    public event Action<CatalogAlbum>? AlbumClicked;
+
+    private (int X0, int X1) _artistBox;
+    private (int X0, int X1) _albumBox;
+
+    /// <summary>"artist · album · track"; artist and album are links (underlined, clickable).</summary>
+    private void PaintTitle(NowPlaying now, int x, int width)
+    {
+        const string sep = "  ·  ";
+        var link = new Attribute(Theme.Fg, Theme.Bg, TextStyle.Underline);
+        var artist = now.Track.Artist ?? now.Album.ArtistName;
+        var end = x + width;
+
+        _artistBox = _albumBox = (0, 0);
+        var cx = x;
+        var s = Clip(artist, Math.Max(0, end - cx));
+        var next = Put(cx, 1, s, link);
+        _artistBox = (cx, next);
+        cx = next;
+        if (cx >= end)
+        {
+            return;
+        }
+
+        cx = Put(cx, 1, Clip(sep, end - cx), Theme.Dim);
+        s = Clip(now.Album.Title, Math.Max(0, end - cx));
+        next = Put(cx, 1, s, link);
+        _albumBox = (cx, next);
+        cx = next;
+        if (cx >= end)
+        {
+            return;
+        }
+
+        cx = Put(cx, 1, Clip(sep, end - cx), Theme.Dim);
+        Put(cx, 1, Clip(now.Track.Title, Math.Max(0, end - cx)), Theme.Normal);
+    }
+
+    private void PaintSeekBar(CatalogTrack track, int left)
     {
         var elapsed = Fmt(_player.Elapsed);
         var total = Fmt(track.Duration);
-        var x0 = elapsed.Length + 2;
+        var x0 = left + elapsed.Length + 1;
         var x1 = W - total.Length - 2;
         _seek = (x0, x1);
-        Put(1, 0, elapsed, Theme.Normal);
+        Put(left, 0, elapsed, Theme.Normal);
         Put(x1 + 1, 0, total, Theme.Dim);
 
         var width = Math.Max(1, x1 - x0);
-        var filled = (int)(width * Math.Clamp(_player.Elapsed / track.Duration, 0, 1));
+        var filled = (int)(width * Fraction(track));
         Put(x0, 0, new string('━', filled), new Attribute(Theme.Accent, Theme.Bg));
         Put(x0 + filled, 0, new string('─', width - filled), Theme.Dim);
     }
 
-    private void PaintWaveform(TrackItem track, int x, int y, int width)
+    private void PaintWaveform(CatalogTrack track, int x, int y, int width)
     {
         if (width < 8)
         {
             return;
         }
 
-        if (!_peaks.TryGetValue(track.Id, out var peaks))
+        float[] peaks;
+        if (_waves is null)
         {
-            peaks = MakePeaks(track.Id);
-            _peaks[track.Id] = peaks;
+            if (!_peaks.TryGetValue(track.Id, out peaks!))
+            {
+                peaks = MakePeaks(track.Id);
+                _peaks[track.Id] = peaks;
+            }
+        }
+        else if (_waves.TryGet(track.Id) is { } profile)
+        {
+            peaks = profile.Peaks;
+        }
+        else
+        {
+            // Not drawn yet: say why instead of leaving a hole (no colour-only or silent states).
+            var note = _waves.StateOf(track.Id) switch
+            {
+                WaveformState.Unsupported => "No waveform: " + (_waves.ErrorOf(track.Id) ?? "unsupported format"),
+                WaveformState.Failed => "No waveform: " + (_waves.ErrorOf(track.Id) ?? "download failed") + " (retrying later)",
+                _ => "◐ Analysing waveform…",
+            };
+            Put(x, y, Clip(note, width), Theme.Dim);
+            return;
         }
 
-        var played = (int)(width * Math.Clamp(_player.Elapsed / track.Duration, 0, 1));
+        var played = (int)(width * Fraction(track));
         var top = new char[width];
         var bottom = new char[width];
         for (var i = 0; i < width; i++)
@@ -157,6 +238,21 @@ public sealed class FooterView : PaintView
             || mouse.Position is not { } p)
         {
             return base.OnMouseEvent(mouse);
+        }
+
+        if (p.Y == 1 && mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && _player.Current is { } playing)
+        {
+            if (p.X >= _artistBox.X0 && p.X < _artistBox.X1)
+            {
+                ArtistClicked?.Invoke(playing.Album);
+                return true;
+            }
+
+            if (p.X >= _albumBox.X0 && p.X < _albumBox.X1)
+            {
+                AlbumClicked?.Invoke(playing.Album);
+                return true;
+            }
         }
 
         if (p.Y == 0 && p.X >= _seek.X0 && p.X < _seek.X1)

@@ -71,6 +71,10 @@ await foreach (var e in events.ReadAllAsync(token))
   30 s) and reports `EventStreamStateEvent`.
 - **Tags are different for albums and tracks.** Artwork is `j` on `albums` and `J` on tracks; artist id is `S` vs `s`. Use
   the enums, not letters.
+- **`titles` with the genre tag needs an explicit sort.** On LMS 9.1.1, `tags:...g...` with `sort:title` or with no sort makes the
+  server drop the connection (a `LmsProtocolException`); `sort:albumtrack` works, at about 7 s per 2 000 tracks on a Raspberry Pi.
+  `TrackQuery` therefore defaults to `AlbumTrack`; keep an explicit sort when you ask for genres in bulk. Found by the catalogue's
+  real-server integration test.
 - **Auth.** Optional HTTP Basic credentials on the HTTP client. The CLI socket needs no login on a server without a
   password; `CliEventStream` does not log in. Cover and download URLs need the same credentials if protection is on.
   Untested against a protected server.

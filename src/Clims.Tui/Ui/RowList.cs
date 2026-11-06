@@ -34,6 +34,14 @@ public sealed class RowList : PaintView
 
     public bool Zebra { get; init; }
 
+    /// <summary>Optional small clickable glyph drawn after the text of some rows (null = none).</summary>
+    public Func<Row, string?>? IconFor { get; init; }
+
+    /// <summary>The glyph of a row was clicked (the row is not activated).</summary>
+    public event Action<Row>? IconClicked;
+
+    private static int IconX(Row row) => 1 + row.Text.Length + 2;
+
     public IReadOnlyList<Row> Rows
     {
         get => _rows;
@@ -89,6 +97,11 @@ public sealed class RowList : PaintView
             FillRow(y, 0, contentWidth, attr);
             var right = row.Right.Length > 0 ? row.Right + " " : "";
             Put(1, y, Clip(row.Text, contentWidth - 1 - right.Length), attr);
+            if (IconFor?.Invoke(row) is { } icon && IconX(row) + icon.Length < contentWidth - right.Length)
+            {
+                Put(IconX(row), y, icon, i == _selected ? attr : new Attribute(Theme.Accent, attr.Background));
+            }
+
             if (right.Length > 0)
             {
                 Put(contentWidth - right.Length, y, right, i == _selected ? attr : new Attribute(Theme.FgDim, attr.Background));
@@ -154,7 +167,8 @@ public sealed class RowList : PaintView
             return true;
         }
 
-        var click = mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked);
+        var click = mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) || mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
+        var doubleClick = mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
         var press = mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed);
         if ((click || press) && mouse.Position is { } p)
         {
@@ -169,10 +183,21 @@ public sealed class RowList : PaintView
             {
                 SetFocus();
                 var i = _offset + p.Y;
+                if (i >= 0 && i < _rows.Count && IconFor?.Invoke(_rows[i]) is { } glyph
+                    && p.X >= IconX(_rows[i]) - 1 && p.X <= IconX(_rows[i]) + glyph.Length)
+                {
+                    SetFocus();
+                    IconClicked?.Invoke(_rows[i]);
+                    return true;
+                }
+
                 if (i >= 0 && i < _rows.Count && _rows[i].Kind != RowKind.Header)
                 {
                     Select(i, true);
-                    RowActivated?.Invoke(_rows[i]);
+                    if (doubleClick)
+                    {
+                        RowActivated?.Invoke(_rows[i]);
+                    }
                 }
 
                 return true;

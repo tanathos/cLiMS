@@ -139,6 +139,7 @@ The proposal above is now `src/Clims.Lms` (see its README and `docs/sprint.md` l
 - A closed connection without a reply is `HttpRequestError.ResponseEnded` in .NET; verified with a real socket. Mapped to `LmsProtocolException`.
 - Insert-next with several id chunks is sent last-to-first so order is preserved.
 - Fixtures recorded from the real server live in `tests/Clims.Lms.Tests/Fixtures`.
+- **Found in Step 3:** `titles` with the genre tag (`g`) is rejected (connection dropped) when sorted by `title` or not sorted at all; `sort:albumtrack` works (`titles 0 2000 tags:adtesgi sort:albumtrack` took 6.7 s on the Pi, 380 KB; `tracknum` 7.7 s, `new` 8.7 s; `alts` with `sort:title` works). `artists` returns every contributor, including people who only appear on tracks.
 
 ## 9. Still open
 1. Audio-level gaplessness (needs the Squeezelite `-v` capture, section 4b/4c).
