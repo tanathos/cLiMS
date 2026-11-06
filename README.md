@@ -4,7 +4,11 @@ Full-screen terminal client for Lyrion Music Server (LMS), built on .NET 10 and 
 Planning and research live in [`docs/`](docs); start with [`docs/sprint.md`](docs/sprint.md).
 
 ## Status
-Step 1 (TUI skeleton with fake data, no network) is implemented. The LMS library, catalogue index, search and real playback are Steps 2 to 5.
+- Step 1: TUI skeleton with fake data (`src/Clims.Tui`), done.
+- Step 2: LMS client library (`src/Clims.Lms`, docs in its [README](src/Clims.Lms/README.md), tests in `tests/Clims.Lms.Tests`), done. The TUI does not use it yet.
+- Steps 3 to 5 (catalogue index, search, real playback and queues) are next; see `docs/sprint.md`.
+
+Run the tests: `dotnet test` (add `$env:CLIMS_LMS_URL = "http://host:9000/"` to also run the read-only integration tests).
 
 ## Run
 ```
@@ -39,6 +43,7 @@ Scrolling: the mouse wheel scrolls the pane under the pointer (no click needed).
 Footer: click the progress bar to seek, the buttons to control playback, the volume bar to set it.
 
 ## Layout
+- `src/Clims.Lms`: UI-free LMS client library (JSON-RPC, typed models, events). `tests/Clims.Lms.Tests`: its tests and recorded fixtures.
 - `src/Clims.Tui/Data`: models, the `ILibrarySource` and `IPlayerController` interfaces, and in-memory fakes (1 000 artists, about 2 500 albums). Steps 2 to 5 replace the fakes.
 - `src/Clims.Tui/Ui`: owner-drawn views. `PaintView` is the base (clipped text helpers, half-block covers), `RowList` is the virtualised list, `AlbumsView` the variable-height album blocks, `FooterView` the transport bar and waveform, `MainWindow` the wiring and global keys.
 

@@ -1,5 +1,9 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Clims.Lms/Clims.Lms.csproj" />
     <Project Path="src/Clims.Tui/Clims.Tui.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Clims.Lms.Tests/Clims.Lms.Tests.csproj" />
   </Folder>
 </Solution>

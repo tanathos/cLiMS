@@ -130,6 +130,16 @@ Conclusions:
 - **Position after a boundary:** the first `time` after `newsong` was 0.5 s (FLAC) and 1.3 s (MP3), so `time` right after a transition is not reliable to the tenth of a second; use the event timestamp as 0.
 - `time` is reported in real seconds and advances about 0.45 s per 0.45 s poll, so linear interpolation between polls is sufficient for the playhead.
 
+## 8b. Implemented (Step 2)
+The proposal above is now `src/Clims.Lms` (see its README and `docs/sprint.md` log). Differences from the plan and facts learned while building it:
+- Typed layer over a raw layer, as proposed. Hand-written mapping from `JsonElement` replaces source-generated serializers (loose typing; no reflection). No `ILogger` yet.
+- **`albums` tag `j` = `artwork_track_id`**, so cover URLs come straight from the album list. Album tag letters differ from track tags (`j`/`J`, `S`/`s`); the library has separate `AlbumTags` and `TrackTags`.
+- `songinfo` replies with one single-key object per field (`songinfo_loop:[{"id":..},{"title":..},...]`).
+- `search` loops are `contributors_loop`/`albums_loop`/`tracks_loop` with `*_id` keys and a `*_count` per group.
+- A closed connection without a reply is `HttpRequestError.ResponseEnded` in .NET; verified with a real socket. Mapped to `LmsProtocolException`.
+- Insert-next with several id chunks is sent last-to-first so order is preserved.
+- Fixtures recorded from the real server live in `tests/Clims.Lms.Tests/Fixtures`.
+
 ## 9. Still open
 1. Audio-level gaplessness (needs the Squeezelite `-v` capture, section 4b/4c).
 2. HTTP Basic auth behaviour with a password set (not tested: needs changing server settings).
