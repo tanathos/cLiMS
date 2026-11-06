@@ -38,7 +38,7 @@ Research notes (read before coding; all measured on the real server unless marke
 ## 2. Status board
 | Step | Goal | Status | Owner | Notes |
 |---|---|---|---|---|
-| 1 | TUI skeleton, fake data, "feel" test | Not started | | Framework go/no-go decision |
+| 1 | TUI skeleton, fake data, "feel" test | Done, awaiting user's feel review | Claude | Terminal.Gui 2.5.0 go (D6); see Log for checklist results and what is untested |
 | 2 | `Clims.Lms` library | Not started | | |
 | 3 | Catalogue navigation (index + Library tab) | Not started | | Needs 1 and 2 |
 | 4 | Search | Not started | | Needs 3 |
@@ -54,7 +54,7 @@ Status values: Not started / In progress / Blocked / Done. Steps 1 and 2 can run
 | D3 | Terminal in use / image strategy | Windows Terminal; half-block covers in lists, Sixel only for footer cover (optional) |
 | D4 | Multiple players | One player (the Pi); no selector yet, but code takes a player id |
 | D5 | Footer height | 5 to 6 rows |
-| D6 | Terminal.Gui v2 stability on .NET 10 | Decided by the Step 1 spike |
+| D6 | Terminal.Gui v2 stability on .NET 10 | **Decided: go.** 2.5.0 stable works on .NET 10 for everything in the Step 1 layout; no fallback needed (final call stays with the user's feel review) |
 | D7 | Image decoder for covers (ImageSharp vs SkiaSharp) | Evaluate in Step 3; check licence |
 | D8 | Live waveform (Squeezelite `-v` + vismux) | Out of scope until static waveform works |
 
@@ -206,8 +206,36 @@ Decided: SQLite on-disk index (memory-only thumbnails); search covers artists, a
 | Date | Who | Entry |
 |---|---|---|
 | 2026-11-06 | Claude | Research phase done (docs listed in section 0). Sprint plan created. No code yet. |
+| 2026-11-06 | Claude | **Step 1 implemented** (`src/Clims.Tui`, `cLiMS.slnx`, README). Terminal.Gui 2.5.0 pinned. Full layout with fake data: header + search + sync status, tab strip, Library (artist list with type-ahead + virtualised album blocks), Search (grouped, "More…"), footer (seek, cover, waveform, transport, volume), 10 fps fake clock. Tested by driving a real Windows Terminal tab (SendKeys, mouse_event, screenshots). Results below. |
+| 2026-11-06 | Claude | **Step 1 fixes after user review:** (1) scrollable panes (artist list, album pane, search results) now have a scrollbar column with click-to-jump; (2) mouse wheel works on the hovered pane without clicking first (root cause: `RowList.Paint` re-revealed the selected row on every frame and undid the scroll; now it only reveals after the selection changes); (3) header is 3 rows tall (blank row above and below, 2 columns of side padding, own darker background); (4) resize crash fixed (see below). |
+| 2026-11-06 | Claude | **Real covers spike:** `--lms <url>` loads 10 random album covers from the live server (`albums ... sort:random`, then a track id of the album, then `/music/<trackId>/cover_192x192_o.jpg`, about 250 ms each) and maps every fake album onto them. Decoded and resampled with SkiaSharp 4.154.0 (MIT) using Mitchell cubic to the cell grid (16x16 px list cover, 10x10 px footer). Findings: SkiaSharp works on .NET 10 with no extra setup (**leans D7 towards SkiaSharp**, still to confirm in Step 3); covers are recognisable but coarse at 16x16 px, so a larger list cover (e.g. 24x12 cells) would look noticeably better; the `albums` command has no artwork tag we could get (tags `J`/`K`/`c` returned nothing), so the cover is addressed via a track id of the album. Throwaway code: `Data/DevCovers.cs`, `Ui/CoverImage.cs`. |
+| 2026-11-06 | Claude | **Cover resolution experiment** (F3 mode, F4 size). Samples per cell: half-block `▀` 1x2, quadrant `▚` 2x2, braille 2x4, each with only 2 colours per cell. Compared on real covers in Windows Terminal: **quadrant at 24x12 cells is the best cell-based option** (now the default; about 4x the samples of the original 16x8 half-block); braille adds little detail and a dotty texture, so not recommended; half-block 16x8 is the grainy baseline. Cell-based covers stay pixelated by nature; the only way to real sharpness is **Sixel** (true pixels, about 160x160 px for a 16x8 cell cover at WT's 10x20 virtual cell), which still has the scrolling/clipping drawbacks recorded in `ui.md` section 3. Quadrant at 24x12 was still judged too grainy, so Sixel was tried next (see next row). |
+| 2026-11-06 | Claude | **Sixel covers implemented and working** in Windows Terminal (default `F3` mode when `--lms` covers are loaded). Covers are fetched at 300 px, resampled to 10x20 px per cell (WT's virtual cell), so a 24x12-cell list cover is 240x240 real pixels and the footer cover about 100x94 px; the result is dramatically sharper than any cell mode. Implementation: `Ui/SixelCovers.cs` publishes per-view placements to `driver.GetSixels()`; `PaintView.DrawCover` uses Sixel only for fully visible covers (partly scrolled covers fall back to quadrant cells, since a sixel cannot be clipped); encoded data cached per cover/size; `AvoidBottomScroll` for images touching the last row. Findings: (1) Terminal.Gui reports Sixel support about 2.4 s after start (needs a repaint then); (2) repainting any cell under a sixel erases it, so lists resend on every paint and the footer (repainting at 10 fps) resends every frame, **possible flicker, to be judged by the user**; (3) hidden views must withdraw their images (done on tab switch); (4) 120 random-size resizes with Sixel active: no crash; (5) digits are type-ahead while the artist list has focus, so `1`-`3` need another pane focused. Open: footer flicker at 10 fps, cost of Sixel on slower terminals, behaviour in terminals without Sixel (falls back to quadrants, untested), search-result thumbnails (Step 4) and queue covers (Step 5) would need the same placement logic. |
+
+### Resize crash (found and fixed 2026-11-06)
+- **Symptom:** app exited when the window was resized.
+- **Cause:** `PaintView.Put` clipped text by UTF-16 index. Narrowing the window cut the header's `🔊` emoji (a surrogate pair) in half, and Terminal.Gui throws `ArgumentException: Only valid Unicode scalar values are allowed in a single Grapheme cluster` on a lone surrogate. Real track titles containing emoji would have hit the same bug.
+- **Fix:** `Put` and `Clip` drop a split surrogate at the cut. `PaintView` also catches exceptions from `Paint()` and logs them instead of ending the app. `Program` logs any fatal exception.
+- **Crash log:** `%TEMP%\clims-crash.log` (see `CrashLog.cs`).
+- **How it was found:** a script launched the app in a Windows Terminal tab, optionally sent keys, then moved/resized that terminal window to random sizes (80 rounds per scenario via `MoveWindow`). Before the fix, 2 of 3 scenarios (Search tab with results, Library scrolled) crashed within 40 rounds; after the fix, 3 x 80 rounds ran clean with an empty crash log. Resize is therefore now **tested**; the below-100x30 footer collapse was exercised by the random sizes but not inspected visually.
+- **Rule for future code:** never slice strings by index for display. Go through `PaintView.Put`/`Clip`, or use grapheme-aware APIs. Wide characters (emoji, CJK) still count as one column in our width maths; keep them out of layout-critical spots or handle width explicitly.
+
+### Step 1 feel checklist results (Windows Terminal, 1920x1080, about 192x42 cells)
+1. **Startup / redraw:** window up in under 4 s on first run (not precisely timed). Footer repaint at 10 fps costs avg 2.4 ms, header status 0.2 ms; idle CPU about 8 % of one core. Resize flicker not judged visually; resize stability tested, see "Resize crash" above.
+2. **Scrolling 2 515 albums with half-block covers:** smooth in a stress run (about 120 PageDown presses): AlbumsView paint avg 6.7 ms, max 26 ms including JIT warm-up. Covers clip cleanly at top and bottom edges like text. Fake covers are procedural; real image decode cost is untested (Step 3).
+3. **Mouse:** tab clicks, seek bar, Prev/Next/Play-Pause buttons, volume bar, artist click and wheel scroll all work. (-10s/+10s buttons share the same code path, not clicked individually.)
+4. **Key conflicts:** `/` and Space are global only when the search box is not focused. Letters are type-ahead in the artist list, so `n`/`p`/`1-3` are disabled there (use the buttons, or Tab to another pane). The terminal sends `/` fine; no conflict with the TextField once focus starts in the artist list.
+5. **Unicode:** box/half-block/block-eighths, `●`, `◀▶❚❚`, `━─░█` and the 🔊 emoji in the header render correctly and aligned in Windows Terminal. Braille waveform not used (block eighths look good).
+6. **Sixel footer cover:** **not implemented or tested.** The half-block cover in the footer looks good enough; revisit only if wanted.
+7. **Go/no-go:** **go** on Terminal.Gui v2.5.0; the stock widgets used were only `Window` and `TextField`, everything else is owner-drawn on `View`, which keeps the API-churn risk small.
+
+**Untested:** visual check of the below-100x30 collapse (code exists in `MainWindow.OnTick`; random-size resize runs did not crash), other terminals (conhost, WSL), keyboard layouts other than the author's Italian one, dragging the scrollbar thumb (only click-to-jump is implemented).
+
+**Gotchas found (also in README):** container `View`s need `CanFocus = true`; `key.Handled` set in `Keyboard.KeyDown` did not stop the same key being typed into a freshly focused TextField (fixed by starting focus in the list); `View.Activated`/`View.Frame` name clashes; `Force16Colors` must be set false on the driver or colours are quantised to 16; the headless/ANSI driver with redirected stdio printed nothing, so UI tests need a real console (see `drive.ps1`-style approach: launch in Windows Terminal, SendKeys, screenshot).
 
 ## 5. Changelog of decisions
 - UI: "Album and Tracks" title bar and year selector removed from the Library right pane.
 - Search: SQLite index on disk; thumbnails in memory only; genres in, composers out; header sync status; mixed local/server results while syncing; resync asks first, "Later" asks again at next launch.
+- UI (Step 1 review): every scrollable pane shows a scrollbar in its last column and reacts to the wheel while hovered, focused or not; header is 3 rows with padding.
+- Step 1: Terminal.Gui v2.5.0 chosen (D6 go). Library tab lists "All Artists" first (id 0 = every album) so the full-album scroll can be judged. Queue tab is a placeholder (D1 default).
 - Scan test: `rescan done` fires even with no change; `lastscan` unchanged after a no-change scan; scans take about 7 minutes and reconnect players.
