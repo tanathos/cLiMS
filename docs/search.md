@@ -150,7 +150,7 @@ I started `rescan` (look for new and changed music) with the CLI socket open. No
 | `lastscan` (`serverstatus`) | **Unchanged** (2026-11-06 05:29:16). So it does not move on a no-change scan; whether it moves when files change is still untested. |
 | Counts (songs/albums/artists/genres) | Unchanged (19 948 / 2 008 / 1 004 / 195). |
 | Track `lastUpdated` | Unchanged for the two tracks sampled. |
-| Side effects | At the end of the scan LMS **disconnected and reconnected the player** (`client disconnect` then `client reconnect`, plus `prefset server positionAtDisconnect 190.333`). The Pi was playing; it came back connected at the same position (190.3 s). Another LMS client (192.168.1.21) was also re-registered. Other noise on the socket: `material-skin …` messages (the Material skin plugin is installed), `menustatus ARRAY(…)`, `prefset … HASH(…)`. |
+| Side effects | At the end of the scan LMS **disconnected and reconnected the player** (`client disconnect` then `client reconnect`, plus `prefset server positionAtDisconnect 190.333`). The Pi was playing; it came back connected at the same position (190.3 s). Another LMS client (192.168.1.x (another client)) was also re-registered. Other noise on the socket: `material-skin …` messages (the Material skin plugin is installed), `menustatus ARRAY(…)`, `prefset … HASH(…)`. |
 
 Design consequences:
 1. **Trigger = `rescan done`, then compare**: on that event (and at launch) read `lastscan` and the counts; propose a resync only if either changed. A `rescan done` with no change must not nag the user.

@@ -29,28 +29,81 @@ public abstract class PaintView : View
     /// </summary>
     protected virtual bool ResendSixelsOnPaint => true;
 
+    /// <summary>
+    /// True for scrolling views with covers: cells under a cover that has not moved are not rewritten (so it neither
+    /// flickers nor needs resending), and the cells of a cover that moved away are blanked. Nothing but the cover
+    /// may be drawn inside the cover's cells.
+    /// </summary>
+    protected virtual bool StableSixels => false;
+
+    private bool _fullClear = true;
+    private int _lastW = -1;
+    private int _lastH = -1;
+
+    /// <summary>Forget where covers were (the view was hidden, or its layout changed): the next frame clears everything.</summary>
+    public void ResetCovers() => _fullClear = true;
+
     /// <summary>Columns on the left that the per-frame clear leaves alone (a still sixel there must not be overwritten, or it is erased).</summary>
     protected virtual int ClearFromX => 0;
 
     /// <summary>Terminal.Gui would clear the whole viewport (and erase a still sixel) before painting; the clear is ours.</summary>
-    protected override bool OnClearingViewport() => ClearFromX > 0 || base.OnClearingViewport();
+    protected override bool OnClearingViewport() => StableSixels || ClearFromX > 0 || base.OnClearingViewport();
 
-    private HashSet<string> _blanked = new();
-    private HashSet<string> _blankedNow = new();
+    private readonly record struct Rect(int X, int Y, int Cols, int Rows);
+
+    private Dictionary<string, Rect> _blanked = new();
+    private Dictionary<string, Rect> _blankedNow = new();
+
+    /// <summary>Cell-drawn covers and placeholders of this frame (partly visible covers): the cleanup of moved sixels must not blank them.</summary>
+    private readonly List<Rect> _drawnCovers = new();
 
     protected override bool OnDrawingContent(DrawContext? context)
     {
         var started = Stopwatch.GetTimestamp();
+        if (_fullClear || W != _lastW || H != _lastH)
+        {
+            _blanked.Clear();
+            _fullClear = false;
+            (_lastW, _lastH) = (W, H);
+        }
+
         SetAttribute(Base);
         for (var y = 0; y < H; y++)
         {
             var from = Math.Clamp(ClearFromX, 0, W);
-            Move(from, y);
-            AddStr(new string(' ', W - from));
+            var spans = StableSixels
+                ? _blanked.Values.Where(r => y >= r.Y && y < r.Y + r.Rows).Select(Guarded).OrderBy(r => r.X).ToList()
+                : null;
+            if (spans is not { Count: > 0 })
+            {
+                Move(from, y);
+                AddStr(new string(' ', W - from));
+                continue;
+            }
+
+            // Skip the cells of covers that are still where they were: writing them would erase the image.
+            var x = from;
+            foreach (var r in spans)
+            {
+                if (r.X > x)
+                {
+                    Move(x, y);
+                    AddStr(new string(' ', Math.Min(r.X, W) - x));
+                }
+
+                x = Math.Max(x, r.X + r.Cols);
+            }
+
+            if (x < W)
+            {
+                Move(x, y);
+                AddStr(new string(' ', W - x));
+            }
         }
 
         _sixels.Clear();
         _blankedNow.Clear();
+        _drawnCovers.Clear();
         _wantedCovers.Clear();
         try
         {
@@ -62,8 +115,13 @@ public abstract class PaintView : View
             CrashLog.Write(ex);
         }
 
+        if (StableSixels)
+        {
+            BlankMovedCovers();
+        }
+
         (_blanked, _blankedNow) = (_blankedNow, _blanked);
-        SixelCovers.Publish(this, _sixels, ResendSixelsOnPaint);
+        SixelCovers.Publish(this, _sixels, ResendSixelsOnPaint && !StableSixels);
 
         // Tell the cover source what this view shows now, so it fetches those and cancels the ones scrolled away.
         // Views that draw no covers do not register, which keeps the cover source's bookkeeping small.
@@ -160,8 +218,8 @@ public abstract class PaintView : View
         if (inside && CoverArt.UseSixel)
         {
             var blankKey = $"{x},{y},{cols},{rows}|{image.Label}";
-            _blankedNow.Add(blankKey);
-            if (ResendSixelsOnPaint || !_blanked.Contains(blankKey))
+            _blankedNow[blankKey] = new Rect(x, y, cols, rows);
+            if ((ResendSixelsOnPaint && !StableSixels) || !_blanked.ContainsKey(blankKey))
             {
                 FillBlank(x, y, cols, rows);
             }
@@ -170,6 +228,7 @@ public abstract class PaintView : View
             return;
         }
 
+        _drawnCovers.Add(new Rect(x, y, cols, rows));
         for (var r = 0; r < rows; r++)
         {
             var cy = y + r;
@@ -197,6 +256,7 @@ public abstract class PaintView : View
     /// <summary>A dim block with a note in the middle: shown while a cover is being fetched, or when an album has none.</summary>
     private void DrawPlaceholder(int x, int y, int cols, int rows, bool loading)
     {
+        _drawnCovers.Add(new Rect(x, y, cols, rows));
         var attr = new Attribute(loading ? Theme.FgDim : Theme.Rgb(70, 76, 90), Theme.BgAlt);
         for (var r = 0; r < rows; r++)
         {
@@ -205,6 +265,47 @@ public abstract class PaintView : View
 
         Put(x + cols / 2, y + rows / 2, loading ? "…" : "♪", attr);
     }
+
+    /// <summary>Covers that were there last frame and are gone or moved: blank their cells, except where a cover is now.</summary>
+    private void BlankMovedCovers()
+    {
+        foreach (var (key, old) in _blanked)
+        {
+            if (_blankedNow.ContainsKey(key))
+            {
+                continue;
+            }
+
+            for (var r = 0; r < old.Rows; r++)
+            {
+                var cy = old.Y + r;
+                var c = 0;
+                while (c < old.Cols)
+                {
+                    var start = c;
+                    while (c < old.Cols && !UnderNewCover(old.X + c, cy))
+                    {
+                        c++;
+                    }
+
+                    if (c > start)
+                    {
+                        FillRow(cy, old.X + start, old.X + c, Theme.Normal);
+                    }
+                    else
+                    {
+                        c++;
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>The cover plus one blank cell on each side: rewriting the cell next to a sixel can disturb its edge column.</summary>
+    private Rect Guarded(Rect r) => new(Math.Max(ClearFromX, r.X - 1), r.Y, r.Cols + (r.X > ClearFromX ? 2 : 1), r.Rows);
+
+    private bool UnderNewCover(int x, int y) =>
+        _blankedNow.Values.Concat(_drawnCovers).Any(n => x >= n.X && x < n.X + n.Cols && y >= n.Y && y < n.Y + n.Rows);
 
     private void FillBlank(int x, int y, int cols, int rows)
     {

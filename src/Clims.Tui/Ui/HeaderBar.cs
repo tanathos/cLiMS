@@ -13,6 +13,7 @@ public sealed class HeaderBar : View
     public const int Rows = 3;
     private const int Pad = 2;
     private const int SearchWidth = 44;
+    private const int ServerButtonWidth = 10;
 
     private readonly StatusText _status;
 
@@ -24,13 +25,18 @@ public sealed class HeaderBar : View
 
         var brand = new BrandText { X = Pad, Y = 1, Width = 8, Height = 1 };
         Search = new TextField { X = Pad + 9, Y = 1, Width = SearchWidth, Height = 1 };
-        _status = new StatusText(player, syncStatus) { X = Pad + 9 + SearchWidth + 2, Y = 1, Width = Dim.Fill(Pad), Height = 1 };
+        _status = new StatusText(player, syncStatus) { X = Pad + 9 + SearchWidth + 2, Y = 1, Width = Dim.Fill(Pad + ServerButtonWidth + 1), Height = 1 };
+        var server = new ServerButton { X = Pos.AnchorEnd(Pad + ServerButtonWidth), Y = 1, Width = ServerButtonWidth, Height = 1 };
+        server.Clicked += () => ServerClicked?.Invoke();
         _status.Clicked += () => SyncClicked?.Invoke();
         Add(new Backdrop { X = 0, Y = 0, Width = Dim.Fill(), Height = Rows });
-        Add(brand, Search, _status);
+        Add(brand, Search, _status, server);
     }
 
     public TextField Search { get; }
+
+    /// <summary>The "Server" button was clicked: open the connect screen.</summary>
+    public event Action? ServerClicked;
 
     /// <summary>The sync status text was clicked: offer "Resync now" or "Cancel".</summary>
     public event Action? SyncClicked;
@@ -44,6 +50,7 @@ public sealed class HeaderBar : View
         SyncState.Synced => ("●", $"Synced ({Age(s.SyncedAt, now)})", Theme.Good),
         SyncState.ServerChanged => ("◔", "Server changed, resync pending", Theme.Warn),
         SyncState.Offline => ("✕", s.HasIndex ? "Offline (using local index)" : "Offline", Theme.Bad),
+        SyncState.LoginRequired => ("✕", "Login required (F2)", Theme.Bad),
         SyncState.Demo => ("◇", "Demo data (no server)", Theme.Accent),
         _ => ("○", "Not synced", Theme.Warn),
     };
@@ -71,6 +78,26 @@ public sealed class HeaderBar : View
 
         protected override void Paint()
         {
+        }
+    }
+
+    private sealed class ServerButton : PaintView
+    {
+        protected override Attribute Base => OnHeader(Theme.Fg);
+
+        public event Action? Clicked;
+
+        protected override void Paint() => Put(0, 0, "⇄ Server", new Attribute(Theme.Fg, Theme.BgAlt));
+
+        protected override bool OnMouseEvent(Mouse mouse)
+        {
+            if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked))
+            {
+                Clicked?.Invoke();
+                return true;
+            }
+
+            return base.OnMouseEvent(mouse);
         }
     }
 

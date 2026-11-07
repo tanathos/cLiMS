@@ -6,7 +6,7 @@ replies are mapped by hand, see "Design").
 
 ## Quick start
 ```csharp
-using var lms = new LmsClient(new LmsClientOptions { BaseUri = new Uri("http://192.168.1.20:9000/") });
+using var lms = new LmsClient(new LmsClientOptions { BaseUri = new Uri("http://192.168.1.x:9000/") });
 
 var status = await lms.Server.GetStatusAsync();                       // version, totals, players
 var albums = await lms.Library.GetAlbumsAsync(new AlbumQuery { Search = "iron" }, start: 0, count: 50);
@@ -20,7 +20,7 @@ await lms.Player.SeekByAsync(player, TimeSpan.FromSeconds(10));
 
 Events:
 ```csharp
-var events = new CliEventStream(new CliEventStreamOptions { Host = "192.168.1.20" });
+var events = new CliEventStream(new CliEventStreamOptions { Host = "192.168.1.x" });
 await foreach (var e in events.ReadAllAsync(token))
 {
     switch (e)
@@ -75,8 +75,7 @@ await foreach (var e in events.ReadAllAsync(token))
   server drop the connection (a `LmsProtocolException`); `sort:albumtrack` works, at about 7 s per 2 000 tracks on a Raspberry Pi.
   `TrackQuery` therefore defaults to `AlbumTrack`; keep an explicit sort when you ask for genres in bulk. Found by the catalogue's
   real-server integration test.
-- **Auth.** Optional HTTP Basic credentials on the HTTP client. The CLI socket needs no login on a server without a
-  password; `CliEventStream` does not log in. Cover and download URLs need the same credentials if protection is on.
+- **Auth.** Optional HTTP Basic credentials on the HTTP client. `CliEventStreamOptions.Credentials` makes the event stream send `login user password` (percent-encoded) before `listen 1` on every connect; a connection closed right after the login ends the stream with `LoginRejected` (no retry loop). Covers and downloads need the same Basic header on their HttpClient. `ServerDiscovery` (UDP 3483 broadcast, per-interface) and `ServerProbe` (read-only `serverstatus` check with plain outcomes) support first-run setup.
   Untested against a protected server.
 - **Never expose ports 9000/9090 beyond the LAN.**
 
@@ -96,7 +95,7 @@ await foreach (var e in events.ReadAllAsync(token))
   event stream (subscribe, noise, duplicates, reconnect, cancel);
 - read-only integration tests against a real server, enabled with `CLIMS_LMS_URL`:
   ```powershell
-  $env:CLIMS_LMS_URL = "http://192.168.1.20:9000/"
+  $env:CLIMS_LMS_URL = "http://192.168.1.x:9000/"
   dotnet test tests/Clims.Lms.Tests
   ```
 - mutating tests, off by default. They need `CLIMS_LMS_ALLOW_WRITE=1` **and** `CLIMS_LMS_PLAYER=<player id>`, take a

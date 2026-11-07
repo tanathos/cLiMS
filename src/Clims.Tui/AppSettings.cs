@@ -7,7 +7,9 @@ namespace Clims.Tui;
 /// <param name="LmsUrl">The server address last used.</param>
 /// <param name="ServerUuid">UUID of that server, so its saved index can be used while it is unreachable.</param>
 /// <param name="PlayerId">The player to control (its id, usually the MAC address). Null: the first connected hardware player.</param>
-public sealed record AppSettings(string? LmsUrl = null, string? ServerUuid = null, string? PlayerId = null)
+/// <param name="Username">Login for a password-protected server.</param>
+/// <param name="ProtectedPassword">The password, protected by <see cref="SecretStore"/> (never plain text).</param>
+public sealed record AppSettings(string? LmsUrl = null, string? ServerUuid = null, string? PlayerId = null, string? Username = null, string? ProtectedPassword = null)
 {
     private static string FilePath => Path.Combine(CatalogPaths.DataFolder, "settings.json");
 
@@ -39,7 +41,9 @@ public sealed record AppSettings(string? LmsUrl = null, string? ServerUuid = nul
     }
 
     /// <summary>Accepts <c>host</c>, <c>host:9000</c> or a full URL, and returns an http URI ending in a slash; null if unusable.</summary>
-    public static Uri? NormalizeUrl(string? text)
+    /// <param name="text">What the user typed.</param>
+    /// <param name="defaultPort">Port to add when the text is a bare host without scheme or port (null: leave it to http's 80).</param>
+    public static Uri? NormalizeUrl(string? text, int? defaultPort = null)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -57,6 +61,16 @@ public sealed record AppSettings(string? LmsUrl = null, string? ServerUuid = nul
             t += "/";
         }
 
-        return Uri.TryCreate(t, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" ? uri : null;
+        if (!Uri.TryCreate(t, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
+        {
+            return null;
+        }
+
+        if (defaultPort is { } port && !text.Contains("://", StringComparison.Ordinal) && uri.IsDefaultPort)
+        {
+            return new UriBuilder(uri) { Port = port }.Uri;
+        }
+
+        return uri;
     }
 }

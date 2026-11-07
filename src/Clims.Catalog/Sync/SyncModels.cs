@@ -20,6 +20,9 @@ public enum SyncState
     /// <summary>The server cannot be reached; browsing uses the saved index, playback does not work.</summary>
     Offline,
 
+    /// <summary>The server answered but rejected the login (or wants one). Nothing is retried until the user fixes it.</summary>
+    LoginRequired,
+
     /// <summary>No server at all: built-in fake data for trying the UI.</summary>
     Demo,
 }

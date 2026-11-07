@@ -3,7 +3,7 @@
 Living document. Update the **Status** column and the **Log** at the end of every working session. Agents: read sections 0 and 1, then the step you are working on, then the linked research notes.
 
 ## 0. Project summary
-cLiMS is a full-screen terminal UI (.NET 10) client for a Lyrion Music Server (LMS 9.1.1) at `http://192.168.1.20:9000` (piCorePlayer, one player: Squeezelite `v2.0.0-1476-pCP`, MAC `b8:27:eb:a9:77:8f`, FLAC and MP3 library of 19 948 tracks / 2 008 albums / 1 004 artists / 195 genres). It browses the library, searches almost instantly, plays tracks and albums, manages custom queues, shows cover art and a waveform, and must never break gapless playback.
+cLiMS is a full-screen terminal UI (.NET 10) client for a Lyrion Music Server (LMS 9.1.1) at `http://192.168.1.x:9000` (piCorePlayer, one player: Squeezelite `v2.0.0-1476-pCP`, MAC `xx:xx:xx:xx:xx:xx`, FLAC and MP3 library of 19 948 tracks / 2 008 albums / 1 004 artists / 195 genres). It browses the library, searches almost instantly, plays tracks and albums, manages custom queues, shows cover art and a waveform, and must never break gapless playback.
 
 Research notes (read before coding; all measured on the real server unless marked inferred):
 | File | Content |
@@ -43,6 +43,7 @@ Research notes (read before coding; all measured on the real server unless marke
 | 3 | Catalogue navigation (index + Library tab) | Done | Claude | 135 new tests; first real sync about 1.5 min; see Log for findings and what is deferred |
 | 4 | Search | Done | Claude | 37 new tests; local search about 2 ms (worst 15 ms) on the real 19 960-track index; server fallback verified with no index; see Log |
 | 5 | Playback, queues, waveform, polish | Done, awaiting your listening test | Claude | 40 new tests; real status, queue and waveform verified read-only against your player; transport commands covered by fake-server tests only; see Log |
+| 6 | First run: server discovery, connect form, password-protected servers | Done (visually verified; auth tested against fakes only) | Claude | Discovery probed read-only on the real server (UDP 3483 answers); decisions D9 to D11 below |
 
 Status values: Not started / In progress / Blocked / Done. Steps 1 and 2 can run in parallel.
 
@@ -57,6 +58,9 @@ Status values: Not started / In progress / Blocked / Done. Steps 1 and 2 can run
 | D6 | Terminal.Gui v2 stability on .NET 10 | **Decided: go.** 2.5.0 stable works on .NET 10 for everything in the Step 1 layout; no fallback needed (final call stays with the user's feel review) |
 | D7 | Image decoder for covers (ImageSharp vs SkiaSharp) | **Decided: SkiaSharp 4.154.0 (MIT).** Decodes JPEG/PNG and resamples (Mitchell) on .NET 10 with no extra setup; ImageSharp's split licence avoided |
 | D8 | Live waveform (Squeezelite `-v` + vismux) | Out of scope until static waveform works |
+| D9 | Several servers found: list or auto-connect? | Always list and ask (Step 6) |
+| D10 | Where the password is kept | Not in plain text: Windows credential store or DPAPI (Step 6) |
+| D11 | Reopen the connect screen while running | Yes, F2 (Step 6) |
 
 Decided: SQLite on-disk index (memory-only thumbnails); search covers artists, albums, tracks and genres (not composers); header shows sync state; resync is never automatic (ask first, "Later" asks again at next launch); sync results are mixed with server results while syncing.
 
@@ -202,6 +206,60 @@ Decided: SQLite on-disk index (memory-only thumbnails); search covers artists, a
 
 ---
 
+## Step 6 – First run: finding the server, and password-protected servers
+**Goal:** the app works the first time it is started with no address, with no command line and no hand-edited file, and it works on servers that ask for a username and password. This closes the items deferred in Step 5 (first-run setup, credentials in the app, server auth for covers and downloads, a configuration file that holds them).
+
+**Status:** implemented. Discovery, the connect screen, F2, shared authenticated HttpClient, CLI login, DPAPI password and the LoginRequired status are in; tests use fakes and loopback sockets (no real password server available).
+
+**When it runs.** Only when there is no address from `--lms`, `CLIMS_LMS_URL` or `settings.json` (today that case falls into demo mode). A saved address that stops answering does **not** reopen the wizard: the app keeps today's Offline behaviour and the wizard stays reachable from a key (see below), so a Wi-Fi hiccup never throws the user back to a setup screen.
+
+**Flow (a full-screen "Connect to a server" screen shown before the main window):**
+1. The screen opens at once and starts **discovery** in the background (about 3 s, with a visible "Searching the network…" line, so nothing looks frozen).
+2. **Servers found** are listed as they answer: name, address, version (example from the real server: `Mnemonic Music · 192.168.1.x:9000 · 9.1.1`). Up, Down and Enter (or double click) pick one. If exactly one is found it is **pre-selected but not connected automatically**: the user always confirms (the app never talks to a server the user has not chosen).
+3. Below the list, **always shown, even when discovery found nothing or is still running:** a form "Connect to a specific address" with *Address* (accepts `host`, `host:port`, `http://host:9000`; the port defaults to 9000), *Username* and *Password* (masked, both optional), and a **Connect** button. Choosing a discovered server fills the form's address, so one path serves both.
+4. **Connect** runs a read-only check (`serverstatus`) and reports the outcome in plain words on the screen: connected; "wrong username or password" (the library already raises `LmsAuthenticationException` for 401 and 403); "no LMS answered at that address" (refused or timeout); "that address answers, but it is not LMS" (reply that is not JSON-RPC). The user can fix the form and retry; nothing is saved until it works.
+5. On success the address, username and (see D10) the password are saved and the app continues into the normal startup. `Esc` or a **Demo** button leaves the wizard and starts demo mode (nothing is saved, so the next launch asks again).
+
+**Discovery (measured on the real server, 2026-11-07).** LMS answers a UDP broadcast on port 3483. The request is the byte `e` followed by 4-letter tags, each with a zero length byte (`NAME`, `JSON`, `VERS`, `UUID`, `CLIP`). The real server replied within the first second with `E` and the tags: `NAME` = `Mnemonic Music`, `JSON` = `9000` (the web and JSON-RPC port), `VERS` = `9.1.1`, `UUID` = `7c1f32ca-…`, `CLIP` = `9090`; the source IP of the datagram is the address. This is read-only and is the same discovery Squeezebox players use. Plan:
+- Send to the limited broadcast (255.255.255.255) **and to each network interface's directed broadcast**, because a PC with several adapters (Wi-Fi, Ethernet, VPN, WSL) may send the limited broadcast out of the wrong one. Listen about 3 s and collect every reply (several servers are possible; de-duplicate by UUID).
+- The UUID also names the local index file (`catalog-<uuid>.db`), so a discovered server is recognised as one we have already cached.
+- A reply gives the address but **not** whether a password is required: that is learned on the first request (a 401 turns the form's credential fields from optional into "required: the server asked for a login" and puts the cursor on Username).
+- Limits to state honestly on the screen when nothing is found: broadcast does not cross routers, VLANs, VPNs or most Docker and WSL networks, and some firewalls block the UDP 3483 reply. The message says so and points at the form below ("No server answered. This is normal across a VPN or another subnet. Type its address below.").
+- Discovery is a small UI-free class in `Clims.Lms` (`ServerDiscovery`: `IAsyncEnumerable<DiscoveredServer>`), testable with a fake UDP socket and with a real-socket loopback test; the real-server probe is an opt-in test like the others.
+
+**Password-protected servers (end to end, not only the login form).** LMS password protection puts **HTTP Basic** on its web port (JSON-RPC, cover art, downloads) and a **`login <user> <password>`** command on the CLI port (9090). Everything that talks to the server must carry the credentials:
+- **JSON-RPC** (`Clims.Lms`): already supports Basic; confirm with a test against a fake handler that the header is sent on every request and that 401 maps to `LmsAuthenticationException`.
+- **Covers** (`LmsCoverSource`) and **waveform downloads** (`WaveformService`): both use their own `HttpClient` and no header today (this is why the README says password servers are unsupported). Fix: one shared, authenticated `HttpClient` (or message handler) built from the connection settings and used by the library, the covers and the waveform downloads; no credentials in URLs (they would end up in logs).
+- **CLI event stream** (`CliEventStream`, port 9090): send `login <user> <password>` right after connecting and again after every reconnect, and treat a rejected login as an authentication failure, not as a silent "no events". The player controller uses its own second event stream; it gets the same login.
+- **Failure behaviour:** credentials rejected at runtime (the password was changed on the server) show a clear header status (`✕ Login required`) and a prompt to reopen the connect screen, instead of the generic Offline. A rejected login is never retried in a loop (accounts can be locked out).
+- **Never logged:** the password, the `Authorization` header and the `login` line are masked in the log file and in exception text.
+
+**Settings and secrets.**
+- `settings.json` keeps `Server` (address), `Username` and `PlayerId`. The **password is not stored in plain text** by default (D10).
+- A way back into the wizard after the first run: a key (proposal `F2`: "Server…") and a line in the `?` help, opened over the running app with the current address filled in. Changing the server stops the current services, loads the cache of the new server (by UUID) and starts again, without restarting the app. (If this proves too invasive for Step 6, the fallback is "saves, then asks to restart", decided when we get there.)
+- `--lms`, `--user` and `--password-file` (or `CLIMS_LMS_USER` / `CLIMS_LMS_PASSWORD`) for scripted use; **no `--password` flag** (it would sit in the shell history and the process list).
+
+**Open decisions (defaults apply until you answer):**
+| # | Question | Default |
+|---|---|---|
+| D9 | Several servers found: always show the list, or auto-connect when only one is found? | **Always show the list and ask**; one server is only pre-selected |
+| D10 | Where is the password kept? | **Windows credential store / DPAPI-protected value** on Windows (not plain text); on Linux and macOS (not targets today) ask at each launch rather than write plain text; a "store in plain text" option is not offered |
+| D11 | Reopen the wizard from a key while the app runs? | Yes, `F2`, applied without restarting if feasible, else with a restart |
+
+**Technical notes**
+- Terminal.Gui has the controls needed (list, text field with a password mask, buttons); the wizard is a normal view in the existing window system, painted with the same theme, and does not introduce a second window loop. All text input views must keep the global shortcuts out of the way while typing (the rule used for the queue name bar and the library filter).
+- Startup order changes: today `Program` decides demo versus server before the UI exists. The wizard needs the UI first, so the settings check moves after `Application.Init` and the wizard result feeds the existing construction of the services.
+- A password-protected server cannot be tested against the user's real server (auth is off there, and turning it on would lock the player's other clients out of the web UI). Test with a **local fake LMS** (a small `HttpListener` plus a TCP listener) that demands Basic and `login`, covering: wrong password, right password, 401 mid-session, CLI `login` failure, covers and downloads with and without the header. The real-server checks stay read-only (discovery, `serverstatus` without credentials).
+- Credentials never go into test fixtures or the log.
+
+**Definition of done:** with no settings file and no arguments the connect screen appears, discovery lists the real server within about 3 s, choosing it connects and saves the address, and the next launch goes straight in; the specific-address form works with and without credentials and reports each failure in plain words; against the fake password server the library, covers, waveform downloads and both event streams all authenticate, a rejected login is shown as such and never retried in a loop; the password is not in `settings.json` or in the log; `F2` reopens the form; docs (README run section, `src/Clims.Lms/README.md`, `docs/jsonrpc-client.md` auth section, this sprint log) updated; all existing tests still pass.
+
+**Risks:** broadcast discovery is unreliable on multi-adapter PCs and VPNs (mitigated by per-interface broadcast and the always-visible address form); Windows Firewall may prompt the first time the app opens a UDP listener (say so on the screen, and use an ephemeral port so no inbound rule is needed for the reply); the secret store differs per OS; changing the server at runtime touches every long-lived service (player, catalogue, waveform, covers), the most likely source of bugs, so it gets its own tests; no real password-protected server is available in the user's setup, so auth correctness rests on the fake server and on the documented LMS behaviour.
+
+**Not in Step 6 (stay deferred):** player selector, live visualiser (D8), themes and keybinding configuration, remembering several servers or profiles (the wizard stores one connection).
+
+---
+
 ## 4. Log
 | Date | Who | Entry |
 |---|---|---|
@@ -263,3 +321,4 @@ Decided: SQLite on-disk index (memory-only thumbnails); search covers artists, a
 - Step 1: Terminal.Gui v2.5.0 chosen (D6 go). Library tab lists "All Artists" first (id 0 = every album) so the full-album scroll can be judged. Queue tab is a placeholder (D1 default).
 - Scan test: `rescan done` fires even with no change; `lastscan` unchanged after a no-change scan; scans take about 7 minutes and reconnect players.
 
+- Step 6 (planned): first run without an address shows a connect screen with network discovery (UDP 3483, verified on the real server) and an always-visible address, username and password form; password-protected servers are supported end to end (Basic on the web port for JSON-RPC, covers and downloads, `login` on the CLI port); the password is not stored in plain text.

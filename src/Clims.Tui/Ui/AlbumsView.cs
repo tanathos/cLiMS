@@ -54,6 +54,8 @@ public sealed class AlbumsView : PaintView
     /// <summary>Shows the artist next to the album's year: for lists that mix artists.</summary>
     public bool ShowArtist { get; set; }
 
+    protected override bool StableSixels => true;
+
     private static int CoverCols => CoverArt.Large ? 24 : 16;
 
     private static int CoverRows => CoverArt.Large ? 12 : 8;

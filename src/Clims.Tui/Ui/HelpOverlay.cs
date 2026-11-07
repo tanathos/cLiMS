@@ -12,6 +12,7 @@ public sealed class HelpOverlay : PaintView
         ("Left  Right", "Seek -10 s / +10 s (or click the progress bar)"),
         ("Alt+n  Alt+p", "Next / previous track, from anywhere (previous restarts the track after 3 s)"),
         ("+  -", "Volume"),
+        ("F2  ⇄ Server", "Connect to another server or enter a login (button at the top right)"),
         ("F5", "Resync the library, or cancel a running sync"),
         ("F3  F4", "Cover rendering mode / list cover size"),
         ("?", "This help"),

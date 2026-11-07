@@ -1,7 +1,7 @@
 # cLiMS – Research notes
 
 Goal: a .NET 10 TUI client for Lyrion Music Server (LMS) – browse library, play tracks/albums, manage custom queues.
-Target server: LMS **9.1.1** at `http://192.168.1.20:9000/` (piCorePlayer, one player: Squeezelite `b8:27:eb:a9:77:8f`).
+Target server: LMS **9.1.1** at `http://192.168.1.x:9000/` (piCorePlayer, one player: Squeezelite `xx:xx:xx:xx:xx:xx`).
 
 Legend: **[verified]** = tested against the live server; **[sourced]** = from web sources, to be confirmed; **[inferred]** = my reasoning.
 

@@ -82,9 +82,17 @@ public static class SixelCovers
         }
     }
 
+    /// <summary>Forgets every placement (the window that owned them is gone, for example when switching server).</summary>
+    public static void ReleaseAll()
+    {
+        Owners.Clear();
+        Driver?.GetSixels().Clear();
+    }
+
     /// <summary>Removes everything an owner showed (it was hidden or scrolled away).</summary>
     public static void Release(object owner)
     {
+        (owner as PaintView)?.ResetCovers();
         if (Owners.Remove(owner))
         {
             Rebuild();

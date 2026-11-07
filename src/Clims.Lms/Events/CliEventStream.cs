@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -25,6 +26,9 @@ public sealed class CliEventStreamOptions
 
     /// <summary>How long a connect attempt may take.</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>Login for a server with password protection; sent as <c>login user password</c> after every connect. Never logged.</summary>
+    public NetworkCredential? Credentials { get; init; }
 }
 
 /// <summary>
@@ -35,12 +39,20 @@ public sealed class CliEventStreamOptions
 public sealed class CliEventStream : ILmsEventStream
 {
     private readonly CliEventStreamOptions _options;
+    private volatile bool _loginRejected;
 
     /// <summary>Creates the stream. Nothing connects until <see cref="ReadAllAsync"/> is enumerated.</summary>
     public CliEventStream(CliEventStreamOptions options)
     {
         _options = options;
     }
+
+    /// <summary>True once the server dropped the connection right after the login: the stream then stops (retrying could lock the account).</summary>
+    public bool LoginRejected => _loginRejected;
+
+    /// <summary>The CLI line that logs in: both parts percent-encoded, as the CLI expects.</summary>
+    internal static string LoginLine(NetworkCredential c) =>
+        $"login {Uri.EscapeDataString(c.UserName)} {Uri.EscapeDataString(c.Password)}\n";
 
     /// <inheritdoc />
     public async IAsyncEnumerable<LmsEvent> ReadAllAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -82,7 +94,8 @@ public sealed class CliEventStream : ILmsEventStream
                     }
 
                     var stream = client.GetStream();
-                    var hello = Encoding.ASCII.GetBytes("listen 1\n");
+                    var login = _options.Credentials is { UserName.Length: > 0 } cred ? LoginLine(cred) : "";
+                    var hello = Encoding.UTF8.GetBytes(login + "listen 1\n");
                     await stream.WriteAsync(hello, ct).ConfigureAwait(false);
 
                     connected = true;
@@ -90,9 +103,19 @@ public sealed class CliEventStream : ILmsEventStream
                     output.TryWrite(new EventStreamStateEvent(true));
 
                     using var reader = new StreamReader(stream, Encoding.UTF8);
+                    var lines = 0;
                     while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
                     {
+                        lines++;
                         Handle(line, deduper, output);
+                    }
+
+                    if (login.Length > 0 && lines == 0)
+                    {
+                        // LMS closes the connection on a wrong login without a word. Do not try again and again.
+                        _loginRejected = true;
+                        output.TryWrite(new EventStreamStateEvent(false, "The server rejected the login."));
+                        return;
                     }
 
                     reason = "The server closed the connection.";

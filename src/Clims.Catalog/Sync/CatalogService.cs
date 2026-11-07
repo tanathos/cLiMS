@@ -159,6 +159,11 @@ public sealed class CatalogService : ICatalogService
         {
             server = await _client.Server.GetStatusAsync(cancellationToken).ConfigureAwait(false);
         }
+        catch (LmsAuthenticationException ex)
+        {
+            SetStatus(new SyncStatus(SyncState.LoginRequired, Current?.Meta is not null, null, Current?.Meta?.SyncedAt, ex.Message));
+            return;
+        }
         catch (LmsException ex)
         {
             var hasIndex = Current?.Meta is not null;
@@ -333,6 +338,10 @@ public sealed class CatalogService : ICatalogService
         {
             Revert(hadIndex, "Sync cancelled.", offline: false);
         }
+        catch (LmsAuthenticationException ex)
+        {
+            Revert(hadIndex, ex.Message, offline: false, loginRequired: true);
+        }
         catch (LmsConnectionException ex)
         {
             Revert(hadIndex, ex.Message, offline: true);
@@ -343,7 +352,7 @@ public sealed class CatalogService : ICatalogService
         }
     }
 
-    private void Revert(bool hadIndex, string detail, bool offline)
+    private void Revert(bool hadIndex, string detail, bool offline, bool loginRequired = false)
     {
         if (!hadIndex)
         {
@@ -351,7 +360,7 @@ public sealed class CatalogService : ICatalogService
         }
 
         var current = Current;
-        var state = offline ? SyncState.Offline : hadIndex ? SyncState.ServerChanged : SyncState.NotSynced;
+        var state = loginRequired ? SyncState.LoginRequired : offline ? SyncState.Offline : hadIndex ? SyncState.ServerChanged : SyncState.NotSynced;
         SetStatus(new SyncStatus(state, current?.Meta is not null, null, current?.Meta?.SyncedAt, detail));
     }
 

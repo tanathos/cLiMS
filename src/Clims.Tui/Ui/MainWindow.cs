@@ -39,6 +39,9 @@ public sealed class MainWindow : Window
     private int _coversDirty;
     private bool _sixelSeen;
 
+    /// <summary>Set when the user pressed F2: the host closes the window and shows the connect screen.</summary>
+    public bool ChangeServerRequested { get; private set; }
+
     public MainWindow(
         IApplication app,
         ICatalogService catalog,
@@ -91,6 +94,7 @@ public sealed class MainWindow : Window
 
         _header.Search.TextChanged += (_, _) => OnSearchTextChanged();
         _header.SyncClicked += OfferResync;
+        _header.ServerClicked += RequestServerChange;
         _search.PlayRequested += Play;
         _search.QueueRequested += OnQueueRequested;
         _search.Notice += Notice;
@@ -167,6 +171,12 @@ public sealed class MainWindow : Window
         }
 
         base.Dispose(disposing);
+    }
+
+    private void RequestServerChange()
+    {
+        ChangeServerRequested = true;
+        _app.RequestStop();
     }
 
     private void ShowInLibrary(CatalogAlbum album, bool scrollToAlbum)
@@ -310,7 +320,7 @@ public sealed class MainWindow : Window
 
         // Failures and cancellations explain themselves in the status detail; make sure the user sees it.
         var status = _catalog.Status;
-        if (status.Detail is { Length: > 0 } detail && status.State is SyncState.NotSynced or SyncState.Offline)
+        if (status.Detail is { Length: > 0 } detail && status.State is SyncState.NotSynced or SyncState.Offline or SyncState.LoginRequired)
         {
             Notice(detail);
         }
@@ -337,6 +347,7 @@ public sealed class MainWindow : Window
         {
             SyncState.Syncing => "Syncing the library…",
             SyncState.Offline => "The server cannot be reached and there is no saved library yet. Press F5 to retry.",
+            SyncState.LoginRequired => "The server asks for a username and password. Press F2 to enter them.",
             _ => "Library not synced yet. Press F5 to sync.",
         };
         _library.SetCatalog(catalog, message);
@@ -595,12 +606,17 @@ public sealed class MainWindow : Window
                     }
                     while (CoverArt.Mode == CoverMode.Sixel && !SixelCovers.Available);
 
+                    _library.Albums.ResetCovers();
                     _library.Albums.SetNeedsDraw();
                 }
                 else if (key == Key.F4)
                 {
                     CoverArt.Large = !CoverArt.Large;
                     _library.Albums.Relayout();
+                }
+                else if (key == Key.F2)
+                {
+                    RequestServerChange();
                 }
                 else if (key == Key.F5)
                 {
@@ -644,6 +660,7 @@ public sealed class MainWindow : Window
         {
             ShowTab(_currentTab);
             FocusPage();
+            _library.Albums.ResetCovers();
             _library.Albums.SetNeedsDraw();
             _search.List.SetNeedsDraw();
         }

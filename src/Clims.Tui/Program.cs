@@ -1,153 +1,138 @@
-﻿using Clims.Catalog;
-using Clims.Lms;
+﻿using System.Net;
+using Clims.Catalog;
 using Clims.Tui;
 using Clims.Tui.Data;
 using Clims.Tui.Ui;
-using Clims.Waveform;
 using Terminal.Gui.App;
 
 // Options:
-//   --lms <url>      the server to use (also CLIMS_LMS_URL, or the address remembered from the last run)
-//   --player <id>    the player to control (its id, usually the MAC address; default: the first connected hardware player)
-//   --demo           built-in fake data, no server
-//   --driver <name>  force a Terminal.Gui driver: windows | dotnet | ansi
+//   --lms <url>              the server to use (also CLIMS_LMS_URL, or the address remembered from the last run)
+//   --user <name>            login for a password-protected server (also CLIMS_LMS_USER)
+//   --password-file <path>   file whose first line is the password (also CLIMS_LMS_PASSWORD). There is no --password:
+//                            it would stay in the shell history and the process list
+//   --player <id>            the player to control (its id, usually the MAC address; default: the first connected hardware player)
+//   --demo                   built-in fake data, no server
+//   --driver <name>          force a Terminal.Gui driver: windows | dotnet | ansi
+// With no address from any of these, the connect screen opens (server search plus a form).
 string? Arg(string name) => args.SkipWhile(a => a != name).Skip(1).FirstOrDefault();
+
+string? PasswordFromArgs()
+{
+    if (Arg("--password-file") is { Length: > 0 } file)
+    {
+        try
+        {
+            return File.ReadLines(file).FirstOrDefault()?.TrimEnd('\r', '\n');
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Cannot read the password file: {ex.Message}");
+            Environment.Exit(2);
+        }
+    }
+
+    return Environment.GetEnvironmentVariable("CLIMS_LMS_PASSWORD");
+}
 
 var driver = Arg("--driver");
 var settings = AppSettings.Load();
 var requested = Arg("--lms") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_URL") ?? settings.LmsUrl;
-var baseUri = args.Contains("--demo") ? null : AppSettings.NormalizeUrl(requested);
+var demoOnly = args.Contains("--demo");
+var uri = demoOnly ? null : AppSettings.NormalizeUrl(requested);
 
-using var cancel = new CancellationTokenSource();
-using var http = new HttpClient();
-ICatalogService catalog;
-IPlayerController player;
-LmsPlayerController? lmsPlayer = null;
-LmsCoverSource? covers = null;
-WaveformService? waves = null;
-CliEventStream? events = null;
-ILibraryApi? library = null; // the server's own search fills in what the local index does not have yet
-
-if (baseUri is null)
+Connection? connection = null;
+if (uri is not null)
 {
-    catalog = new DemoCatalogService();
-    var demo = catalog.Current!;
-    var fake = new FakePlayer("piCorePlayer");
-    fake.Play(demo.Albums[0], demo.TracksOf(demo.Albums[0].Id), 0);
-    player = fake;
-}
-else
-{
-    // The saved index is found again through the server's UUID, remembered per address.
-    var known = settings.LmsUrl == baseUri.ToString() ? settings.ServerUuid : null;
-
-    var lms = new LmsClient(new LmsClientOptions { BaseUri = baseUri }, http);
-    library = lms.Library;
-    catalog = new CatalogService(lms, new CatalogServiceOptions
-    {
-        KnownServerUuid = known,
-        StoreFactory = uuid =>
-        {
-            // Called once the UUID is known: from the saved settings, or after the server was actually reached. Only
-            // then is the address worth remembering, so a mistyped --lms never overwrites a working one.
-            settings = settings with { LmsUrl = baseUri.ToString(), ServerUuid = uuid };
-            settings.Save();
-            return new SqliteCatalogStore(CatalogPaths.For(uuid));
-        },
-    });
-    covers = new LmsCoverSource(http, baseUri);
-    CoverArt.Source = covers;
-    waves = new WaveformService(http, baseUri);
-    events = new CliEventStream(new CliEventStreamOptions { Host = baseUri.Host });
-    var service = catalog;
-    lmsPlayer = new LmsPlayerController(lms, () => service.Current, new LmsPlayerOptions { PlayerId = Arg("--player") ?? settings.PlayerId });
-    lmsPlayer.Notice += CrashLog.Info;
-    player = lmsPlayer;
+    var user = Arg("--user") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_USER") ?? settings.Username;
+    var password = PasswordFromArgs() ?? SecretStore.Unprotect(settings.ProtectedPassword);
+    connection = new Connection(uri, string.IsNullOrEmpty(user) ? null : new NetworkCredential(user, password ?? ""));
 }
 
-try
+// Nothing to connect to and demo not asked for: the first thing the user sees is the connect screen.
+var askFirst = connection is null && !demoOnly;
+var exitCode = 0;
+while (true)
 {
-    CrashLog.Info($"cLiMS starting ({(baseUri is null ? "demo" : baseUri.ToString())})");
-    using var app = Application.Create().Init(driver);
-    if (app.Driver is { } d)
+    var changeServer = false;
+    try
     {
-        d.Force16Colors = false;
-    }
-
-    SixelCovers.Driver = app.Driver;
-    using var search = new SearchService(() => catalog.Current, library);
-    using var main = new MainWindow(app, catalog, search, player, new SavedQueueStore(SavedQueueStore.DefaultPath), waves);
-
-    // Start talking to the server only once the UI loop is running, so its events have somewhere to go.
-    app.AddTimeout(TimeSpan.FromMilliseconds(50), () =>
-    {
-        lmsPlayer?.Start();
-        _ = Task.Run(async () =>
+        CrashLog.Info($"cLiMS starting ({(connection is null ? "demo" : connection.Uri.ToString())})");
+        using var app = Application.Create().Init(driver);
+        if (app.Driver is { } d)
         {
-            try
-            {
-                await catalog.StartAsync(cancel.Token);
-                if (events is not null)
-                {
-                    await catalog.RunEventsAsync(events, cancel.Token);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Shutting down.
-            }
-            catch (Exception ex)
-            {
-                CrashLog.Write(ex);
-            }
-        });
-        if (lmsPlayer is not null && events is not null)
-        {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    // Its own connection: one enumerator per stream object.
-                    await lmsPlayer.FollowEventsAsync(new CliEventStream(new CliEventStreamOptions { Host = baseUri!.Host }), cancel.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Shutting down.
-                }
-                catch (Exception ex)
-                {
-                    CrashLog.Write(ex);
-                }
-            });
+            d.Force16Colors = false;
         }
 
-        return false;
-    });
+        SixelCovers.ReleaseAll();
+        SixelCovers.Driver = app.Driver;
+        // A fresh screen: images left by the previous window are not repainted by cell writes that did not change.
+        Console.Out.Write("[2J[H");
 
-    // Returning false from the handler lets the exception end the run; it is logged below.
-    app.Run(main, ex =>
+        if (askFirst)
+        {
+            // First run: Esc means demo. Later (F2): Esc keeps what was running.
+            var first = connection is null;
+            var answer = ConnectWindow.Show(app, allowDemo: first, connection?.Uri.Authority, connection?.Credentials?.UserName);
+            askFirst = false;
+            if (answer.Choice == ConnectChoice.Cancelled && first)
+            {
+                break; // Ctrl+Q on the first screen leaves the app
+            }
+
+            if (answer.Choice == ConnectChoice.Connected)
+            {
+                connection = new Connection(answer.Uri!, string.IsNullOrEmpty(answer.Username) ? null : new NetworkCredential(answer.Username, answer.Password ?? ""));
+                settings = settings with
+                {
+                    LmsUrl = answer.Uri!.ToString(),
+                    ServerUuid = answer.Uuid ?? (settings.LmsUrl == answer.Uri.ToString() ? settings.ServerUuid : null),
+                    Username = answer.Username,
+                    ProtectedPassword = SecretStore.Protect(answer.Password),
+                };
+                settings.Save();
+            }
+            else if (answer.Choice == ConnectChoice.Demo)
+            {
+                connection = null;
+            }
+        }
+
+        using var session = new Session(connection, settings, Arg("--player"));
+        using var search = new SearchService(() => session.Catalog.Current, session.Library);
+        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves);
+
+        // Start talking to the server only once the UI loop is running, so its events have somewhere to go.
+        app.AddTimeout(TimeSpan.FromMilliseconds(50), () =>
+        {
+            session.Start();
+            return false;
+        });
+
+        // Returning false from the handler lets the exception end the run; it is logged below.
+        app.Run(main, ex =>
+        {
+            CrashLog.Write(ex);
+            return false;
+        });
+        changeServer = main.ChangeServerRequested;
+        PerfStats.Dump();
+    }
+    catch (Exception ex)
     {
-        CrashLog.Write(ex);
-        return false;
-    });
-    PerfStats.Dump();
-}
-catch (Exception ex)
-{
-    var path = CrashLog.Write(ex);
-    Console.Error.WriteLine($"cLiMS crashed: {ex.GetType().Name}: {ex.Message}");
-    Console.Error.WriteLine($"Details written to {path}");
-    return 1;
-}
-finally
-{
-    // Graceful shutdown: stop every background loop, then close what they use. Playback is left exactly as it is.
-    cancel.Cancel();
-    lmsPlayer?.Dispose();
-    waves?.Dispose();
-    catalog.Dispose();
-    covers?.Dispose();
+        var path = CrashLog.Write(ex);
+        Console.Error.WriteLine($"cLiMS crashed: {ex.GetType().Name}: {ex.Message}");
+        Console.Error.WriteLine($"Details written to {path}");
+        exitCode = 1;
+        break;
+    }
+
     CrashLog.Info("cLiMS stopped");
+    if (!changeServer)
+    {
+        break;
+    }
+
+    askFirst = true; // F2: back to the connect screen, with the current server filled in
 }
 
-return 0;
+return exitCode;
