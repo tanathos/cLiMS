@@ -5,17 +5,6 @@ using Terminal.Gui.Views;
 
 namespace Clims.Tui.Ui;
 
-/// <summary>What the left pane lists (decision D2; Folder is not offered: LMS folders need another query).</summary>
-public enum LibraryDimension
-{
-    AlbumArtist,
-    Genre,
-    Year,
-}
-
-/// <summary>The left pane's selection: which dimension, which key within it (null = "All ..."), and the heading to show.</summary>
-public sealed record LibrarySelection(LibraryDimension Dimension, object? Key, string Heading);
-
 /// <summary>
 /// Library tab: a dimension list on the left (type-ahead jumps by name or year), the albums of the selection on the
 /// right. Everything comes from the in-memory catalogue, so switching is instant; track lists of visible albums are
@@ -182,6 +171,13 @@ public sealed class LibraryTab : View
     {
         _dimension = LibraryDimension.Genre;
         Rebuild(wantedKey: genre);
+    }
+
+    /// <summary>Selects a year in the Year dimension (from a click on an album's year).</summary>
+    public void SelectYear(int year)
+    {
+        _dimension = LibraryDimension.Year;
+        Rebuild(wantedKey: year);
     }
 
     private void Rebuild(object? wantedKey = null)

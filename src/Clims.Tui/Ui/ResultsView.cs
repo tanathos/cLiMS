@@ -4,38 +4,6 @@ using Terminal.Gui.Input;
 
 namespace Clims.Tui.Ui;
 
-public enum ResultKind
-{
-    /// <summary>A group title such as "Albums (4 / 12)"; not selectable.</summary>
-    Header,
-    Artist,
-    Album,
-    Track,
-    Genre,
-
-    /// <summary>"More tracks…": expands a group.</summary>
-    More,
-
-    /// <summary>A status line ("Searching the server…", "No results"); not selectable.</summary>
-    Info,
-}
-
-/// <summary>One row of the search results. Artists, albums and tracks take two lines and carry a small cover.</summary>
-/// <param name="Kind">What it is.</param>
-/// <param name="Text">Main line (the name or title; matches are highlighted).</param>
-/// <param name="Detail">Second line, dim (artist, album, year; matches are highlighted).</param>
-/// <param name="Right">Right-aligned text on the main line (duration, counts).</param>
-/// <param name="Cover">Cover to show in the thumbnail; null shows the artist icon (artists) or nothing.</param>
-/// <param name="Data">The catalogue object, or the group key of a "More" row.</param>
-public sealed record ResultItem(ResultKind Kind, string Text, string Detail = "", string Right = "", CoverKey? Cover = null, object? Data = null)
-{
-    /// <summary>Rows of text this item occupies.</summary>
-    public int Height => Kind is ResultKind.Artist or ResultKind.Album or ResultKind.Track ? 2 : 1;
-
-    /// <summary>False for headers and status lines.</summary>
-    public bool Selectable => Kind is not (ResultKind.Header or ResultKind.Info);
-}
-
 /// <summary>
 /// Virtualised list of search results with variable row heights: only the rows in view are drawn. Matches of the query are
 /// highlighted, thumbnails are requested lazily through <see cref="CoverArt.Source"/> (and cancelled when they scroll
@@ -63,6 +31,9 @@ public sealed class ResultsView : PaintView
 
     /// <summary>Key <c>a</c> (add to queue) or <c>n</c> (play next) on the selected row.</summary>
     public event Action<QueueAction, ResultItem>? QueueRequested;
+
+    /// <summary>Right click on an album or track row (now selected), with the screen cell of the click.</summary>
+    public event Action<ResultItem, System.Drawing.Point>? ContextRequested;
 
     public IReadOnlyList<ResultItem> Items => _items;
 
@@ -278,6 +249,19 @@ public sealed class ResultsView : PaintView
         if (mouse.Flags.HasFlag(MouseFlags.WheeledUp))
         {
             Scroll(-2);
+            return true;
+        }
+
+        if (mouse.Flags.HasFlag(MouseFlags.RightButtonClicked) && mouse.Position is { } rp)
+        {
+            SetFocus();
+            var at = ItemAt(rp.Y);
+            if (at >= 0 && _items[at].Kind is ResultKind.Album or ResultKind.Track)
+            {
+                Select(at, true);
+                ContextRequested?.Invoke(_items[at], mouse.ScreenPosition);
+            }
+
             return true;
         }
 

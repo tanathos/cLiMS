@@ -3,22 +3,6 @@ using Clims.Lms;
 
 namespace Clims.Tui.Ui;
 
-/// <summary>How the connect screen ended.</summary>
-public enum ConnectChoice
-{
-    /// <summary>A server was reached; <see cref="ConnectResult.Uri"/> and the login are set.</summary>
-    Connected,
-
-    /// <summary>The user chose demo mode.</summary>
-    Demo,
-
-    /// <summary>The user backed out (keep what was running).</summary>
-    Cancelled,
-}
-
-/// <summary>What the connect screen produced.</summary>
-public sealed record ConnectResult(ConnectChoice Choice, Uri? Uri = null, string? Username = null, string? Password = null, string? Uuid = null);
-
 /// <summary>
 /// State and logic of the connect screen, without any drawing: the servers found, the search state, and the connection
 /// check with its plain-words outcome. The view only shows this and forwards clicks and keys.

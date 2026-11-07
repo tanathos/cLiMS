@@ -2,26 +2,6 @@ using Terminal.Gui.Drawing;
 
 namespace Clims.Tui.Ui;
 
-public enum CoverMode
-{
-    /// <summary>"▀": 1 x 2 samples per cell, two colours.</summary>
-    HalfBlock,
-
-    /// <summary>Quadrant blocks: 2 x 2 samples per cell, two colours.</summary>
-    Quadrant,
-
-    /// <summary>Braille dots: 2 x 4 samples per cell, two colours.</summary>
-    Braille,
-
-    /// <summary>Real pixels via Sixel when the terminal supports it (partly visible covers fall back to quadrants).</summary>
-    Sixel,
-}
-
-/// <summary>Identifies a cover: the server's artwork id, or (demo data, no id) a seed for a generated one.</summary>
-/// <param name="ArtworkId">Server artwork id; null when the album has none.</param>
-/// <param name="Seed">Seed for generated demo covers.</param>
-public readonly record struct CoverKey(string? ArtworkId, int Seed);
-
 /// <summary>Chooses how covers are drawn and turns a <see cref="CoverImage"/> into terminal cells.</summary>
 public static class CoverArt
 {

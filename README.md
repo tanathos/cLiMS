@@ -102,6 +102,7 @@ Press `?` in the app for the same list.
 | letters | Type-ahead in the left list (artist, genre or year) |
 | `F6` | Switch the left list: Album Artist / Genre / Year (or click the ≡ icon in its header); click the ▾/▴ arrow to sort ascending/descending; drag the divider to resize the column (22 characters to half the screen); the ⌕ next to "All ..." (or `Ctrl+F`) turns that row into a filter field, `x` or `Esc` closes it |
 | `Enter` or double click | Play the selected track, album or search result: replaces the queue and restarts the stream (not gapless). A single click only selects |
+| Right click | On an album cover (whole album) or a track: menu with Play and Enqueue (arrows, `Enter` and `Esc` work in it too) |
 | `a` / `n` | Add the highlighted track to the end of the queue / play it next (gapless); `A` / `N` do the same for the whole album |
 | Recently added tab | The Library's album list (same keys: `Enter` plays, `a` / `n` and `A` / `N` queue) with only the newest 100 albums, newest first |
 | Queue tab | `Enter` play that entry, `x` or `Delete` remove, `Shift+Up/Down` move, `c` clear (asks), `s` save under a name, `o` saved queues (`Enter` replace after asking, `a` append, `x` delete, `Esc` back) |
@@ -173,6 +174,10 @@ To cut a release:
 
 ## License
 [MIT](LICENSE), copyright (c) 2026 Eros Fratini.
+
+## Coding standards
+- **One type per file.** Every top-level class, record, struct, enum and interface lives in its own file, named after the type (`CoverKey` is in `CoverKey.cs`). This applies to `src` and `tests`: test helpers and fakes get their own files too. Nested types stay inside their parent.
+- Warnings are errors.
 
 ## Notes for contributors
 - Terminal.Gui is pinned to 2.5.0. The API is large and moves; check `Terminal.Gui.xml` in the NuGet cache instead of memory.

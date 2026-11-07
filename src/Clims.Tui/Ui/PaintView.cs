@@ -67,7 +67,7 @@ public abstract class PaintView : View
             (_lastW, _lastH) = (W, H);
         }
 
-        SetAttribute(Base);
+        Use(Base);
         for (var y = 0; y < H; y++)
         {
             var from = Math.Clamp(ClearFromX, 0, W);
@@ -136,6 +136,33 @@ public abstract class PaintView : View
         return true;
     }
 
+    /// <summary>True while a modal view is open: every view that can be dimmed draws its colours at half brightness.</summary>
+    public static bool Dimmed { get; set; }
+
+    /// <summary>Screen area of an open popup: a cover touching it is drawn in cells, because a sixel would be painted over the popup.</summary>
+    public static System.Drawing.Rectangle? SixelHole { get; set; }
+
+    private static bool InHole(System.Drawing.Point screen, int cols, int rows) =>
+        SixelHole is { } hole && hole.IntersectsWith(new System.Drawing.Rectangle(screen.X, screen.Y, cols, rows));
+
+    /// <summary>False for the modal view itself.</summary>
+    protected virtual bool Dimmable => true;
+
+    private void Use(Attribute attr)
+    {
+        if (Dimmed && Dimmable)
+        {
+            attr = new Attribute(Shade(attr.Foreground), Shade(attr.Background), attr.Style);
+        }
+
+        SetAttribute(attr);
+    }
+
+    private static Color Shade(Color c) => new(c.R / 2, c.G / 2, c.B / 2, 255);
+
+    /// <summary>Asks for a cover without drawing it (a better version of one that is drawn).</summary>
+    protected void WantCover(CoverKey key) => _wantedCovers.Add(key);
+
     protected abstract void Paint();
 
     /// <summary>Draws a one-column scrollbar on the right edge. Nothing is drawn when everything fits.</summary>
@@ -196,7 +223,7 @@ public abstract class PaintView : View
             text = DropSplitSurrogates(text[..(W - x)]);
         }
 
-        SetAttribute(attr);
+        Use(attr);
         Move(x, y);
         AddStr(text);
         return x + text.Length;
@@ -215,7 +242,7 @@ public abstract class PaintView : View
 
         // A sixel cannot be clipped, so only covers fully inside the view use it; the rest fall back to cells.
         var inside = x >= 0 && y >= 0 && x + cols <= W && y + rows <= H;
-        if (inside && CoverArt.UseSixel)
+        if (inside && CoverArt.UseSixel && !(Dimmed && Dimmable) && !(Dimmable && InHole(ViewportToScreen(new System.Drawing.Point(x, y)), cols, rows)))
         {
             var blankKey = $"{x},{y},{cols},{rows}|{image.Label}";
             _blankedNow[blankKey] = new Rect(x, y, cols, rows);
@@ -246,7 +273,7 @@ public abstract class PaintView : View
                 }
 
                 var (glyph, fg, bg) = CoverArt.Glyph(image, c, r, cols, rows);
-                SetAttribute(new Attribute(fg, bg));
+                Use(new Attribute(fg, bg));
                 Move(cx, cy);
                 AddStr(glyph);
             }
@@ -329,7 +356,7 @@ public abstract class PaintView : View
             return;
         }
 
-        SetAttribute(attr);
+        Use(attr);
         Move(x0, y);
         AddStr(new string(' ', x1 - x0));
     }

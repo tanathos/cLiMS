@@ -32,6 +32,11 @@ public sealed class MainWindow : Window
     private readonly WaveformService? _waves;
     private string _waveSignature = "";
     private bool _helpVisible;
+    private bool _infoVisible;
+    private bool _menuVisible;
+    private readonly ContextMenu _menu = new();
+    private readonly ClickShield _shield = new();
+    private readonly AlbumInfoOverlay _info = new();
     private readonly HelpOverlay _help = new();
     private int _currentTab = -1;
     private int _tabBeforeSearch = 1;
@@ -85,11 +90,31 @@ public sealed class MainWindow : Window
         _help.Width = Dim.Fill();
         _help.Height = Dim.Fill(FooterView.Rows);
         _help.Visible = false;
+        // Two rows above and below and two columns left and right stay visible, dimmed.
+        _info.X = 2;
+        _info.Y = 2;
+        _info.Width = Dim.Fill(2);
+        _info.Height = Dim.Fill(2);
+        _info.Visible = false;
 
         Add(_header, _tabs);
         Add(_pages);
         Add(_help);
         Add(_footer);
+        Add(_info);
+        _shield.Visible = false;
+        Add(_shield);
+        _menu.Visible = false;
+        Add(_menu);
+        _menu.Chosen += RunMenuEntry;
+        _shield.Clicked += CloseMenu;
+        _library.Albums.ContextRequested += OnAlbumContext;
+        _recent.Albums.ContextRequested += OnAlbumContext;
+        _search.List.ContextRequested += (item, at) => OpenMenu(
+            [new MenuEntry("Play", _search.List.ActivateSelected), new MenuEntry("Enqueue", () => _search.List.RequestQueue(QueueAction.Add))],
+            at);
+        _footer.CoverClicked += OpenInfo;
+        _info.CloseRequested += CloseInfo;
 
         _tabs.SelectedChanged += ShowTab;
         ShowTab(0);
@@ -114,6 +139,25 @@ public sealed class MainWindow : Window
         _recent.Albums.PlayRequested += Play;
         _recent.Albums.QueueRequested += OnQueueRequested;
         _recent.Albums.VisibleAlbumsChanged += _refresher.SetVisible;
+        foreach (var albums in new[] { _library.Albums, _recent.Albums })
+        {
+            albums.ArtistClicked += album => ShowInLibrary(album, scrollToAlbum: false);
+            albums.GenreClicked += genre =>
+            {
+                _tabs.Selected = 1;
+                _library.CloseFilter();
+                _library.SelectGenre(genre);
+                _library.Artists.SetFocus();
+            };
+            albums.YearClicked += year =>
+            {
+                _tabs.Selected = 1;
+                _library.CloseFilter();
+                _library.SelectYear(year);
+                _library.Artists.SetFocus();
+            };
+        }
+
         _footer.ArtistClicked += album => ShowInLibrary(album, scrollToAlbum: false);
         _footer.AlbumClicked += album => ShowInLibrary(album, scrollToAlbum: true);
         _search.ArtistChosen += artist =>
@@ -129,6 +173,11 @@ public sealed class MainWindow : Window
         catalog.PromptRequested += p => _app.Invoke(() => OnPrompt(p));
         catalog.AlbumRefreshed += _ => _app.Invoke(() =>
         {
+            if (_infoVisible)
+            {
+                return;
+            }
+
             _library.Albums.SetNeedsDraw();
             _recent.Albums.SetNeedsDraw();
         });
@@ -166,7 +215,7 @@ public sealed class MainWindow : Window
         };
         if (_waves is not null)
         {
-            _waves.Updated += () => _app.Invoke(() => _footer.SetNeedsDraw());
+            _waves.Updated += () => _app.Invoke(() => { if (!_infoVisible) { _footer.SetNeedsDraw(); } });
         }
 
         ApplyCatalog();
@@ -305,8 +354,24 @@ public sealed class MainWindow : Window
     private void OnPlayerChanged()
     {
         UpdateTabTitle();
-        _footer.SetNeedsDraw();
-        _queue.Refresh();
+        if (_infoVisible)
+        {
+            if (_player.Current is { } playing)
+            {
+                _info.Show(playing, _catalog.Current);
+            }
+            else
+            {
+                CloseInfo();
+            }
+        }
+
+        if (!_infoVisible)
+        {
+            _footer.SetNeedsDraw();
+            _queue.Refresh();
+        }
+
         WantWaveforms();
     }
 
@@ -441,9 +506,13 @@ public sealed class MainWindow : Window
 
         if (Interlocked.Exchange(ref _coversDirty, 0) == 1)
         {
+            _info.SetNeedsDraw();
+            if (!_infoVisible)
+            {
             _library.Albums.SetNeedsDraw();
             _recent.Albums.SetNeedsDraw();
             _search.List.SetNeedsDraw();
+            }
         }
 
         if (_noticeUntil != DateTime.MinValue && now > _noticeUntil)
@@ -459,7 +528,12 @@ public sealed class MainWindow : Window
         _lastTick = now;
         _footer.ShowCover = Viewport.Width >= MinWidth;
         _footer.ShowWaveform = Viewport.Height >= MinHeight;
-        _footer.SetNeedsDraw();
+        // While the album view is open the screen under it stays still: repainting it would wipe the cover image (a sixel is erased by any text written over it).
+        if (!_infoVisible)
+        {
+            _footer.SetNeedsDraw();
+        }
+
         _header.Refresh();
         return true;
     }
@@ -483,6 +557,57 @@ public sealed class MainWindow : Window
             else
             {
                 _player.Previous();
+            }
+
+            key.Handled = true;
+            return;
+        }
+
+        if (_menuVisible)
+        {
+            if (key == Key.CursorDown)
+            {
+                _menu.MoveSelection(1);
+            }
+            else if (key == Key.CursorUp)
+            {
+                _menu.MoveSelection(-1);
+            }
+            else if (key == Key.Enter)
+            {
+                RunMenuEntry();
+            }
+            else if (key == Key.Esc)
+            {
+                CloseMenu();
+            }
+
+            key.Handled = true;
+            return;
+        }
+
+        if (_infoVisible)
+        {
+            var c = key.AsRune.Value;
+            if (key == Key.Esc || key == Key.Enter || c is 'q' or 'Q')
+            {
+                CloseInfo();
+            }
+            else if (key == Key.Space)
+            {
+                _player.TogglePlay();
+            }
+            else if (c is '+' or '=')
+            {
+                _player.SetVolume(_player.Volume + 5);
+            }
+            else if (c == '-')
+            {
+                _player.SetVolume(_player.Volume - 5);
+            }
+            else if (key == Key.CursorRight || key == Key.CursorLeft)
+            {
+                _player.Seek(TimeSpan.FromSeconds(key == Key.CursorRight ? 10 : -10));
             }
 
             key.Handled = true;
@@ -670,6 +795,121 @@ public sealed class MainWindow : Window
         }
 
         key.Handled = true;
+    }
+
+    private void OpenInfo()
+    {
+        if (_infoVisible || _helpVisible || _player.Current is not { } now)
+        {
+            return;
+        }
+
+        _infoVisible = true;
+        _info.Show(null, null); // forget the last album: the first show always paints
+        _info.Show(now, _catalog.Current);
+        // Sixel images sit above any text and cannot be dimmed: while the view is open everything under it draws its covers in cells.
+        PaintView.Dimmed = true;
+        ReleaseSixels();
+        _info.Visible = true;
+        _info.SetFocus();
+        SetNeedsDraw();
+    }
+
+    private void OnAlbumContext(CatalogAlbum album, IReadOnlyList<CatalogTrack> tracks, int index, System.Drawing.Point at)
+    {
+        if (tracks.Count == 0)
+        {
+            Notice("This album's tracks are still loading.");
+            return;
+        }
+
+        // Index -1 is the cover: the whole album. Otherwise the one track (played with the rest of the album queued behind it).
+        var from = Math.Max(0, index);
+        IReadOnlyList<CatalogTrack> chosen = index >= 0 ? new[] { tracks[index] } : tracks;
+        OpenMenu(
+            [new MenuEntry("Play", () => Play(album, tracks, from)), new MenuEntry("Enqueue", () => OnQueueRequested(QueueAction.Add, album, chosen, from))],
+            at);
+    }
+
+    private void OpenMenu(IReadOnlyList<MenuEntry> entries, System.Drawing.Point at)
+    {
+        if (_menuVisible || _infoVisible || _helpVisible)
+        {
+            return;
+        }
+
+        _menuVisible = true;
+        // A cover under the popup is drawn in cells (a sixel would be painted over the popup); the others stay sharp.
+        var (menuW, menuH) = ContextMenu.SizeFor(entries);
+        var (menuX, menuY) = ContextMenu.Place(at.X, at.Y, menuW, menuH, Viewport.Width, Viewport.Height);
+        PaintView.SixelHole = new System.Drawing.Rectangle(menuX, menuY, menuW, menuH);
+        ReleaseSixels();
+        _shield.Visible = true;
+        _menu.Open(entries, at.X, at.Y, Viewport.Width, Viewport.Height);
+        SetNeedsDraw();
+    }
+
+    private void CloseMenu()
+    {
+        if (!_menuVisible)
+        {
+            return;
+        }
+
+        _menuVisible = false;
+        _menu.Close();
+        PaintView.SixelHole = null;
+        _shield.Visible = false;
+        ReleaseSixels();
+        _footer.SetNeedsDraw();
+        _library.Albums.SetNeedsDraw();
+        _recent.Albums.SetNeedsDraw();
+        _search.List.SetNeedsDraw();
+        SetNeedsDraw();
+    }
+
+    private void RunMenuEntry()
+    {
+        var entries = _menu.Entries;
+        var chosen = _menu.Selected;
+        CloseMenu();
+        if (chosen >= 0 && chosen < entries.Count)
+        {
+            entries[chosen].Run();
+        }
+    }
+
+    /// <summary>Takes every sixel off the screen and has the views draw again (as cells when a modal view is open, as sixels otherwise).</summary>
+    private void ReleaseSixels()
+    {
+        SixelCovers.Release(_library.Albums);
+        SixelCovers.Release(_search.List);
+        SixelCovers.Release(_recent.Albums);
+        SixelCovers.Release(_footer);
+        _library.Albums.ResetCovers();
+        _recent.Albums.ResetCovers();
+        _search.List.ResetCovers();
+        _footer.ResetCovers();
+    }
+
+    private void CloseInfo()
+    {
+        if (!_infoVisible)
+        {
+            return;
+        }
+
+        _infoVisible = false;
+        _info.Visible = false;
+        PaintView.Dimmed = false;
+        SixelCovers.Release(_info);
+        CoverArt.Source.Want(_info, Array.Empty<CoverKey>());
+        ReleaseSixels();
+        _footer.SetNeedsDraw();
+        _library.Albums.SetNeedsDraw();
+        _recent.Albums.SetNeedsDraw();
+        _search.List.SetNeedsDraw();
+        SetNeedsDraw();
     }
 
     private void ToggleHelp()

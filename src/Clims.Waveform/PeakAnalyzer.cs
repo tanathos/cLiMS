@@ -4,21 +4,6 @@ using NVorbis;
 
 namespace Clims.Waveform;
 
-/// <summary>An overview of one track: loudness per slice of its length, 0 to 1.</summary>
-/// <param name="Peaks">Peak amplitude of each equal slice of the track, normalised so the loudest slice is 1.</param>
-/// <param name="Duration">Length of the decoded audio.</param>
-public sealed record PeakProfile(float[] Peaks, TimeSpan Duration);
-
-/// <summary>The file is not in a format this library can decode (for example MP3).</summary>
-public sealed class UnsupportedAudioException : Exception
-{
-    /// <summary>Creates the exception.</summary>
-    public UnsupportedAudioException(string message)
-        : base(message)
-    {
-    }
-}
-
 /// <summary>Decodes an audio file and reduces it to peaks. FLAC, Ogg Vorbis and WAV, recognised by their first bytes.</summary>
 public static class PeakAnalyzer
 {

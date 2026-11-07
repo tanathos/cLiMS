@@ -4,12 +4,6 @@ using Terminal.Gui.Drivers;
 
 namespace Clims.Tui.Ui;
 
-/// <summary>Where a cover should be drawn as a Sixel image, in screen cells.</summary>
-public sealed record SixelPlacement(CoverImage Image, int Cols, int Rows, Point Screen)
-{
-    public string Key => $"{Image.Label}|{Cols}x{Rows}@{Screen.X},{Screen.Y}";
-}
-
 /// <summary>
 /// Real-pixel covers through Terminal.Gui's sixel queue. Each view publishes the placements it drew in its last
 /// frame; the shared queue is rebuilt from all owners. Encoded sixel data is cached per cover and size.

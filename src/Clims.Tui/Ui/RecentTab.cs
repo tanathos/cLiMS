@@ -29,7 +29,7 @@ public sealed class RecentTab : View
     {
         _source = source;
         CanFocus = true;
-        Albums = new AlbumsView { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(), ShowArtist = true };
+        Albums = new AlbumsView { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(), ShowArtist = true, Sortable = false };
         Add(Albums);
         Rebuild();
     }

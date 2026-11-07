@@ -10,9 +10,6 @@ using Terminal.Gui.App;
 
 namespace Clims.Tui;
 
-/// <summary>Where to connect and with which login.</summary>
-public sealed record Connection(Uri Uri, NetworkCredential? Credentials);
-
 /// <summary>
 /// Everything that talks to one server (or the demo data), built from a <see cref="Connection"/> and torn down together.
 /// Changing the server (F2) disposes one session and builds the next, so no service keeps the old address.

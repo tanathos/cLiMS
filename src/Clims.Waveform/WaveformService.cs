@@ -2,47 +2,6 @@ using Clims.Lms;
 
 namespace Clims.Waveform;
 
-/// <summary>Where a track's waveform stands.</summary>
-public enum WaveformState
-{
-    /// <summary>Nobody asked for it yet.</summary>
-    Unknown,
-
-    /// <summary>Downloading or decoding.</summary>
-    Loading,
-
-    /// <summary>Peaks are available.</summary>
-    Ready,
-
-    /// <summary>The format cannot be decoded (shown as "no waveform", never retried).</summary>
-    Unsupported,
-
-    /// <summary>Download or decode failed (retried after a pause).</summary>
-    Failed,
-}
-
-/// <summary>Settings for <see cref="WaveformService"/>.</summary>
-public sealed class WaveformOptions
-{
-    /// <summary>Peaks per track.</summary>
-    public int Points { get; init; } = PeakAnalyzer.DefaultPoints;
-
-    /// <summary>Profiles kept in memory (about 5 KB each).</summary>
-    public int CacheSize { get; init; } = 64;
-
-    /// <summary>Largest file that is downloaded for analysis.</summary>
-    public long MaxBytes { get; init; } = 400L * 1024 * 1024;
-
-    /// <summary>How long a failed track is left alone before it can be tried again.</summary>
-    public TimeSpan RetryAfter { get; init; } = TimeSpan.FromSeconds(30);
-
-    /// <summary>Folder for the temporary download; the system temp folder by default.</summary>
-    public string? TempFolder { get; init; }
-
-    /// <summary>Clock, replaceable in tests.</summary>
-    public Func<DateTimeOffset> Now { get; init; } = () => DateTimeOffset.UtcNow;
-}
-
 /// <summary>
 /// Overview waveforms for the player: downloads the original file of the current track (and the next one, ahead of time),
 /// decodes it and keeps the peaks in memory. One download at a time, the current track always first, work for tracks

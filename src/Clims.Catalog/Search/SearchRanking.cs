@@ -1,64 +1,6 @@
 namespace Clims.Catalog;
 
 /// <summary>
-/// The parsed query: words folded (case, accents), plus the same words joined by single spaces. Names are normalised the
-/// same way ("AC/DC - Back in Black" becomes <c>ac dc back in black</c>), so matching is plain string work.
-/// </summary>
-public sealed class SearchQuery
-{
-    private SearchQuery(string[] words)
-    {
-        Words = words;
-        Text = string.Join(' ', words);
-    }
-
-    /// <summary>Folded query words.</summary>
-    public string[] Words { get; }
-
-    /// <summary>The words joined with single spaces.</summary>
-    public string Text { get; }
-
-    /// <summary>True when the query has no words.</summary>
-    public bool IsEmpty => Words.Length == 0;
-
-    /// <summary>Parses user input.</summary>
-    public static SearchQuery Parse(string text) => new(TextFolding.Words(TextFolding.Fold(text ?? string.Empty)));
-}
-
-/// <summary>The searchable forms of one item: its main name, its artist, and everything searchable joined.</summary>
-/// <param name="Name">Normalised main name (artist, album or track title, genre).</param>
-/// <param name="Artist">Normalised artist name (albums and tracks), or null.</param>
-/// <param name="All">Name, artist and album title joined, so "wish cure" finds the album Wish by The Cure.</param>
-public readonly record struct SearchKeys(string Name, string? Artist, string All)
-{
-    /// <summary>Keys of an item that has only a name.</summary>
-    public static SearchKeys ForName(string name)
-    {
-        var n = Normalize(name);
-        return new SearchKeys(n, null, n);
-    }
-
-    /// <summary>Keys of an album.</summary>
-    public static SearchKeys ForAlbum(string title, string artist)
-    {
-        var t = Normalize(title);
-        var a = Normalize(artist);
-        return new SearchKeys(t, a, t + " " + a);
-    }
-
-    /// <summary>Keys of a track.</summary>
-    public static SearchKeys ForTrack(string title, string? artist, string? album)
-    {
-        var t = Normalize(title);
-        var a = artist is null ? null : Normalize(artist);
-        var l = album is null ? "" : Normalize(album);
-        return new SearchKeys(t, a, t + " " + (a ?? "") + " " + l);
-    }
-
-    private static string Normalize(string s) => string.Join(' ', TextFolding.Words(TextFolding.Fold(s)));
-}
-
-/// <summary>
 /// The ranking rules. A name matches when every query word occurs in it, anywhere (the server only matches word starts).
 /// Better matches score higher:
 /// <list type="bullet">

@@ -3,15 +3,6 @@ using Terminal.Gui.Input;
 
 namespace Clims.Tui.Ui;
 
-public enum RowKind
-{
-    Item,
-    Header,
-    More,
-}
-
-public sealed record Row(string Text, string Right = "", RowKind Kind = RowKind.Item, object? Data = null);
-
 /// <summary>
 /// Virtualised single-column list: only visible rows are drawn, so 1 000+ rows cost the same as 30.
 /// Optional type-ahead and A-Z jump on the first letter. The last column is a scrollbar.

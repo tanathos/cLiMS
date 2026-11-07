@@ -7,6 +7,10 @@ public static class Theme
 {
     public static Color Rgb(int r, int g, int b) => new(r, g, b, 255);
 
+    /// <summary>The colour <paramref name="amount"/> (0..1) of the way from <paramref name="a"/> to <paramref name="b"/>.</summary>
+    public static Color Mix(Color a, Color b, double amount) =>
+        Rgb((int)(a.R + (b.R - a.R) * amount), (int)(a.G + (b.G - a.G) * amount), (int)(a.B + (b.B - a.B) * amount));
+
     public static readonly Color Bg = Rgb(24, 26, 31);
     public static readonly Color BgHeader = Rgb(16, 18, 23);
     public static readonly Color BgAlt = Rgb(40, 44, 54);

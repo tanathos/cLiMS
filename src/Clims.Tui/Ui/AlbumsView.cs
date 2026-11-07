@@ -5,16 +5,6 @@ using Terminal.Gui.Input;
 
 namespace Clims.Tui.Ui;
 
-/// <summary>What the user asked to do with a track or album besides playing it right now.</summary>
-public enum QueueAction
-{
-    /// <summary>Append to the end of the queue.</summary>
-    Add,
-
-    /// <summary>Insert right after the current track.</summary>
-    PlayNext,
-}
-
 /// <summary>
 /// Right pane of the Library tab: a heading, then one block per album (cover, title, year · genres, duration,
 /// two-column tracklist). Block heights vary with the number of tracks, so tops are precomputed and only blocks that
@@ -27,6 +17,8 @@ public sealed class AlbumsView : PaintView
 
     private MusicCatalog? _catalog;
     private IReadOnlyList<CatalogAlbum> _albums = Array.Empty<CatalogAlbum>();
+    private IReadOnlyList<CatalogAlbum> _source = Array.Empty<CatalogAlbum>();
+    private bool _yearDescending = true;
     private int[] _tops = Array.Empty<int>();
     private int _totalRows;
     private string _heading = "";
@@ -64,14 +56,60 @@ public sealed class AlbumsView : PaintView
 
     private int TextWidth => W - 1 - TextX - 2;
 
+    /// <summary>Albums are ordered by year (newest first at the start), and the heading row shows a clickable sort label. Off for lists whose order comes from the server.</summary>
+    public bool Sortable { get; set; } = true;
+
+    /// <summary>True when the newest year comes first (the default).</summary>
+    public bool YearDescending => _yearDescending;
+
+    /// <summary>Right click on a cover (track index -1: the whole album) or on a track, with the screen cell of the click.</summary>
+    public event Action<CatalogAlbum, IReadOnlyList<CatalogTrack>, int, System.Drawing.Point>? ContextRequested;
+
+    /// <summary>A genre in an album's line was clicked.</summary>
+    public event Action<string>? GenreClicked;
+
+    /// <summary>The artist in an album's line was clicked.</summary>
+    public event Action<CatalogAlbum>? ArtistClicked;
+
+    /// <summary>The year in an album's line was clicked.</summary>
+    public event Action<int>? YearClicked;
+
+    private string SortLabel => _yearDescending ? "Year ▼" : "Year ▲";
+
+    /// <summary>Flips the year order (click on the label at the top right) and goes back to the top.</summary>
+    public void ToggleSort()
+    {
+        _yearDescending = !_yearDescending;
+        _albums = Ordered(_source);
+        _offset = 0;
+        _selAlbum = 0;
+        _selTrack = 0;
+        _lastVisible = Array.Empty<int>();
+        Relayout();
+    }
+
+    // Albums without a year always go last. The sort is stable: within a year the given order stays.
+    private IReadOnlyList<CatalogAlbum> Ordered(IReadOnlyList<CatalogAlbum> albums)
+    {
+        if (!Sortable)
+        {
+            return albums;
+        }
+
+        return (_yearDescending
+            ? albums.OrderByDescending(a => a.Year == 0 ? -1 : a.Year)
+            : albums.OrderBy(a => a.Year == 0 ? int.MaxValue : a.Year)).ToList();
+    }
+
     public void SetAlbums(string heading, IReadOnlyList<CatalogAlbum> albums, MusicCatalog catalog)
     {
         // The same list again (a catalogue refresh, or the first build finishing): keep scroll position and selection.
-        var same = _message is null && heading == _heading && albums.Count == _albums.Count
-                   && albums.Zip(_albums).All(p => p.First.Id == p.Second.Id);
+        var same = _message is null && heading == _heading && albums.Count == _source.Count
+                   && albums.Zip(_source).All(p => p.First.Id == p.Second.Id);
         _heading = heading;
         _message = null;
-        _albums = albums;
+        _source = albums;
+        _albums = Ordered(albums);
         _catalog = catalog;
         _version = catalog.Version;
         if (!same)
@@ -113,6 +151,7 @@ public sealed class AlbumsView : PaintView
     public void SetMessage(string message)
     {
         _message = message;
+        _source = Array.Empty<CatalogAlbum>();
         _albums = Array.Empty<CatalogAlbum>();
         _catalog = null;
         _lastVisible = Array.Empty<int>();
@@ -136,10 +175,70 @@ public sealed class AlbumsView : PaintView
     }
 
     private int TrackCount(CatalogAlbum a) => _catalog?.TracksOf(a.Id).Count ?? 0;
+    /// <summary>
+    /// Where each track of an album goes: two columns filled top to bottom. An album with several discs gets a "Disc N"
+    /// line before each disc, and every disc is split into its own two columns.
+    /// </summary>
+    public sealed class TrackLayout
+    {
+        public TrackLayout(IReadOnlyList<CatalogTrack> tracks)
+        {
+            Slots = new (int Col, int Row)[tracks.Count];
+            var discs = tracks.Select(t => t.Disc).Distinct().ToList();
+            var row = 0;
+            foreach (var disc in discs)
+            {
+                if (discs.Count > 1)
+                {
+                    if (row > 0)
+                    {
+                        row++; // a blank line between discs
+                    }
 
-    private static int TrackRows(int trackCount) => (trackCount + 1) / 2;
+                    Headers.Add((row, disc));
+                    row++;
+                }
 
-    private int BlockHeight(CatalogAlbum a) => Math.Max(CoverRows, 3 + Math.Max(1, TrackRows(TrackCount(a)))) + 1;
+                var indexes = Enumerable.Range(0, tracks.Count).Where(i => tracks[i].Disc == disc).ToList();
+                var rows = (indexes.Count + 1) / 2;
+                for (var k = 0; k < indexes.Count; k++)
+                {
+                    Slots[indexes[k]] = (k / rows, row + k % rows);
+                }
+
+                row += rows;
+            }
+
+            Rows = row;
+        }
+
+        /// <summary>Column and row (below the first line of tracks) of each track.</summary>
+        public (int Col, int Row)[] Slots { get; }
+
+        /// <summary>Rows with a "Disc N" title.</summary>
+        public List<(int Row, int Disc)> Headers { get; } = new();
+
+        public int Rows { get; }
+
+        /// <summary>The track at a column and row, or -1.</summary>
+        public int TrackAt(int col, int row)
+        {
+            for (var i = 0; i < Slots.Length; i++)
+            {
+                if (Slots[i].Col == col && Slots[i].Row == row)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+    }
+
+    private TrackLayout LayoutOf(CatalogAlbum a) => new(_catalog?.TracksOf(a.Id) ?? Array.Empty<CatalogTrack>());
+
+    private int BlockHeight(CatalogAlbum a) => Math.Max(CoverRows, 3 + Math.Max(1, LayoutOf(a).Rows)) + 1;
+
 
     protected override void Paint()
     {
@@ -157,7 +256,15 @@ public sealed class AlbumsView : PaintView
         // A resize can leave the old offset past the new maximum.
         _offset = Math.Clamp(_offset, 0, Math.Max(0, _totalRows - H));
 
-        Put(1, -_offset, _heading, new Attribute(Theme.Accent, Theme.Bg));
+        var headingW = W - 3;
+        if (Sortable)
+        {
+            var label = SortLabel;
+            headingW = W - 2 - label.Length - 3;
+            Put(W - 2 - label.Length, -_offset, label, new Attribute(Theme.Accent, Theme.Bg));
+        }
+
+        Put(1, -_offset, Clip(_heading, Math.Max(1, headingW)), new Attribute(Theme.Accent, Theme.Bg));
         Put(1, 1 - _offset, new string('─', Math.Max(0, W - 3)), Theme.Dim);
 
         var visible = new List<int>();
@@ -232,40 +339,17 @@ public sealed class AlbumsView : PaintView
         Put(W - 1 - duration.Length - 2, top, duration, Theme.Dim);
         Put(TextX, top, Clip(album.Title, textW - duration.Length - 1), new Attribute(Theme.Fg, Theme.Bg));
 
-        var details = new List<string>();
-        if (ShowArtist && album.ArtistName.Length > 0)
-        {
-            details.Add(album.ArtistName);
-        }
+        var (full, parts) = Details(album, summary.Genres);
+        Put(TextX, top + 1, Clip(full, textW), Theme.Dim);
 
-        if (album.Year > 0)
+        // Genres in italic: redraw each genre over the line.
+        foreach (var part in parts)
         {
-            details.Add(album.Year.ToString());
-        }
-
-        if (summary.Genres.Count > 0)
-        {
-            details.Add(string.Join("; ", summary.Genres));
-        }
-
-        var line = Clip(string.Join(" · ", details), textW);
-        Put(TextX, top + 1, line, Theme.Dim);
-
-        // Genres in italic: redraw the genre part of the (already clipped) line over itself.
-        if (summary.Genres.Count > 0)
-        {
-            var genres = string.Join("; ", summary.Genres);
-            var at = line.LastIndexOf(genres, StringComparison.Ordinal);
-            if (at < 0 && line.Length > 0)
+            if (part.X < textW && (part.Genre is not null || part.Year > 0 || part.Artist))
             {
-                // Clipped: italicise whatever remains after the last separator.
-                var cut = line.LastIndexOf(" · ", StringComparison.Ordinal);
-                at = details.Count > 1 && cut >= 0 ? cut + 3 : (details.Count == 1 ? 0 : -1);
-            }
-
-            if (at >= 0 && at < line.Length)
-            {
-                Put(TextX + at, top + 1, line[at..], new Attribute(Theme.FgDim, Theme.Bg, TextStyle.Italic));
+                // Links: underlined (genres also italic).
+                var style = part.Genre is not null ? TextStyle.Italic | TextStyle.Underline : TextStyle.Underline;
+                Put(TextX + part.X, top + 1, Clip(part.Text, textW - part.X), new Attribute(Theme.FgDim, Theme.Bg, style));
             }
         }
 
@@ -275,12 +359,16 @@ public sealed class AlbumsView : PaintView
             return;
         }
 
-        var rows = TrackRows(tracks.Count);
+        var layout = new TrackLayout(tracks);
         var colW = Math.Max(10, textW / 2);
+        foreach (var (headerRow, disc) in layout.Headers)
+        {
+            Put(TextX, top + 3 + headerRow, $"Disc {disc}", new Attribute(Theme.Fg, Theme.Bg, TextStyle.Italic));
+        }
+
         for (var t = 0; t < tracks.Count; t++)
         {
-            var col = t / rows;
-            var row = t % rows;
+            var (col, row) = layout.Slots[t];
             var y = top + 3 + row;
             if (y < 0 || y >= H)
             {
@@ -298,6 +386,44 @@ public sealed class AlbumsView : PaintView
             Put(x, y, $"{number,2} {Clip(track.Title, cellW - dur.Length - 5)}", attr);
             Put(x + cellW - dur.Length, y, dur, selected ? attr : new Attribute(Theme.FgDim, Theme.Bg));
         }
+    }
+
+    /// <summary>One piece of the "artist · year · genre; genre" line: where it starts and what a click on it means.</summary>
+    private readonly record struct Detail(int X, string Text, string? Genre, int Year, bool Artist = false);
+
+    private (string Line, List<Detail> Parts) Details(CatalogAlbum album, IEnumerable<string> genres)
+    {
+        var text = new System.Text.StringBuilder();
+        var parts = new List<Detail>();
+        void Add(string piece, string? genre, int year, string separator, bool artist = false)
+        {
+            if (text.Length > 0)
+            {
+                text.Append(separator);
+            }
+
+            parts.Add(new Detail(text.Length, piece, genre, year, artist));
+            text.Append(piece);
+        }
+
+        if (ShowArtist && album.ArtistName.Length > 0)
+        {
+            Add(album.ArtistName, null, 0, " · ", artist: true);
+        }
+
+        if (album.Year > 0)
+        {
+            Add(album.Year.ToString(), null, album.Year, " · ");
+        }
+
+        var first = true;
+        foreach (var genre in genres)
+        {
+            Add(genre, genre, 0, first ? " · " : "; ");
+            first = false;
+        }
+
+        return (text.ToString(), parts);
     }
 
     protected override bool OnKeyDown(Key key)
@@ -378,6 +504,13 @@ public sealed class AlbumsView : PaintView
             return true;
         }
 
+        if (mouse.Flags.HasFlag(MouseFlags.RightButtonClicked) && mouse.Position is { } rp)
+        {
+            SetFocus();
+            RaiseContext(rp.X, rp.Y, mouse.ScreenPosition);
+            return true;
+        }
+
         var click = mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) || mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
         var doubleClick = mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
         var press = mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed);
@@ -401,7 +534,11 @@ public sealed class AlbumsView : PaintView
         return base.OnMouseEvent(mouse);
     }
 
-    private void HitTest(int x, int y, bool play)
+    /// <summary>
+    /// Right click on a cover (the whole album) or on a track (just that track): selects it and asks for a menu.
+    /// The track index is -1 for the whole album.
+    /// </summary>
+    private void RaiseContext(int x, int y, System.Drawing.Point screen)
     {
         if (_catalog is not { } catalog)
         {
@@ -413,17 +550,91 @@ public sealed class AlbumsView : PaintView
         {
             var album = _albums[i];
             var tracks = catalog.TracksOf(album.Id);
-            var rows = TrackRows(tracks.Count);
+            if (row < _tops[i] + CoverRows && x >= 1 && x < 1 + CoverCols)
+            {
+                _selAlbum = i;
+                _selTrack = 0;
+                SetNeedsDraw();
+                ContextRequested?.Invoke(album, tracks, -1, screen);
+                return;
+            }
+
             var line = row - _tops[i] - 3;
             var colW = Math.Max(10, TextWidth / 2);
             var col = (x - TextX) / colW;
-            if (rows == 0 || line < 0 || line >= rows || x < TextX || col > 1)
+            if (line < 0 || x < TextX || col > 1)
             {
                 continue;
             }
 
-            var t = col * rows + line;
-            if (t < tracks.Count)
+            var t = new TrackLayout(tracks).TrackAt(col, line);
+            if (t >= 0)
+            {
+                _selAlbum = i;
+                _selTrack = t;
+                SetNeedsDraw();
+                ContextRequested?.Invoke(album, tracks, t, screen);
+                return;
+            }
+        }
+    }
+
+    private void HitTest(int x, int y, bool play)
+    {
+        if (_catalog is not { } catalog)
+        {
+            return;
+        }
+
+        var row = y + _offset;
+        if (Sortable && row == 0 && x >= W - 2 - SortLabel.Length - 1)
+        {
+            ToggleSort();
+            return;
+        }
+
+        for (var i = FirstVisible(); i < _albums.Count && _tops[i] <= row; i++)
+        {
+            var album = _albums[i];
+            if (row == _tops[i] + 1)
+            {
+                var (_, parts) = Details(album, catalog.Summary(album.Id).Genres);
+                foreach (var part in parts)
+                {
+                    var start = TextX + part.X;
+                    if (x >= start && x < Math.Min(start + part.Text.Length, TextX + TextWidth))
+                    {
+                        if (part.Artist)
+                        {
+                            ArtistClicked?.Invoke(album);
+                        }
+                        else if (part.Genre is not null)
+                        {
+                            GenreClicked?.Invoke(part.Genre);
+                        }
+                        else if (part.Year > 0)
+                        {
+                            YearClicked?.Invoke(part.Year);
+                        }
+
+                        return;
+                    }
+                }
+
+                continue;
+            }
+
+            var tracks = catalog.TracksOf(album.Id);
+            var line = row - _tops[i] - 3;
+            var colW = Math.Max(10, TextWidth / 2);
+            var col = (x - TextX) / colW;
+            if (line < 0 || x < TextX || col > 1)
+            {
+                continue;
+            }
+
+            var t = new TrackLayout(tracks).TrackAt(col, line);
+            if (t >= 0)
             {
                 _selAlbum = i;
                 _selTrack = t;
@@ -476,8 +687,8 @@ public sealed class AlbumsView : PaintView
 
     private void EnsureSelectionVisible()
     {
-        var rows = Math.Max(1, TrackRows(TrackCount(_albums[_selAlbum])));
-        var line = _tops[_selAlbum] + 3 + _selTrack % rows;
+        var slots = LayoutOf(_albums[_selAlbum]).Slots;
+        var line = _tops[_selAlbum] + 3 + (_selTrack < slots.Length ? slots[_selTrack].Row : 0);
         if (line < _offset)
         {
             _offset = Math.Max(0, _tops[_selAlbum]);

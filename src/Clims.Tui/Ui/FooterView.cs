@@ -80,6 +80,9 @@ public sealed class FooterView : PaintView
         Put(x0, 5, Clip(hint, W - x0 - 1), Theme.Dim);
     }
 
+    /// <summary>The user clicked the cover: show the playing album full screen.</summary>
+    public event Action? CoverClicked;
+
     /// <summary>The user clicked the artist of the playing track: show that artist in the library.</summary>
     public event Action<CatalogAlbum>? ArtistClicked;
 
@@ -119,7 +122,14 @@ public sealed class FooterView : PaintView
         }
 
         cx = Put(cx, 1, Clip(sep, end - cx), Theme.Dim);
-        Put(cx, 1, Clip(now.Track.Title, Math.Max(0, end - cx)), Theme.Normal);
+        // "(3/12)": position in the queue, right-aligned on the same line.
+        var count = _player.QueueIndex >= 0 && _player.Queue.Count > 0 ? $"({_player.QueueIndex + 1}/{_player.Queue.Count})" : "";
+        var room = Math.Max(0, end - cx - (count.Length > 0 ? count.Length + 2 : 0));
+        Put(cx, 1, Clip(now.Track.Title, room), new Attribute(Theme.Fg, Theme.Bg, TextStyle.Bold));
+        if (count.Length > 0 && end - cx >= count.Length + 2)
+        {
+            Put(end - count.Length, 1, count, Theme.Dim);
+        }
     }
 
     private void PaintSeekBar(CatalogTrack track, int left)
@@ -189,8 +199,9 @@ public sealed class FooterView : PaintView
             top[i] = level > 8 ? Blocks[level - 8] : ' ';
         }
 
-        var done = new Attribute(Theme.Accent, Theme.Bg);
-        var todo = new Attribute(Theme.FgDim, Theme.Bg);
+        // The waveform is background decoration: a softer accent and a dimmer rest than the rest of the player.
+        var done = new Attribute(Theme.Mix(Theme.Accent, Theme.Bg, 0.35), Theme.Bg);
+        var todo = new Attribute(Theme.Mix(Theme.FgDim, Theme.Bg, 0.45), Theme.Bg);
         Put(x, y, new string(top, 0, played), done);
         Put(x + played, y, new string(top, played, width - played), todo);
         Put(x, y + 1, new string(bottom, 0, played), done);
@@ -238,6 +249,12 @@ public sealed class FooterView : PaintView
             || mouse.Position is not { } p)
         {
             return base.OnMouseEvent(mouse);
+        }
+
+        if (ShowCover && p.X < CoverCols && mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && _player.Current is not null)
+        {
+            CoverClicked?.Invoke();
+            return true;
         }
 
         if (p.Y == 1 && mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && _player.Current is { } playing)

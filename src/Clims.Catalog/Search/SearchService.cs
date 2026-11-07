@@ -2,26 +2,6 @@ using Clims.Lms;
 
 namespace Clims.Catalog;
 
-/// <summary>Search over the local index, with the server filling in the groups the index does not have yet.</summary>
-public interface ISearchService
-{
-    /// <summary>Raised with the local result at once, and again when the server's part has arrived (any thread).</summary>
-    event Action<SearchOutcome>? Changed;
-
-    /// <summary>Starts a search. Supersedes the previous one: an answer for older text is never reported.</summary>
-    void Query(string text);
-}
-
-/// <summary>Settings for <see cref="SearchService"/>.</summary>
-public sealed class SearchServiceOptions
-{
-    /// <summary>Wait after the last keystroke before the server is asked (the local result needs no wait).</summary>
-    public TimeSpan ServerDebounce { get; init; } = TimeSpan.FromMilliseconds(120);
-
-    /// <summary>Hits requested per group from the server.</summary>
-    public int ServerCount { get; init; } = 50;
-}
-
 /// <summary>
 /// Local first, server for what is missing. The local index answers every keystroke synchronously (a few milliseconds).
 /// While the index is incomplete the server's <c>search</c> fills the gaps, after a short debounce and with the previous

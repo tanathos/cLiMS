@@ -19,6 +19,7 @@ public sealed class HelpOverlay : PaintView
         ("Ctrl+Q", "Quit"),
         ("Library and search results", ""),
         ("Enter  double click", "Play (replaces the queue, restarts the stream), open an artist or genre; a single click only selects"),
+        ("Right click", "Menu on a cover or track: Play, Enqueue"),
         ("a  n", "Add the highlighted track to the end of the queue / play it next (gapless)"),
         ("A  N", "The same for the whole album (Library and Recently added tabs)"),
         ("F6", "Library view: Album Artist / Genre / Year"),
