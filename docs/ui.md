@@ -95,3 +95,8 @@ Always full screen (alternate screen buffer, resize-aware). Three fixed regions:
 - **Queueing from the library and search:** `a` / `n` add the highlighted track to the end / right after the current track (playback continues without a gap); `A` / `N` do it for the whole album; `Enter` plays and replaces the queue.
 - **Help:** `?` draws the key reference over the tabs; `?` or `Esc` closes it.
 - **Not done:** a player selector, themes and key bindings in a settings file, a first-run screen.
+
+## 9. Recently added tab (key 4)
+- A fourth tab next to Search, Library and Queue. It uses the Library's album list (cover, title, artist, year, genres, track columns, `Enter`, `a` / `n`, `A` / `N`, F3 / F4) over the newest 100 albums, newest first, full width (there is no left column: nothing to group by).
+- The order comes from the server (`albums … sort:new`, the time the files were added); the content comes from the local index. Opening the tab, or pressing `4` on it, asks the server again. Albums added after the last sync are not listed until you resync (F5).
+- While the order is being fetched the tab says so; if the server does not answer it says that instead of showing an empty list.

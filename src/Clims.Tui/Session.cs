@@ -89,6 +89,18 @@ public sealed class Session : IDisposable
     /// <summary>The server's own search, filling in what the local index does not have yet. Null in demo mode.</summary>
     public ILibraryApi? Library { get; }
 
+    /// <summary>The newest albums, newest first: the server's own order (<c>sort:new</c>), or the last demo albums.</summary>
+    public RecentAlbumsSource RecentAlbums => async (count, ct) =>
+    {
+        if (Library is null)
+        {
+            return Catalog.Current?.Albums.OrderByDescending(a => a.Id).Take(count).Select(a => a.Id).ToList() ?? new List<int>();
+        }
+
+        var page = await Library.GetAlbumsAsync(new AlbumQuery { Sort = AlbumSort.New }, 0, count, ct).ConfigureAwait(false);
+        return page.Items.Select(a => a.Id).ToList();
+    };
+
     /// <summary>Waveforms, or null in demo mode.</summary>
     public WaveformService? Waves { get; }
 

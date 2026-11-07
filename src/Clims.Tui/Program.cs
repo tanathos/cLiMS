@@ -13,7 +13,16 @@ using Terminal.Gui.App;
 //   --player <id>            the player to control (its id, usually the MAC address; default: the first connected hardware player)
 //   --demo                   built-in fake data, no server
 //   --driver <name>          force a Terminal.Gui driver: windows | dotnet | ansi
+//   --version                print the version and exit
 // With no address from any of these, the connect screen opens (server search plus a form).
+if (args.Contains("--version"))
+{
+    var v = System.Reflection.Assembly.GetExecutingAssembly().GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+        .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "unknown";
+    Console.WriteLine($"cLiMS {v}");
+    return 0;
+}
+
 string? Arg(string name) => args.SkipWhile(a => a != name).Skip(1).FirstOrDefault();
 
 string? PasswordFromArgs()
@@ -99,7 +108,7 @@ while (true)
 
         using var session = new Session(connection, settings, Arg("--player"));
         using var search = new SearchService(() => session.Catalog.Current, session.Library);
-        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves);
+        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums);
 
         // Start talking to the server only once the UI loop is running, so its events have somewhere to go.
         app.AddTimeout(TimeSpan.FromMilliseconds(50), () =>

@@ -7,7 +7,7 @@ public sealed class HelpOverlay : PaintView
     {
         ("Everywhere", ""),
         ("/", "Search (type; Esc clears and goes back; Enter or Down moves to the results)"),
-        ("1  2  3", "Search / Library / Queue tab"),
+        ("1  2  3  4", "Search / Library / Queue / Recently added tab (4 again: ask the server for the newest albums)"),
         ("Space", "Play / pause"),
         ("Left  Right", "Seek -10 s / +10 s (or click the progress bar)"),
         ("Alt+n  Alt+p", "Next / previous track, from anywhere (previous restarts the track after 3 s)"),
@@ -20,7 +20,7 @@ public sealed class HelpOverlay : PaintView
         ("Library and search results", ""),
         ("Enter  double click", "Play (replaces the queue, restarts the stream), open an artist or genre; a single click only selects"),
         ("a  n", "Add the highlighted track to the end of the queue / play it next (gapless)"),
-        ("A  N", "The same for the whole album (Library tab)"),
+        ("A  N", "The same for the whole album (Library and Recently added tabs)"),
         ("F6", "Library view: Album Artist / Genre / Year"),
         ("Queue tab", ""),
         ("Enter", "Play that entry"),

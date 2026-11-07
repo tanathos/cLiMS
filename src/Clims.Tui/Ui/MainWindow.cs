@@ -28,6 +28,7 @@ public sealed class MainWindow : Window
     private readonly SearchTab _search;
     private readonly FooterView _footer;
     private readonly QueueTab _queue;
+    private readonly RecentTab _recent;
     private readonly WaveformService? _waves;
     private string _waveSignature = "";
     private bool _helpVisible;
@@ -48,7 +49,8 @@ public sealed class MainWindow : Window
         ISearchService search,
         IPlayerController player,
         SavedQueueStore queues,
-        WaveformService? waves = null)
+        WaveformService? waves = null,
+        RecentAlbumsSource? recentAlbums = null)
     {
         _waves = waves;
         _app = app;
@@ -62,12 +64,13 @@ public sealed class MainWindow : Window
         SetScheme(Theme.Dark);
 
         _header = new HeaderBar(player, () => catalog.Status) { X = 0, Y = 0 };
-        _tabs = new TabStrip("Search", "Library", "Queue") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
+        _tabs = new TabStrip("Search", "Library", "Queue", "Recently added") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
 
         _search = new SearchTab();
         _library = new LibraryTab();
         _queue = new QueueTab(player, queues);
-        _pages = new View[] { _search, _library, _queue };
+        _recent = new RecentTab(recentAlbums ?? ((_, _) => Task.FromResult<IReadOnlyList<int>>(Array.Empty<int>())));
+        _pages = new View[] { _search, _library, _queue, _recent };
         foreach (var page in _pages)
         {
             page.X = 0;
@@ -108,6 +111,9 @@ public sealed class MainWindow : Window
         _library.Albums.PlayRequested += Play;
         _library.Albums.QueueRequested += OnQueueRequested;
         _library.Albums.VisibleAlbumsChanged += _refresher.SetVisible;
+        _recent.Albums.PlayRequested += Play;
+        _recent.Albums.QueueRequested += OnQueueRequested;
+        _recent.Albums.VisibleAlbumsChanged += _refresher.SetVisible;
         _footer.ArtistClicked += album => ShowInLibrary(album, scrollToAlbum: false);
         _footer.AlbumClicked += album => ShowInLibrary(album, scrollToAlbum: true);
         _search.ArtistChosen += artist =>
@@ -121,7 +127,11 @@ public sealed class MainWindow : Window
         catalog.StatusChanged += _ => _app.Invoke(OnStatusChanged);
         catalog.CatalogChanged += _ => _app.Invoke(OnCatalogChanged);
         catalog.PromptRequested += p => _app.Invoke(() => OnPrompt(p));
-        catalog.AlbumRefreshed += _ => _app.Invoke(() => _library.Albums.SetNeedsDraw());
+        catalog.AlbumRefreshed += _ => _app.Invoke(() =>
+        {
+            _library.Albums.SetNeedsDraw();
+            _recent.Albums.SetNeedsDraw();
+        });
         CoverArt.Source.Updated += () => Interlocked.Exchange(ref _coversDirty, 1);
 
         _app.Keyboard.KeyDown += OnGlobalKey;
@@ -167,6 +177,7 @@ public sealed class MainWindow : Window
     {
         if (disposing)
         {
+            _recent.Cancel();
             _refresher.Dispose();
         }
 
@@ -223,6 +234,19 @@ public sealed class MainWindow : Window
         if (index == 2)
         {
             _queue.Refresh();
+        }
+
+        if (index == 3)
+        {
+            _recent.Albums.ResetCovers();
+            _recent.Refresh();
+        }
+        else
+        {
+            _recent.Cancel();
+            SixelCovers.Release(_recent.Albums);
+            CoverArt.Source.Want(_recent.Albums, Array.Empty<CoverKey>());
+            _recent.Albums.ForgetVisible();
         }
 
         if (index != 0)
@@ -351,6 +375,7 @@ public sealed class MainWindow : Window
             _ => "Library not synced yet. Press F5 to sync.",
         };
         _library.SetCatalog(catalog, message);
+        _recent.SetCatalog(catalog, message);
         _search.SetCatalog(catalog);
     }
 
@@ -410,12 +435,14 @@ public sealed class MainWindow : Window
         {
             _sixelSeen = true;
             _library.Albums.SetNeedsDraw();
+            _recent.Albums.SetNeedsDraw();
             _search.List.SetNeedsDraw();
         }
 
         if (Interlocked.Exchange(ref _coversDirty, 0) == 1)
         {
             _library.Albums.SetNeedsDraw();
+            _recent.Albums.SetNeedsDraw();
             _search.List.SetNeedsDraw();
         }
 
@@ -575,7 +602,12 @@ public sealed class MainWindow : Window
                     return false;
                 });
                 break;
-            case '1' or '2' or '3' when !typeAhead:
+            case '1' or '2' or '3' or '4' when !typeAhead:
+                if (ch == '4' && _tabs.Selected == 3)
+                {
+                    _recent.Refresh(); // pressing 4 on the tab itself asks the server again
+                }
+
                 _tabs.Selected = ch - '1';
                 FocusPage();
                 break;
@@ -608,11 +640,14 @@ public sealed class MainWindow : Window
 
                     _library.Albums.ResetCovers();
                     _library.Albums.SetNeedsDraw();
+                    _recent.Albums.ResetCovers();
+                    _recent.Albums.SetNeedsDraw();
                 }
                 else if (key == Key.F4)
                 {
                     CoverArt.Large = !CoverArt.Large;
                     _library.Albums.Relayout();
+                    _recent.Albums.Relayout();
                 }
                 else if (key == Key.F2)
                 {
@@ -651,8 +686,10 @@ public sealed class MainWindow : Window
 
             SixelCovers.Release(_library.Albums);
             SixelCovers.Release(_search.List);
+            SixelCovers.Release(_recent.Albums);
             CoverArt.Source.Want(_library.Albums, Array.Empty<CoverKey>());
             CoverArt.Source.Want(_search.List, Array.Empty<CoverKey>());
+            CoverArt.Source.Want(_recent.Albums, Array.Empty<CoverKey>());
             _refresher.SetVisible(Array.Empty<CatalogAlbum>());
             _help.SetFocus();
         }
@@ -662,6 +699,8 @@ public sealed class MainWindow : Window
             FocusPage();
             _library.Albums.ResetCovers();
             _library.Albums.SetNeedsDraw();
+            _recent.Albums.ResetCovers();
+            _recent.Albums.SetNeedsDraw();
             _search.List.SetNeedsDraw();
         }
 
@@ -689,6 +728,9 @@ public sealed class MainWindow : Window
             case 2:
                 _queue.Refresh();
                 _queue.List.SetFocus();
+                break;
+            case 3:
+                _recent.Albums.SetFocus();
                 break;
         }
     }

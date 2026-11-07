@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <PackageReference Include="SkiaSharp" Version="4.154.0" />
+    <!-- SkiaSharp itself carries natives for Windows and macOS only; without this the Linux build cannot load libSkiaSharp. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.154.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
     <PackageReference Include="Terminal.Gui" Version="2.5.0" />
   </ItemGroup>

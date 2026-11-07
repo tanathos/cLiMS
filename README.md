@@ -10,6 +10,7 @@ Browse a large library, search it as you type, see real cover art in the termina
 
 ## Features
 - **Library** by Album Artist, Genre or Year, with albums, genres in italic, track lists and covers. The left column is resizable, sortable and filterable.
+- **Recently added:** a fourth tab with the albums the server added last, in the Library's layout (covers, track lists), newest first.
 - **Instant search** on every keystroke over a local index (about 2 ms on 20 000 tracks). The server's own search fills in while the index is incomplete.
 - **Real covers** as Sixel images (with half-block, quadrant and braille fallbacks for other terminals).
 - **Playback** on your LMS player: play/pause, seek, volume, next/previous, status kept in step through server events.
@@ -96,12 +97,13 @@ Press `?` in the app for the same list.
 | Key | Action |
 |---|---|
 | `/` | Focus the search box (typing switches to the Search tab and searches at once; `Esc` clears and returns to the previous tab, `Enter`/`Down` jumps to results) |
-| `1` `2` `3` | Search / Library / Queue tab (click the tab strip too) |
+| `1` `2` `3` `4` | Search / Library / Queue / Recently added tab (click the tab strip too; `4` on the tab again asks the server for the newest albums) |
 | `Tab` | Move focus between panes |
 | letters | Type-ahead in the left list (artist, genre or year) |
 | `F6` | Switch the left list: Album Artist / Genre / Year (or click the ≡ icon in its header); click the ▾/▴ arrow to sort ascending/descending; drag the divider to resize the column (22 characters to half the screen); the ⌕ next to "All ..." (or `Ctrl+F`) turns that row into a filter field, `x` or `Esc` closes it |
 | `Enter` or double click | Play the selected track, album or search result: replaces the queue and restarts the stream (not gapless). A single click only selects |
 | `a` / `n` | Add the highlighted track to the end of the queue / play it next (gapless); `A` / `N` do the same for the whole album |
+| Recently added tab | The Library's album list (same keys: `Enter` plays, `a` / `n` and `A` / `N` queue) with only the newest 100 albums, newest first |
 | Queue tab | `Enter` play that entry, `x` or `Delete` remove, `Shift+Up/Down` move, `c` clear (asks), `s` save under a name, `o` saved queues (`Enter` replace after asking, `a` append, `x` delete, `Esc` back) |
 | `Space` | Play / pause |
 | `Left` `Right` | Seek -10 s / +10 s |
@@ -127,6 +129,8 @@ dotnet test
 $env:CLIMS_LMS_URL = "http://host:9000/"      # read-only integration tests; a full sync takes about 1.5 minutes
 $env:CLIMS_CATALOG_DB = "<path to catalog-*.db>"   # times the local search on your saved index, no server needed
 ```
+Prebuilt single-file builds are on the [Releases page](https://github.com/tanathos/cLiMS/releases).
+
 Single-file build (about 100 MB, no .NET needed on the target):
 ```
 dotnet publish src/Clims.Tui -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
@@ -154,8 +158,21 @@ Done so far (details in [`docs/sprint.md`](docs/sprint.md)):
 | 4 | Ranked search over the local index | Done |
 | 5 | Real playback, queue, saved queues, waveform, help, log, packaging, CI | Done. Not verified: audio-level gaplessness (needs a listening test) and the controls against a real player (checked with fakes only) |
 | 6 | First run: server discovery, connect screen with address form, password-protected servers, per-server index, `F2` / `⇄ Server` | Done. Auth is tested against fakes only (no password-protected server was available) |
+| 7 | Recently added tab (key `4`) from LMS `albums sort:new` | Done |
+| 0.7.0 | First tagged release: MIT license, changelog, release workflow for Windows, Linux and macOS | Done |
 
 Deferred: player selector, live visualiser, themes and key binding configuration, remembering several servers at once.
+
+## Releases
+Versions follow [Semantic Versioning](https://semver.org/) (`0.y.z` until 1.0: minor versions may change behaviour). Each release is a git tag `vX.Y.Z` with a GitHub Release holding single-file builds for `win-x64`, `linux-x64` and `osx-arm64` (zip or tar.gz, plus `SHA256SUMS`). Changes are listed in [`CHANGELOG.md`](CHANGELOG.md). Download from the [Releases page](https://github.com/tanathos/cLiMS/releases); `Clims.Tui --version` prints the version. The builds are not code-signed, so Windows SmartScreen warns on first run, and only Windows Terminal has been tested.
+
+To cut a release:
+1. Set `<Version>` in [`Directory.Build.props`](Directory.Build.props) (the only place the version lives) and move the "Unreleased" notes in `CHANGELOG.md` under a new `## [X.Y.Z] - date` heading.
+2. Commit, then `git tag -a vX.Y.Z -m "cLiMS X.Y.Z"` and `git push origin vX.Y.Z`.
+3. [`.github/workflows/release.yml`](.github/workflows/release.yml) checks that the tag matches the version, builds and tests, publishes the three builds and creates the Release with the changelog section as its notes. A tag with a dash (`v0.8.0-rc.1`) becomes a pre-release.
+
+## License
+[MIT](LICENSE), copyright (c) 2026 Eros Fratini.
 
 ## Notes for contributors
 - Terminal.Gui is pinned to 2.5.0. The API is large and moves; check `Terminal.Gui.xml` in the NuGet cache instead of memory.
@@ -169,4 +186,5 @@ Deferred: player selector, live visualiser, themes and key binding configuration
 - LMS quirks that bit us: `titles` with the genre tag only works with an explicit `sort:albumtrack`; `artists` includes track-only people; ids can change after a rescan.
 - Anything that cancels work by "no longer wanted" needs a re-check after acquiring the slot: a freed slot can start the request that was just cancelled.
 - Never log credentials: not the password, the `Authorization` header or the CLI `login` line.
+- SkiaSharp ships natives for Windows and macOS only: Linux needs `SkiaSharp.NativeAssets.Linux.NoDependencies` (same version, kept in step with `SkiaSharp`).
 - Warnings are errors.
