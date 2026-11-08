@@ -3,12 +3,11 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
-## [0.8.0] - Unreleased
+## [0.8.0] - 2026-11-08
 
 ### Added
 - Album lists show a sort label at the top right of the heading row ("Year ▼" / "Year ▲"); click it to flip the direction.
 - The artist, year and genres on an album's line are links (underlined): the artist opens in the Library, a genre opens the Genre view with that genre selected, the year opens the Year view with that year selected. They work on the Library and Recently added tabs.
-
 - Click the cover in the player to open the playing album full screen: large cover on the left; artist, album title, genres, runtime in minutes and file format (with a lossless/lossy icon) on the right. The rest of the screen stays visible, dimmed. Esc, Enter, `q` or a click closes it; playback keys still work.
 - Right-click an album cover or a track (in the Library, Recently added and Search tabs) for a menu with "Play" and "Enqueue". On a cover they act on the whole album, on a track on that track. Arrow keys, Enter, Esc and the mouse work in the menu.
 - Multi-disc albums show a "Disc N" heading above each disc, and every disc's tracks are split into two columns of their own.
@@ -43,3 +42,4 @@ First tagged release.
 - The binaries are not code-signed (Windows SmartScreen will warn on first run).
 
 [0.7.0]: https://github.com/tanathos/cLiMS/releases/tag/v0.7.0
+[0.8.0]: https://github.com/tanathos/cLiMS/releases/tag/v0.8.0

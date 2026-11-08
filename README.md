@@ -25,6 +25,14 @@ The Library, with covers, genres in italic, a resizable and filterable left colu
 
 ![Library](screenshots/library.png)
 
+The Recently added tab: the newest 50 albums on the server, newest first:
+
+![Recently added](screenshots/recent.png)
+
+Click the cover in the player to see the playing album full screen:
+
+![Full-screen cover](screenshots/cover.png)
+
 Search results appear as you type, with the matched text highlighted:
 
 ![Search](screenshots/search.png)
