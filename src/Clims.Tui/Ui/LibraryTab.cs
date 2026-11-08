@@ -52,7 +52,7 @@ public sealed class LibraryTab : View
 
     public LibraryDimension Dimension => _dimension;
     public const int MinLeftWidth = 22;
-    private int _leftWidth = 30;
+    private int _leftWidth = 36;
     private bool _descending;
 
     public SplitterView Splitter { get; }

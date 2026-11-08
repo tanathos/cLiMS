@@ -15,6 +15,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - The player shows the position in the queue, for example "(3/12)", at the end of the title line.
 
 ### Changed
+- The Library's left column starts 6 characters wider (36). The Recently added tab shows the newest 50 albums instead of 100.
+- Header: the server area shows only the player name and a coloured status icon (no "Synced (… ago)" text, no volume). Click the icon to see the status ("Synced 1 min ago, resync now?"). Only the icon and the "⇄ Server" button are clickable, and clicking empty header space no longer focuses the search box. The footer volume bar is labelled with a 🔊 icon instead of "Vol".
 - Album lists are ordered by year, newest first, by default (albums without a year come last). Recently added keeps the server's newest-first order.
 - The track title in the player is bold, and the waveform is drawn in softer colours.
 

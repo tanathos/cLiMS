@@ -44,7 +44,7 @@ Research notes (read before coding; all measured on the real server unless marke
 | 4 | Search | Done | Claude | 37 new tests; local search about 2 ms (worst 15 ms) on the real 19 960-track index; server fallback verified with no index; see Log |
 | 5 | Playback, queues, waveform, polish | Done, awaiting your listening test | Claude | 40 new tests; real status, queue and waveform verified read-only against your player; transport commands covered by fake-server tests only; see Log |
 | 6 | First run: server discovery, connect form, password-protected servers | Done (visually verified; auth tested against fakes only) | Claude | Discovery probed read-only on the real server (UDP 3483 answers); decisions D9 to D11 below |
-| 7 | "Recently added" tab (key `4`) | Done (verified on the real server) | Claude | Newest 100 albums from LMS `albums sort:new`, shown in the Library's album list; see Log |
+| 7 | "Recently added" tab (key `4`) | Done (verified on the real server) | Claude | Newest 50 albums from LMS `albums sort:new`, shown in the Library's album list; see Log |
 
 Status values: Not started / In progress / Blocked / Done. Steps 1 and 2 can run in parallel.
 

@@ -221,7 +221,7 @@ public sealed class FooterView : PaintView
         var vx = W - barWidth - 10;
         if (vx > x + 4)
         {
-            Put(vx, 4, "Vol", Theme.Dim);
+            Put(vx, 4, "🔊", Theme.Dim);
             var bx = vx + 4;
             _volume = (bx, bx + barWidth);
             var filled = _player.Volume * barWidth / 100;

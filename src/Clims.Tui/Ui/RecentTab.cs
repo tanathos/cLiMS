@@ -13,7 +13,7 @@ public delegate Task<IReadOnlyList<int>> RecentAlbumsSource(int count, Cancellat
 public sealed class RecentTab : View
 {
     /// <summary>How many albums the tab lists.</summary>
-    public const int Count = 100;
+    public const int Count = 50;
 
     public const string Heading = "Recently added";
 

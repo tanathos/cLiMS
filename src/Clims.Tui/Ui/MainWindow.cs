@@ -97,7 +97,7 @@ public sealed class MainWindow : Window
         _info.Height = Dim.Fill(2);
         _info.Visible = false;
 
-        Add(_header, _tabs);
+        Add(_header, _header.Search, _tabs);
         Add(_pages);
         Add(_help);
         Add(_footer);
@@ -456,17 +456,20 @@ public sealed class MainWindow : Window
     private void OfferResync()
     {
         var status = _catalog.Status;
+        var now = DateTimeOffset.UtcNow;
+        var (_, label, _) = HeaderBar.Describe(status, now);
         if (status.State == SyncState.Demo)
         {
             Notice("Demo mode: there is no server to sync with.");
         }
         else if (status.State == SyncState.Syncing)
         {
-            _tabs.ShowPrompt("A sync is running. Cancel it?", new PromptChoice('Y', "Cancel sync", _catalog.CancelSync), new PromptChoice('N', "Keep going", () => { }));
+            _tabs.ShowPrompt(label + ". Cancel it?", new PromptChoice('Y', "Cancel sync", _catalog.CancelSync), new PromptChoice('N', "Keep going", () => { }));
         }
         else
         {
-            _tabs.ShowPrompt("Resync the library now?", new PromptChoice('Y', "Resync", StartSync), new PromptChoice('N', "No", () => { }));
+            var text = status.State == SyncState.Synced ? $"Synced {HeaderBar.Age(status.SyncedAt, now)}" : label;
+            _tabs.ShowPrompt(text + ", resync now?", new PromptChoice('Y', "Resync", StartSync), new PromptChoice('N', "No", () => { }));
         }
     }
 

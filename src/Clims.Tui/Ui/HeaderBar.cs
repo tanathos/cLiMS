@@ -13,13 +13,13 @@ public sealed class HeaderBar : View
     public const int Rows = 3;
     private const int Pad = 2;
     private const int SearchWidth = 44;
-    private const int ServerButtonWidth = 10;
+    private const int ServerButtonWidth = 8; // exactly the width of "⇄ Server"
 
     private readonly StatusText _status;
 
     public HeaderBar(IPlayerController player, Func<SyncStatus> syncStatus)
     {
-        CanFocus = true;
+        CanFocus = false; // a click on the bar's empty cells must not move focus to the search box
         Height = Rows;
         Width = Dim.Fill();
 
@@ -30,9 +30,10 @@ public sealed class HeaderBar : View
         server.Clicked += () => ServerClicked?.Invoke();
         _status.Clicked += () => SyncClicked?.Invoke();
         Add(new Backdrop { X = 0, Y = 0, Width = Dim.Fill(), Height = Rows });
-        Add(brand, Search, _status, server);
+        Add(brand, _status, server);
     }
 
+    /// <summary>The search box. It is not a child of the bar (a focusable parent would pull focus to it on any click in the bar): the main window adds it next to the bar.</summary>
     public TextField Search { get; }
 
     /// <summary>The "Server" button was clicked: open the connect screen.</summary>
@@ -119,30 +120,26 @@ public sealed class HeaderBar : View
             _status = status;
         }
 
+        private (int X0, int X1) _icon;
+
         public event Action? Clicked;
 
         protected override Attribute Base => OnHeader(Theme.Fg);
 
         protected override void Paint()
         {
-            var (symbol, label, color) = Describe(_status(), DateTimeOffset.UtcNow);
-
-            // Right-aligned. The emoji is two UTF-16 chars but one display cell pair, so it is counted as 2.
-            var right = $"  🔊 {_player.Volume}";
+            // Right-aligned "name ●": only the icon is clickable, the status text is shown when it is clicked.
+            var (symbol, _, color) = Describe(_status(), DateTimeOffset.UtcNow);
             var name = _player.PlayerName + " ";
-            var room = Math.Max(0, W - right.Length - name.Length - symbol.Length - 1);
-            label = Clip(label, room);
-            var total = name.Length + symbol.Length + 1 + label.Length + right.Length;
-            var x = Math.Max(0, W - total);
+            var x = Math.Max(0, W - name.Length - symbol.Length);
             x = Put(x, 0, name, OnHeader(Theme.Fg));
-            x = Put(x, 0, symbol + " ", OnHeader(color));
-            x = Put(x, 0, label, OnHeader(Theme.FgDim));
-            Put(x, 0, right, OnHeader(Theme.Fg));
+            _icon = (x, x + symbol.Length);
+            Put(x, 0, symbol, OnHeader(color));
         }
 
         protected override bool OnMouseEvent(Mouse mouse)
         {
-            if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked))
+            if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && mouse.Position is { } p && p.Y == 0 && p.X >= _icon.X0 && p.X < _icon.X1)
             {
                 Clicked?.Invoke();
                 return true;
