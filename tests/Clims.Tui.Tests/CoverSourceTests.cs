@@ -120,6 +120,133 @@ public class CoverSourceTests
         }
     }
 
+    private static readonly DateTimeOffset T0 = new(2026, 11, 8, 12, 0, 0, TimeSpan.Zero);
+
+    private static (string Folder, Clims.Catalog.CoverCacheStore Store) TempCache()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "clims-cc-" + Guid.NewGuid().ToString("N"));
+        return (folder, new Clims.Catalog.CoverCacheStore(Path.Combine(folder, "covers-x.db")));
+    }
+
+    private static void Cleanup(string folder)
+    {
+        if (Directory.Exists(folder))
+        {
+            Directory.Delete(folder, true);
+        }
+    }
+
+    [Fact]
+    public async Task A_cover_fetched_once_is_served_from_the_disk_cache_by_the_next_session()
+    {
+        var (folder, store) = TempCache();
+        try
+        {
+            var first = new Handler((_, _) => Task.FromResult(Ok()));
+            using (var source = new LmsCoverSource(new HttpClient(first), Base, cache: () => store, clock: () => T0))
+            {
+                source.Want(new object(), new[] { Key("a1") });
+                await Eventually(() => source.TryGet(Key("a1")) is not null);
+            }
+
+            Assert.Single(first.Requested);
+            Assert.Equal(1, store.Count(300));
+
+            var second = new Handler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+            using var again = new LmsCoverSource(new HttpClient(second), Base, cache: () => store, clock: () => T0.AddDays(1));
+            again.Want(new object(), new[] { Key("a1") });
+            await Eventually(() => again.TryGet(Key("a1")) is not null);
+
+            Assert.Empty(second.Requested);
+        }
+        finally
+        {
+            Cleanup(folder);
+        }
+    }
+
+    [Fact]
+    public async Task An_expired_cover_is_fetched_again()
+    {
+        var (folder, store) = TempCache();
+        try
+        {
+            store.Put("a1", 300, Png(), T0, TimeSpan.FromDays(30));
+            var handler = new Handler((_, _) => Task.FromResult(Ok()));
+            using var source = new LmsCoverSource(new HttpClient(handler), Base, cache: () => store, clock: () => T0.AddDays(31));
+            source.Want(new object(), new[] { Key("a1") });
+            await Eventually(() => source.TryGet(Key("a1")) is not null);
+
+            Assert.Single(handler.Requested);
+        }
+        finally
+        {
+            Cleanup(folder);
+        }
+    }
+
+    [Fact]
+    public async Task The_big_cover_is_cached_under_its_own_size_and_rules()
+    {
+        var (folder, store) = TempCache();
+        try
+        {
+            var handler = new Handler((_, _) => Task.FromResult(Ok()));
+            using var source = new LmsCoverSource(new HttpClient(handler), Base, cache: () => store, clock: () => T0);
+            var big = new CoverKey("a1", 0, Big: true);
+            source.Want(new object(), new[] { big });
+            await Eventually(() => source.TryGet(big) is not null);
+
+            Assert.Equal(1, store.Count(900));
+            Assert.Equal(0, store.Count(300));
+        }
+        finally
+        {
+            Cleanup(folder);
+        }
+    }
+
+    [Fact]
+    public async Task A_resolution_with_a_zero_ttl_is_not_cached_and_a_disabled_cache_stores_nothing()
+    {
+        var (folder, store) = TempCache();
+        try
+        {
+            var noBig = new Clims.Tui.CoverCacheSettings { Big = new Clims.Tui.CoverCacheTier(0) };
+            using (var source = new LmsCoverSource(new HttpClient(new Handler((_, _) => Task.FromResult(Ok()))), Base, cache: () => store, cacheSettings: noBig))
+            {
+                var big = new CoverKey("a1", 0, Big: true);
+                source.Want(new object(), new[] { big, Key("a1") });
+                await Eventually(() => source.TryGet(big) is not null && source.TryGet(Key("a1")) is not null);
+            }
+
+            Assert.Equal(0, store.Count(900));
+            Assert.Equal(1, store.Count(300));
+
+            var off = new Clims.Tui.CoverCacheSettings { Enabled = false };
+            using var disabled = new LmsCoverSource(new HttpClient(new Handler((_, _) => Task.FromResult(Ok()))), Base, cache: () => store, cacheSettings: off);
+            disabled.Want(new object(), new[] { Key("b2") });
+            await Eventually(() => disabled.TryGet(Key("b2")) is not null);
+
+            Assert.Equal(1, store.Count(300));
+        }
+        finally
+        {
+            Cleanup(folder);
+        }
+    }
+
+    [Fact]
+    public async Task Before_the_cache_exists_covers_still_load()
+    {
+        var handler = new Handler((_, _) => Task.FromResult(Ok()));
+        using var source = new LmsCoverSource(new HttpClient(handler), Base, cache: () => null);
+        source.Want(new object(), new[] { Key("a1") });
+        await Eventually(() => source.TryGet(Key("a1")) is not null);
+
+        Assert.Single(handler.Requested);
+    }
+
     [Fact]
     public async Task Albums_without_artwork_are_never_requested()
     {

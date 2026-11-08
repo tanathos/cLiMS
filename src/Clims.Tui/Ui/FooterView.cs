@@ -48,7 +48,7 @@ public sealed class FooterView : PaintView
     protected override void Paint()
     {
         _buttons.Clear();
-        const string hint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-4 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
+        const string hint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-5 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
         if (_player.Current is not { } now)
         {
             _seek = (0, 0);

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Terminal.Gui.Drawing;
+using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 
 namespace Clims.Tui.Ui;
@@ -188,6 +189,71 @@ public abstract class PaintView : View
         var length = Math.Clamp(height * visible / total, 1, height);
         var range = Math.Max(1, total - visible);
         return (Math.Clamp(offset * (height - length) / range, 0, height - length), length);
+    }
+
+    private bool _barDrag;
+    private static PaintView? s_pressedOn;
+
+    /// <summary>
+    /// True for a click whose button went down on another view (a drag that ended here, for example a scrollbar drag
+    /// released over a row): the terminal reports it here, but it is not a click on this view and must not select anything.
+    /// Call first in OnMouseEvent.
+    /// </summary>
+    protected bool StrayClick(Mouse mouse)
+    {
+        var flags = mouse.Flags;
+        if (flags.HasFlag(MouseFlags.LeftButtonPressed) && !flags.HasFlag(MouseFlags.PositionReport))
+        {
+            s_pressedOn = this;
+            return false;
+        }
+
+        if (flags.HasFlag(MouseFlags.LeftButtonClicked) || flags.HasFlag(MouseFlags.LeftButtonDoubleClicked))
+        {
+            var stray = s_pressedOn is not null && s_pressedOn != this;
+            s_pressedOn = null;
+            return stray;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Mouse handling of the scrollbar column: a press on it (or a click) moves the thumb there, and the drag that follows
+    /// keeps moving it wherever the pointer goes. The release that ends the drag is consumed, so it never reaches the
+    /// rows as a click. Returns true when the event was a scrollbar one; <paramref name="setOffset"/> gets the row of the pointer.
+    /// </summary>
+    protected bool ScrollbarMouse(Mouse mouse, bool scrollable, Action<int> setOffset)
+    {
+        var flags = mouse.Flags;
+        var press = flags.HasFlag(MouseFlags.LeftButtonPressed);
+        var fresh = press && !flags.HasFlag(MouseFlags.PositionReport);
+        var clicked = flags.HasFlag(MouseFlags.LeftButtonClicked) || flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
+        if (fresh)
+        {
+            _barDrag = false;
+        }
+
+        // The terminal ends a drag with a Released event and then a Clicked one at the same place: both are the drag's.
+        if (_barDrag)
+        {
+            if (mouse.Position is { } at && press)
+            {
+                setOffset(at.Y);
+            }
+
+            _barDrag = !clicked;
+            return true;
+        }
+
+        if (fresh && scrollable && mouse.Position is { } p && p.X >= W - 1)
+        {
+            setOffset(p.Y);
+            _barDrag = true;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>Offset that puts the scrollbar thumb's centre at row y (click-to-jump).</summary>

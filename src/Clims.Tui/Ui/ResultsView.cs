@@ -240,6 +240,11 @@ public sealed class ResultsView : PaintView
 
     protected override bool OnMouseEvent(Mouse mouse)
     {
+        if (StrayClick(mouse))
+        {
+            return true;
+        }
+
         if (mouse.Flags.HasFlag(MouseFlags.WheeledDown))
         {
             Scroll(2);
@@ -265,18 +270,19 @@ public sealed class ResultsView : PaintView
             return true;
         }
 
+        if (ScrollbarMouse(mouse, _items.Count > 0 && MaxOffset() > 0, y =>
+            {
+                _offset = Math.Clamp(OffsetFromScrollbar(y, _items.Count, Math.Max(1, FitCount())), 0, MaxOffset());
+                SetNeedsDraw();
+            }))
+        {
+            return true;
+        }
+
         var click = mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) || mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
         var doubleClick = mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
-        var press = mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed);
-        if ((click || press) && mouse.Position is { } p)
+        if (click && mouse.Position is { } p)
         {
-            if (p.X >= W - 1 && _items.Count > 0 && MaxOffset() > 0)
-            {
-                _offset = Math.Clamp(OffsetFromScrollbar(p.Y, _items.Count, Math.Max(1, FitCount())), 0, MaxOffset());
-                SetNeedsDraw();
-                return true;
-            }
-
             if (click)
             {
                 SetFocus();

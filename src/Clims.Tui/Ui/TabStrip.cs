@@ -41,6 +41,9 @@ public sealed class TabStrip : PaintView
 
     public event Action<int>? SelectedChanged;
 
+    /// <summary>A tab was clicked with the mouse (after it became the selected one).</summary>
+    public event Action<int>? TabClicked;
+
     /// <summary>Shows a question with answers; replaces any notice. Answered by key or click.</summary>
     public void ShowPrompt(string text, params PromptChoice[] choices)
     {
@@ -140,6 +143,7 @@ public sealed class TabStrip : PaintView
                 if (p.X >= _spans[i].X0 && p.X < _spans[i].X1)
                 {
                     Selected = i;
+                    TabClicked?.Invoke(i);
                     return true;
                 }
             }

@@ -3,6 +3,16 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.9.0] - Unreleased
+
+### Added
+- Cover cache: covers are kept in a SQLite file of their own (`covers-<server uuid>.db`) and filled lazily, so later launches show them without asking the server. The normal (300 px) and full-screen (900 px) covers each have a time to live and an optional entry limit in the `CoverCache` node of `settings.json` (on by default, 30 days; the full-screen covers keep the newest 50).
+- Genres explorer, a fifth tab (key `5`): pick a genre and the next column lists the genres that share at least one track with it, pick again to narrow further. The artists of the tracks tagged with the whole chain are listed underneath, and a random queue of 25, 50 or 100 of those tracks can replace the queue or be appended. Because a track can carry several genres (the track listing reports only one), the sync now also asks the server for the tracks of each genre (about 40 s more on a 20,000-track library) and the index stores those links. An index saved before this keeps working (each track has its one genre then); resync with F5 to get them all.
+
+### Changed
+- Releases ship two builds per platform: the default self-contained one is now compressed (about 45 MB instead of 96 MB), and a new `-framework-dependent` one (about 26 MB) needs the .NET 10 runtime installed.
+- Digit keys switch tabs even when a list with type-ahead has focus, unless a jump is in progress (they used to be typed into the list's type-ahead).
+
 ## [0.8.0] - 2026-11-08
 
 ### Added

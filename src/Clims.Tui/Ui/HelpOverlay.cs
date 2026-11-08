@@ -7,7 +7,7 @@ public sealed class HelpOverlay : PaintView
     {
         ("Everywhere", ""),
         ("/", "Search (type; Esc clears and goes back; Enter or Down moves to the results)"),
-        ("1  2  3  4", "Search / Library / Queue / Recently added tab (4 again: ask the server for the newest albums)"),
+        ("1  2  3  4  5", "Search / Library / Queue / Recently added / Genres tab (4 again: ask the server for the newest albums)"),
         ("Space", "Play / pause"),
         ("Left  Right", "Seek -10 s / +10 s (or click the progress bar)"),
         ("Alt+n  Alt+p", "Next / previous track, from anywhere (previous restarts the track after 3 s)"),
@@ -30,6 +30,12 @@ public sealed class HelpOverlay : PaintView
         ("c", "Clear the queue (asks first)"),
         ("s", "Save the queue under a name (kept on this PC, by file address)"),
         ("o", "Saved queues: Enter replaces the queue (asks first), a appends, x deletes, Esc back"),
+        ("Genres tab", ""),
+        ("Up  Down  Enter", "Pick a genre: the next column lists the genres that share a track with it; Enter or Right goes there, Left or Backspace back"),
+        ("Ctrl+F", "Filter the genres of the active column (Enter keeps it, Esc clears it)"),
+        ("Alt+R  Alt+Q", "Random queue of the tagged tracks: replace the queue (asks first) / append"),
+        ("[  ]", "Random queue size: 25, 50 or 100 tracks (or click it)"),
+        ("Esc", "Clear the genre chain"),
     };
 
     public HelpOverlay()

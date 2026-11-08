@@ -343,6 +343,33 @@ public sealed class LmsPlayerController : IPlayerController, IDisposable
     }
 
     /// <inheritdoc />
+    public void PlayTracks(IReadOnlyList<(Clims.Catalog.CatalogAlbum Album, Clims.Catalog.CatalogTrack Track)> tracks, bool replace)
+    {
+        if (tracks.Count == 0)
+        {
+            return;
+        }
+
+        var ids = tracks.Select(t => t.Track.Id).ToList();
+        Do(
+            replace ? "Play" : "Add to queue",
+            async (id, ct) =>
+            {
+                var before = _status;
+                if (replace)
+                {
+                    await _client.Queue.LoadTracksAsync(id, ids, 0, ct).ConfigureAwait(false);
+                    Notify($"Playing {ids.Count} tracks.");
+                    return;
+                }
+
+                await _client.Queue.AddTracksAsync(id, ids, ct).ConfigureAwait(false);
+                await EnsurePlaybackContinuesAsync(id, before, ct).ConfigureAwait(false);
+                Notify($"Added {ids.Count} tracks to the queue.");
+            });
+    }
+
+    /// <inheritdoc />
     public void JumpTo(int index) => Do("Jump", (id, ct) => _client.Player.JumpToAsync(id, index, ct));
 
     /// <inheritdoc />

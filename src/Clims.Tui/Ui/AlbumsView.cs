@@ -491,6 +491,11 @@ public sealed class AlbumsView : PaintView
 
     protected override bool OnMouseEvent(Mouse mouse)
     {
+        if (StrayClick(mouse))
+        {
+            return true;
+        }
+
         // Wheel works on the hovered pane whether or not it has focus.
         if (mouse.Flags.HasFlag(MouseFlags.WheeledDown))
         {
@@ -511,18 +516,19 @@ public sealed class AlbumsView : PaintView
             return true;
         }
 
+        if (ScrollbarMouse(mouse, _totalRows > H, y =>
+            {
+                _offset = OffsetFromScrollbar(y, _totalRows, H);
+                SetNeedsDraw();
+            }))
+        {
+            return true;
+        }
+
         var click = mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) || mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
         var doubleClick = mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
-        var press = mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed);
-        if ((click || press) && mouse.Position is { } p)
+        if (click && mouse.Position is { } p)
         {
-            if (p.X >= W - 1 && _totalRows > H)
-            {
-                _offset = OffsetFromScrollbar(p.Y, _totalRows, H);
-                SetNeedsDraw();
-                return true;
-            }
-
             if (click)
             {
                 SetFocus();

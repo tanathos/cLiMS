@@ -20,6 +20,7 @@ public sealed class Session : IDisposable
     private readonly HttpClient? _http;
     private readonly LmsPlayerController? _lmsPlayer;
     private readonly LmsCoverSource? _covers;
+    private volatile CoverCacheStore? _coverCache;
     private readonly CliEventStream? _events;
     private readonly Connection? _connection;
     private AppSettings _settings;
@@ -64,10 +65,11 @@ public sealed class Session : IDisposable
                 // then is the address worth remembering, so a mistyped --lms never overwrites a working one.
                 _settings = _settings with { LmsUrl = uri.ToString(), ServerUuid = uuid };
                 _settings.Save();
+                _coverCache = new CoverCacheStore(CatalogPaths.CoversFor(uuid));
                 return new SqliteCatalogStore(CatalogPaths.For(uuid));
             },
         });
-        _covers = new LmsCoverSource(_http, uri, credentials);
+        _covers = new LmsCoverSource(_http, uri, credentials, cache: () => _coverCache, cacheSettings: settings.CoverCache ?? new CoverCacheSettings());
         CoverArt.Source = _covers;
         Waves = new WaveformService(_http, uri);
         _events = new CliEventStream(EventOptions());
