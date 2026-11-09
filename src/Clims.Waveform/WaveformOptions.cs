@@ -8,7 +8,7 @@ public sealed class WaveformOptions
     /// <summary>Peaks per track.</summary>
     public int Points { get; init; } = PeakAnalyzer.DefaultPoints;
 
-    /// <summary>Profiles kept in memory (about 5 KB each).</summary>
+    /// <summary>Profiles kept in memory (about 120 KB each with the spectrum).</summary>
     public int CacheSize { get; init; } = 64;
 
     /// <summary>Largest file that is downloaded for analysis.</summary>

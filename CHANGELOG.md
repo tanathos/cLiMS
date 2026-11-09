@@ -13,6 +13,9 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - Releases ship two builds per platform: the default self-contained one is now compressed (about 45 MB instead of 96 MB), and a new `-framework-dependent` one (about 26 MB) needs the .NET 10 runtime installed.
 - Digit keys switch tabs even when a list with type-ahead has focus, unless a jump is in progress (they used to be typed into the list's type-ahead).
 
+### Fixed
+- Covers (Sixel images) no longer stay missing after the terminal window is resized: once the size stops changing they are sent to the terminal again.
+
 ## [0.8.0] - 2026-11-08
 
 ### Added

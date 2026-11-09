@@ -35,6 +35,7 @@ public sealed class GenresTab : View
     private string _filter = "";
     private bool _typingFilter;
     private bool _updating;
+    private int _lastColumn;
 
     public GenresTab(Random? random = null)
     {
@@ -130,16 +131,29 @@ public sealed class GenresTab : View
         _emptyMessage = emptyMessage;
         _explorer = catalog is { TracksLoaded: true } && catalog.Genres.Count > 0 ? GenreExplorer.Build(catalog) : null;
         _chain.Clear();
+        _lastColumn = 0;
         ClearFilter();
         Rebuild();
     }
 
-    /// <summary>Puts the keyboard focus on the first column.</summary>
+    /// <summary>
+    /// Puts the keyboard focus back on the column that had it (the first one for a fresh tab). Coming back to the tab must not
+    /// count as choosing in that column, otherwise the genres picked after it would be dropped.
+    /// </summary>
     public void FocusFirst()
     {
         if (_count > 0)
         {
-            _columns[0].SetFocus();
+            var before = _updating;
+            _updating = true;
+            try
+            {
+                _columns[Math.Clamp(_lastColumn, 0, _count - 1)].SetFocus();
+            }
+            finally
+            {
+                _updating = before;
+            }
         }
         else
         {
@@ -344,6 +358,11 @@ public sealed class GenresTab : View
             };
             list.HasFocusChanged += (_, e) =>
             {
+                if (e.NewValue)
+                {
+                    _lastColumn = i;
+                }
+
                 // Only a column that already has a chosen genre: merely clicking the title of the next one must not pick for the user.
                 if (e.NewValue && !_updating && i < _chain.Count && i < _count)
                 {

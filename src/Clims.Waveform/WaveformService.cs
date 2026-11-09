@@ -13,7 +13,7 @@ public sealed class WaveformService : IDisposable
     private readonly Uri _baseUri;
     private readonly WaveformOptions _options;
     private readonly object _gate = new();
-    private readonly Dictionary<int, PeakProfile> _ready = new();
+    private readonly Dictionary<int, TrackAnalysis> _ready = new();
     private readonly LinkedList<int> _recent = new();
     private readonly Dictionary<int, WaveformState> _states = new();
     private readonly Dictionary<int, DateTimeOffset> _failedAt = new();
@@ -40,7 +40,16 @@ public sealed class WaveformService : IDisposable
     {
         lock (_gate)
         {
-            return _ready.TryGetValue(trackId, out var p) ? p : null;
+            return _ready.TryGetValue(trackId, out var a) ? a.Peaks : null;
+        }
+    }
+
+    /// <summary>The spectrum over time of a track, when ready (it comes from the same decode as the peaks).</summary>
+    public SpectrumProfile? TrySpectrum(int trackId)
+    {
+        lock (_gate)
+        {
+            return _ready.TryGetValue(trackId, out var a) ? a.Spectrum : null;
         }
     }
 
@@ -186,7 +195,7 @@ public sealed class WaveformService : IDisposable
         }
     }
 
-    private void Store(int id, PeakProfile profile)
+    private void Store(int id, TrackAnalysis profile)
     {
         _ready[id] = profile;
         _states[id] = WaveformState.Ready;
@@ -201,7 +210,7 @@ public sealed class WaveformService : IDisposable
         }
     }
 
-    private async Task<PeakProfile> LoadAsync(int trackId, CancellationToken ct)
+    private async Task<TrackAnalysis> LoadAsync(int trackId, CancellationToken ct)
     {
         var folder = _options.TempFolder ?? Path.GetTempPath();
         var path = Path.Combine(folder, $"clims-wave-{Guid.NewGuid():N}.tmp");
@@ -224,7 +233,7 @@ public sealed class WaveformService : IDisposable
                 () =>
                 {
                     using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                    return PeakAnalyzer.Analyze(stream, _options.Points, ct);
+                    return PeakAnalyzer.AnalyzeAll(stream, _options.Points, ct);
                 },
                 ct).ConfigureAwait(false);
         }

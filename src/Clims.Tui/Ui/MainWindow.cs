@@ -523,6 +523,40 @@ public sealed class MainWindow : Window
         _searchService.Query(_header.Search.Text);
     }
 
+    private (int W, int H) _lastSize;
+    private DateTime _resizeSettledAt = DateTime.MinValue;
+    private int _resizeRefreshes;
+
+    /// <summary>
+    /// A terminal erases its sixel images when the window is resized, while the user is still dragging and for a moment after.
+    /// Once the size has stopped changing, send them again (twice, a little apart, as the terminal may finish later than we do).
+    /// </summary>
+    private void RedrawCoversAfterResize(DateTime now)
+    {
+        var size = (Viewport.Width, Viewport.Height);
+        if (size != _lastSize)
+        {
+            _lastSize = size;
+            _resizeRefreshes = 2;
+            _resizeSettledAt = now + TimeSpan.FromMilliseconds(400);
+            return;
+        }
+
+        if (_resizeRefreshes == 0 || now < _resizeSettledAt)
+        {
+            return;
+        }
+
+        _resizeRefreshes--;
+        _resizeSettledAt = now + TimeSpan.FromMilliseconds(1000);
+        SixelCovers.Refresh();
+        _info.SetNeedsDraw();
+        _library.Albums.SetNeedsDraw();
+        _recent.Albums.SetNeedsDraw();
+        _search.List.SetNeedsDraw();
+        _footer.SetNeedsDraw();
+    }
+
     private bool OnTick()
     {
         var now = DateTime.UtcNow;
@@ -534,6 +568,8 @@ public sealed class MainWindow : Window
             _recent.Albums.SetNeedsDraw();
             _search.List.SetNeedsDraw();
         }
+
+        RedrawCoversAfterResize(now);
 
         if (Interlocked.Exchange(ref _coversDirty, 0) == 1)
         {
