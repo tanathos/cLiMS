@@ -3,6 +3,15 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+- Lyrics in the full-screen album view, under the album details. Synced lyrics highlight the line being sung and keep it in the middle; plain ones scroll (Up, Down, Page Up/Down, the wheel; synced lyrics follow the music again after 8 seconds). `[` and `]` shift the timing by half a second, `R` searches again, `L` turns online lookup on.
+- Lyrics store: found lyrics are kept for good in `lyrics.db` (one file for all servers, never expired), so a song is never searched twice and stored lyrics show offline. A search that found nothing is remembered for a day (`Lyrics.MissRetryDays` in `settings.json`, 0 to search every time); enabling another provider searches again at once, and a provider that could not be reached leaves nothing behind.
+- Lyrics from the track itself, tried before any provider and not needing online lookup: the lyrics in the file's tags (asked from the server through its lyrics tag; LRC text comes out synced, junk like `XXX|` is ignored) and `.lrc` / `.txt` files next to the track (named like the audio file, or an `.lrc` in the folder named with the title), located through the new `Lyrics.MusicPathMap` setting (the server's music folder as this PC sees it, for example `/mnt/Music` to `\\nas\Music`). A share that cannot be reached is not remembered as "no lyrics". A share that needs a login takes `Lyrics.MusicShareUser` and `Lyrics.MusicSharePassword`; the password is encrypted (Windows) and removed from `settings.json` at the next launch.
+- Lyrics providers: LRCLIB (synced, free, no key), DarkLyrics (metal, plain text, one page fills the whole album) and lyrics.ovh (plain text). Online lookup is off by default and is turned on with `L` in the album view or `Lyrics.OnlineLookup`; only the artist, album, title and length are sent. See the new "Lyrics" section of the README.
+
+### Changed
+- The album view's details (artist, album, genre, runtime, format) are anchored to the top of the cover and a little closer together, to leave room for the lyrics.
+
 ## [0.9.0] - 2026-11-09
 
 ### Added

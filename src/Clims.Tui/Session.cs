@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using Clims.Catalog;
 using Clims.Lms;
+using Clims.Lyrics;
 using Clims.Tui.Data;
 using Clims.Tui.Ui;
 using Clims.Waveform;
@@ -24,6 +25,9 @@ public sealed class Session : IDisposable
     private readonly CliEventStream? _events;
     private readonly Connection? _connection;
     private AppSettings _settings;
+    private HttpClient? _lyricsHttp;
+    private ILmsRpcClient? _rpc;
+    private LyricsStore? _lyricsStore;
 
     /// <summary>Builds the services. A null <paramref name="connection"/> means demo mode.</summary>
     public Session(Connection? connection, AppSettings settings, string? playerId)
@@ -72,6 +76,16 @@ public sealed class Session : IDisposable
         _covers = new LmsCoverSource(_http, uri, credentials, cache: () => _coverCache, cacheSettings: settings.CoverCache ?? new CoverCacheSettings());
         CoverArt.Source = _covers;
         Waves = new WaveformService(_http, uri);
+        if (settings.Lyrics?.Enabled ?? true)
+        {
+            // Not the client above: that one carries the server login, which no other site may see.
+            _rpc = lms.Rpc;
+            _lyricsHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            _lyricsStore = new LyricsStore(CatalogPaths.LyricsFile());
+            _settings = ProtectSharePassword(_settings);
+            Lyrics = new LyricsFeed(BuildLyrics(_settings.Lyrics ?? new LyricsSettings()), EnableOnlineLyrics);
+        }
+
         _events = new CliEventStream(EventOptions());
         var service = Catalog;
         _lmsPlayer = new LmsPlayerController(lms, () => service.Current, new LmsPlayerOptions { PlayerId = playerId ?? settings.PlayerId });
@@ -102,6 +116,87 @@ public sealed class Session : IDisposable
 
     /// <summary>Waveforms, or null in demo mode.</summary>
     public WaveformService? Waves { get; }
+
+    /// <summary>The lyrics of the playing track, or null in demo mode or when lyrics are switched off in settings.</summary>
+    public LyricsFeed? Lyrics { get; }
+
+    /// <summary>A share password typed into settings.json is encrypted and removed from the file (where encryption is possible).</summary>
+    internal static AppSettings ProtectSharePassword(AppSettings settings)
+    {
+        if (settings.Lyrics is not { MusicSharePassword.Length: > 0 } lyrics || SecretStore.Protect(lyrics.MusicSharePassword) is not { } protectedValue)
+        {
+            return settings;
+        }
+
+        var updated = settings with { Lyrics = lyrics with { MusicSharePassword = null, MusicShareProtectedPassword = protectedValue } };
+        updated.Save();
+        return updated;
+    }
+
+    private LyricsService BuildLyrics(LyricsSettings lyrics)
+    {
+        var providers = new List<ILyricsProvider>();
+
+        // Local sources first, whatever the online setting: a file next to the track (when a path map says where the music is as seen
+        // from this PC), then the lyrics in the track's own tags (one small question to the server).
+        if (lyrics.MusicPathMap is { Count: > 0 })
+        {
+            providers.Add(new SidecarLyricsProvider(lyrics.MusicPathMap, lyrics.MusicShareUser, SecretStore.Unprotect(lyrics.MusicShareProtectedPassword)));
+        }
+
+        if (_rpc is { } rpc)
+        {
+            providers.Add(new EmbeddedLyricsProvider((id, ct) => EmbeddedLyricsAsync(rpc, id, ct)));
+        }
+
+        if (lyrics.OnlineLookup && _lyricsHttp is { } http)
+        {
+            foreach (var name in (lyrics.Providers ?? []).Select(p => p.Trim().ToLowerInvariant()).Distinct())
+            {
+                switch (name)
+                {
+                    case "lrclib":
+                        providers.Add(new LrclibProvider(http));
+                        break;
+                    case "darklyrics":
+                        providers.Add(new DarkLyricsProvider(http));
+                        break;
+                    case "lyricsovh":
+                        providers.Add(new LyricsOvhProvider(http));
+                        break;
+                }
+            }
+        }
+
+        return new LyricsService(_lyricsStore!, providers, TimeSpan.FromDays(Math.Max(0, lyrics.MissRetryDays)));
+    }
+
+    /// <summary>The lyrics tag (<c>w</c>) of one track, straight from the server; null when it has none.</summary>
+    private static async Task<string?> EmbeddedLyricsAsync(ILmsRpcClient rpc, int trackId, CancellationToken ct)
+    {
+        try
+        {
+            var reply = await rpc.RequestAsync(null, new object[] { "titles", 0, 1, "tags:w", $"track_id:{trackId}" }, RequestKind.Read, ct).ConfigureAwait(false);
+            return reply.TryGetProperty("titles_loop", out var loop) && loop.ValueKind == System.Text.Json.JsonValueKind.Array && loop.GetArrayLength() > 0
+                && loop[0].TryGetProperty("lyrics", out var lyrics) && lyrics.ValueKind == System.Text.Json.JsonValueKind.String
+                ? lyrics.GetString()
+                : null;
+        }
+        catch (LmsConnectionException ex)
+        {
+            // "The server could not be asked": the lyrics service does not remember that as "no lyrics".
+            throw new HttpRequestException(ex.Message, ex);
+        }
+    }
+
+    private void EnableOnlineLyrics()
+    {
+        var current = _settings.Lyrics ?? new LyricsSettings();
+        var providers = current.Providers is { Count: > 0 } ? current.Providers : ["lrclib"];
+        _settings = _settings with { Lyrics = current with { OnlineLookup = true, Providers = providers } };
+        _settings.Save();
+        Lyrics?.Replace(BuildLyrics(_settings.Lyrics!));
+    }
 
     /// <summary>True when there is no server.</summary>
     public bool IsDemo => _connection is null;
@@ -160,6 +255,8 @@ public sealed class Session : IDisposable
         Waves?.Dispose();
         Catalog.Dispose();
         _covers?.Dispose();
+        Lyrics?.Dispose();
+        _lyricsHttp?.Dispose();
         _http?.Dispose();
         _cancel.Dispose();
     }

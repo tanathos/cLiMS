@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Clims.Lms\Clims.Lms.csproj" />
     <ProjectReference Include="..\Clims.Catalog\Clims.Catalog.csproj" />
+    <ProjectReference Include="..\Clims.Lyrics\Clims.Lyrics.csproj" />
     <ProjectReference Include="..\Clims.Waveform\Clims.Waveform.csproj" />
   </ItemGroup>
 

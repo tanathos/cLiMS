@@ -21,6 +21,9 @@ public static class CatalogPaths
         }
     }
 
+    /// <summary>The lyrics store: one file for every server (lyrics belong to the song). Unlike the caches it holds things that cost a search to get back.</summary>
+    public static string LyricsFile(string? folder = null) => Path.Combine(folder ?? DataFolder, "lyrics.db");
+
     /// <summary>The cache file for a server, keyed by its UUID so that changing the address does not lose the index.</summary>
     public static string For(string serverUuid, string? folder = null) => Named("catalog", serverUuid, folder);
 

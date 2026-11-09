@@ -31,6 +31,7 @@ public sealed class MainWindow : Window
     private readonly RecentTab _recent;
     private readonly GenresTab _genres;
     private readonly WaveformService? _waves;
+    private readonly LyricsFeed? _lyrics;
     private string _waveSignature = "";
     private bool _helpVisible;
     private bool _infoVisible;
@@ -56,9 +57,11 @@ public sealed class MainWindow : Window
         IPlayerController player,
         SavedQueueStore queues,
         WaveformService? waves = null,
-        RecentAlbumsSource? recentAlbums = null)
+        RecentAlbumsSource? recentAlbums = null,
+        LyricsFeed? lyrics = null)
     {
         _waves = waves;
+        _lyrics = lyrics;
         _app = app;
         _catalog = catalog;
         _searchService = search;
@@ -196,6 +199,11 @@ public sealed class MainWindow : Window
         _app.AddTimeout(FrameInterval, OnTick);
         UpdateTabTitle();
         player.Changed += () => _app.Invoke(OnPlayerChanged);
+        if (lyrics is not null)
+        {
+            lyrics.Changed += () => _app.Invoke(PushLyrics);
+        }
+
         player.Notice += text => _app.Invoke(() => Notice(text));
         _queue.Notice += Notice;
         _genres.Notice += Notice;
@@ -371,6 +379,8 @@ public sealed class MainWindow : Window
             if (_player.Current is { } playing)
             {
                 _info.Show(playing, _catalog.Current);
+                _lyrics?.Show(playing);
+                PushLyrics();
             }
             else
             {
@@ -601,6 +611,11 @@ public sealed class MainWindow : Window
             _footer.SetNeedsDraw();
         }
 
+        if (_infoVisible)
+        {
+            _info.Tick(_player.Elapsed, now);
+        }
+
         _header.Refresh();
         return true;
     }
@@ -675,6 +690,18 @@ public sealed class MainWindow : Window
             else if (key == Key.CursorRight || key == Key.CursorLeft)
             {
                 _player.Seek(TimeSpan.FromSeconds(key == Key.CursorRight ? 10 : -10));
+            }
+            else if (c is 'r' or 'R')
+            {
+                _lyrics?.Show(_player.Current, refresh: true);
+            }
+            else if (c is 'l' or 'L')
+            {
+                _lyrics?.EnableOnline();
+            }
+            else
+            {
+                _info.HandleLyricsKey(key);
             }
 
             key.Handled = true;
@@ -881,6 +908,8 @@ public sealed class MainWindow : Window
         _infoVisible = true;
         _info.Show(null, null); // forget the last album: the first show always paints
         _info.Show(now, _catalog.Current);
+        _lyrics?.Show(now);
+        PushLyrics();
         // Sixel images sit above any text and cannot be dimmed: while the view is open everything under it draws its covers in cells.
         PaintView.Dimmed = true;
         ReleaseSixels();
@@ -964,6 +993,14 @@ public sealed class MainWindow : Window
         _recent.Albums.ResetCovers();
         _search.List.ResetCovers();
         _footer.ResetCovers();
+    }
+
+    private void PushLyrics()
+    {
+        if (_lyrics is not null && _infoVisible)
+        {
+            _info.SetLyrics(_lyrics.State, _lyrics.Result, _lyrics.CanEnableOnline);
+        }
     }
 
     private void CloseInfo()
