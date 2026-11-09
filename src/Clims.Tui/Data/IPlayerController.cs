@@ -53,6 +53,12 @@ public interface IPlayerController
     /// <summary>Adds to the end of the queue or right after the current track. Playback continues without a gap.</summary>
     void Enqueue(QueueAction action, CatalogAlbum album, IReadOnlyList<CatalogTrack> tracks);
 
+    /// <summary>
+    /// Plays <paramref name="tracks"/> from any albums (for example a random pick): replaces the queue and starts the first
+    /// (not gapless), or appends them to the end of the queue.
+    /// </summary>
+    void PlayTracks(IReadOnlyList<(CatalogAlbum Album, CatalogTrack Track)> tracks, bool replace);
+
     /// <summary>Plays the queue entry at <paramref name="index"/>.</summary>
     void JumpTo(int index);
 

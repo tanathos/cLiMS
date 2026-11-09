@@ -144,7 +144,7 @@ Decided: SQLite on-disk index (memory-only thumbnails); search covers artists, a
 - Status states and header text: `Not synced`, `Sync in progress, live search only` (with progress), `Synced` (age), `Server changed, resync pending`, `Offline (using local index)`.
 - Library tab: left pane dimension list (D2) with A-Z jump from `textkey`; right pane artist heading and album blocks (cover, title, year · genres, duration, tracklist in two columns). **No "Album and Tracks" title bar and no year selector** (removed by the user).
 - Album blocks: when shown, re-fetch that album's tracks live (`titles album_id:N`, about 100 ms) and update the index row (self-healing after targeted rescans, which only change `lastUpdated`).
-- Covers: lazy fetch when a block becomes visible, memory-only LRU of converted half-block cell arrays, 2 to 3 concurrent requests, cancel when scrolled away. No disk cache.
+- Covers: lazy fetch when a block becomes visible, memory-only LRU of converted half-block cell arrays, 2 to 3 concurrent requests, cancel when scrolled away. No disk cache (superseded in 0.9.0: a separate `covers-<uuid>.db` file, see the README).
 - Actions on artist/album/track: Enter (play: replaces queue, not gapless), `a` add to end, `n` play next, Space multi-select. (Playback wiring lands in Step 5; Step 3 may stub with log messages.)
 
 **Technical notes**

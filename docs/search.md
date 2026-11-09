@@ -87,7 +87,7 @@ Why not local only: the first run needs the server anyway, and changes need sync
 - **Artist rows** use an icon, since LMS has no artist portraits.
 
 ## 8. Decisions, round 2
-- Thumbnails: **memory only** (no disk cache).
+- Thumbnails: **memory only** (no disk cache). Superseded in 0.9.0: a separate `covers-<uuid>.db` cache, see the README.
 - The index also feeds the **Library tab** (artist list, album lists and counts), not only search.
 - The header shows the **sync state** next to the player name (section 10).
 

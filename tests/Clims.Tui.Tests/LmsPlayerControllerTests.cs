@@ -227,6 +227,32 @@ public class LmsPlayerControllerTests
     }
 
     [Fact]
+    public async Task Tracks_from_several_albums_are_loaded_or_appended_in_the_given_order()
+    {
+        var (player, lms) = await StartedAsync();
+        using var _ = player;
+        var a = new CatalogAlbum(7, "A", 3, "Artist", 1999, null, false, 1);
+        var b = new CatalogAlbum(8, "B", 3, "Artist", 2001, null, false, 1);
+        var items = new[]
+        {
+            (a, new CatalogTrack(21, 7, "x", null, null, 1, 1, TimeSpan.Zero, null)),
+            (b, new CatalogTrack(31, 8, "y", null, null, 1, 1, TimeSpan.Zero, null)),
+            (a, new CatalogTrack(22, 7, "z", null, null, 1, 2, TimeSpan.Zero, null)),
+        };
+        var notices = new List<string>();
+        player.Notice += notices.Add;
+
+        player.PlayTracks(items, replace: true);
+        player.PlayTracks(items.Take(2).ToList(), replace: false);
+        player.PlayTracks(Array.Empty<(CatalogAlbum, CatalogTrack)>(), replace: true);
+        await player.FlushAsync();
+
+        Assert.Equal(new[] { "Load(21,31,22@0)", "Add(21,31)" }, lms.Commands);
+        Assert.Contains(notices, n => n == "Playing 3 tracks.");
+        Assert.Contains(notices, n => n == "Added 2 tracks to the queue.");
+    }
+
+    [Fact]
     public async Task Adding_to_a_queue_that_just_ran_dry_starts_the_next_track()
     {
         var (player, lms) = await StartedAsync(l => l.Mode = PlayMode.Play);

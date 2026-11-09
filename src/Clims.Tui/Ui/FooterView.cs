@@ -48,7 +48,7 @@ public sealed class FooterView : PaintView
     protected override void Paint()
     {
         _buttons.Clear();
-        const string hint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-4 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
+        const string hint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-5 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
         if (_player.Current is not { } now)
         {
             _seek = (0, 0);
@@ -73,7 +73,14 @@ public sealed class FooterView : PaintView
 
         if (ShowWaveform)
         {
-            PaintWaveform(track, x0, 2, W - x0 - 2);
+            if (ShowSpectrum)
+            {
+                PaintSpectrum(track, x0, 2, W - x0 - 2);
+            }
+            else
+            {
+                PaintWaveform(track, x0, 2, W - x0 - 2);
+            }
         }
 
         PaintControls(x0);
@@ -148,6 +155,98 @@ public sealed class FooterView : PaintView
         Put(x0 + filled, 0, new string('─', width - filled), Theme.Dim);
     }
 
+    /// <summary>F7: draw a spectrum analyzer in place of the waveform.</summary>
+    public bool ShowSpectrum { get; set; }
+
+    private int _spectrumTrack = -1;
+    private int _spectrumFrame = -1;
+
+    /// <summary>
+    /// Added to the playhead when picking the spectrum frame. The position LMS reports is when the server last heard from the
+    /// player, and the audio takes a little longer to reach the speakers, so a few hundred ms may be needed either way.
+    /// </summary>
+    public TimeSpan SpectrumOffset { get; set; }
+
+    private readonly float[] _smooth = new float[SpectrumBands];
+    private const int SpectrumBands = 32;
+
+    /// <summary>
+    /// Bars for the frame of the spectrum that is playing now (precomputed from the file, so it follows the playhead rather than
+    /// the speakers). Rises at once and falls a little each frame, which is what makes it look alive at 10 fps.
+    /// </summary>
+    private void PaintSpectrum(CatalogTrack track, int x, int y, int width)
+    {
+        if (width < 8)
+        {
+            return;
+        }
+
+        var target = new float[SpectrumBands];
+        if (_waves is null)
+        {
+            var t = _player.Elapsed.TotalSeconds;
+            for (var b = 0; b < SpectrumBands; b++)
+            {
+                target[b] = (0.55f + 0.45f * MathF.Sin((float)t * (1.3f + b * 0.21f) + b * 1.7f)) * (1 - b / 60f);
+            }
+        }
+        else if (_waves.TrySpectrum(track.Id) is { } spectrum)
+        {
+            var now = spectrum.IndexAt(_player.Elapsed + SpectrumOffset);
+            // The footer repaints at about 10 fps and a frame lasts 50 ms: take the loudest of every frame passed since the
+            // last repaint, otherwise a beat that falls between two repaints is never drawn.
+            var from = _spectrumTrack == track.Id && _spectrumFrame is >= 0 && now > _spectrumFrame && now - _spectrumFrame <= 6 ? _spectrumFrame + 1 : now;
+            _spectrumTrack = track.Id;
+            _spectrumFrame = now;
+            for (var i = Math.Max(0, from); i <= now; i++)
+            {
+                var frame = spectrum.Frame(i);
+                for (var b = 0; b < SpectrumBands && b < frame.Length; b++)
+                {
+                    target[b] = Math.Max(target[b], frame[b] / 255f);
+                }
+            }
+        }
+        else
+        {
+            PaintPending(track, x, y, width, "spectrum");
+            return;
+        }
+
+        for (var b = 0; b < SpectrumBands; b++)
+        {
+            _smooth[b] = Math.Max(target[b], _smooth[b] - 0.12f);
+        }
+
+        var top = new char[width];
+        var bottom = new char[width];
+        for (var i = 0; i < width; i++)
+        {
+            var at = i * (SpectrumBands - 1) / (float)Math.Max(1, width - 1);
+            var lo = (int)at;
+            var hi = Math.Min(SpectrumBands - 1, lo + 1);
+            var level = (int)Math.Round((_smooth[lo] + (_smooth[hi] - _smooth[lo]) * (at - lo)) * 16);
+            bottom[i] = Blocks[Math.Clamp(level, 0, 8)];
+            top[i] = level > 8 ? Blocks[Math.Min(level - 8, 8)] : ' ';
+        }
+
+        var bars = new Attribute(Theme.Mix(Theme.Accent, Theme.Bg, 0.2), Theme.Bg);
+        Put(x, y, new string(top), bars);
+        Put(x, y + 1, new string(bottom), bars);
+    }
+
+    /// <summary>Says why the waveform or spectrum is not drawn yet instead of leaving a hole.</summary>
+    private void PaintPending(CatalogTrack track, int x, int y, int width, string what)
+    {
+        var note = _waves!.StateOf(track.Id) switch
+        {
+            WaveformState.Unsupported => $"No {what}: " + (_waves.ErrorOf(track.Id) ?? "unsupported format"),
+            WaveformState.Failed => $"No {what}: " + (_waves.ErrorOf(track.Id) ?? "download failed") + " (retrying later)",
+            _ => $"◐ Analysing {what}…",
+        };
+        Put(x, y, Clip(note, width), Theme.Dim);
+    }
+
     private void PaintWaveform(CatalogTrack track, int x, int y, int width)
     {
         if (width < 8)
@@ -171,13 +270,7 @@ public sealed class FooterView : PaintView
         else
         {
             // Not drawn yet: say why instead of leaving a hole (no colour-only or silent states).
-            var note = _waves.StateOf(track.Id) switch
-            {
-                WaveformState.Unsupported => "No waveform: " + (_waves.ErrorOf(track.Id) ?? "unsupported format"),
-                WaveformState.Failed => "No waveform: " + (_waves.ErrorOf(track.Id) ?? "download failed") + " (retrying later)",
-                _ => "◐ Analysing waveform…",
-            };
-            Put(x, y, Clip(note, width), Theme.Dim);
+            PaintPending(track, x, y, width, "waveform");
             return;
         }
 

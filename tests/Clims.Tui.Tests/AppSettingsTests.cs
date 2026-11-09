@@ -21,4 +21,35 @@ public class AppSettingsTests
     [InlineData("   ")]
     [InlineData("ftp://host/")]
     public void Unusable_addresses_give_null(string? input) => Assert.Null(AppSettings.NormalizeUrl(input));
+
+    [Fact]
+    public void The_cover_cache_is_on_by_default_with_a_ttl_per_resolution()
+    {
+        var settings = System.Text.Json.JsonSerializer.Deserialize<AppSettings>("""{"LmsUrl":"http://h/"}""")!;
+
+        Assert.True(settings.CoverCache.Enabled);
+        Assert.Equal(30, settings.CoverCache.Normal.TtlDays);
+        Assert.Equal(30, settings.CoverCache.Big.TtlDays);
+        Assert.Equal(50, settings.CoverCache.Big.MaxEntries);
+    }
+
+    [Fact]
+    public void The_cover_cache_node_can_be_changed_in_the_file()
+    {
+        var json = """{"CoverCache":{"Enabled":false,"Normal":{"TtlDays":7},"Big":{"TtlDays":0}}}""";
+        var settings = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json)!;
+
+        Assert.False(settings.CoverCache.Enabled);
+        Assert.Equal(7, settings.CoverCache.Normal.TtlDays);
+        Assert.False(settings.CoverCache.Big.Active);
+    }
+
+    [Fact]
+    public void The_cover_cache_node_survives_a_round_trip()
+    {
+        var saved = new AppSettings("http://h/") { CoverCache = new CoverCacheSettings { Normal = new CoverCacheTier(5, 100) } };
+        var back = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(System.Text.Json.JsonSerializer.Serialize(saved))!;
+
+        Assert.Equal(saved.CoverCache, back.CoverCache);
+    }
 }

@@ -269,7 +269,9 @@ public sealed class QueueTab : View
         {
             var marker = e.Index == _player.QueueIndex ? (_player.IsPlaying ? "▶" : "▮") : " ";
             var who = string.IsNullOrEmpty(e.Track.Artist) ? e.Album.ArtistName : e.Track.Artist;
-            rows.Add(new Row($"{marker} {e.Index + 1,3}. {e.Track.Title}  ·  {who}  ·  {e.Album.Title}", Format(e.Track.Duration), Data: e));
+            // "artist · album · title", the title in bold.
+            var prefix = $"{marker} {e.Index + 1,3}. {who} · {e.Album.Title} · ";
+            rows.Add(new Row(prefix + e.Track.Title, Format(e.Track.Duration), Data: e, Bold: (prefix.Length, e.Track.Title.Length)));
         }
 
         return rows;

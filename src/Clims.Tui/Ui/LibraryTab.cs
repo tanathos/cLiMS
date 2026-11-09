@@ -417,7 +417,9 @@ public sealed class LibraryTab : View
 
         protected override bool OnMouseEvent(Mouse mouse)
         {
-            if (mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed) && !_dragging)
+            // Only a press that starts here: a drag begun in another view (a scrollbar) and carried over the handle also
+            // reports "pressed", but with PositionReport, and must not take it over.
+            if (mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed) && !mouse.Flags.HasFlag(MouseFlags.PositionReport) && !_dragging)
             {
                 _dragging = true;
                 App?.Mouse.GrabMouse(this);

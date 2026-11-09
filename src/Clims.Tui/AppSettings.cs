@@ -11,6 +11,9 @@ namespace Clims.Tui;
 /// <param name="ProtectedPassword">The password, protected by <see cref="SecretStore"/> (never plain text).</param>
 public sealed record AppSettings(string? LmsUrl = null, string? ServerUuid = null, string? PlayerId = null, string? Username = null, string? ProtectedPassword = null)
 {
+    /// <summary>The cover cache options (the "CoverCache" node). Written back on save, so the defaults are visible in the file.</summary>
+    public CoverCacheSettings CoverCache { get; init; } = new();
+
     private static string FilePath => Path.Combine(CatalogPaths.DataFolder, "settings.json");
 
     public static AppSettings Load()

@@ -34,9 +34,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { rid: win-x64, os: windows-latest }
-          - { rid: linux-x64, os: ubuntu-latest }
-          - { rid: osx-arm64, os: macos-latest }
+          - { rid: win-x64, os: windows-latest, flavour: self-contained }
+          - { rid: win-x64, os: windows-latest, flavour: framework-dependent }
+          - { rid: linux-x64, os: ubuntu-latest, flavour: self-contained }
+          - { rid: linux-x64, os: ubuntu-latest, flavour: framework-dependent }
+          - { rid: osx-arm64, os: macos-latest, flavour: self-contained }
+          - { rid: osx-arm64, os: macos-latest, flavour: framework-dependent }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -45,11 +48,19 @@ jobs:
           dotnet-version: 10.0.x
       - name: Publish a single-file build
         shell: bash
-        run: dotnet publish src/Clims.Tui -c Release -r ${{ matrix.rid }} --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+        run: |
+          # Self-contained: no .NET needed, compressed (about 45 MB). Framework-dependent: needs the .NET 10 runtime (about 26 MB; compression is not allowed there).
+          if [ "${{ matrix.flavour }}" = "self-contained" ]; then
+            mode="--self-contained -p:EnableCompressionInSingleFile=true"
+          else
+            mode="--no-self-contained"
+          fi
+          dotnet publish src/Clims.Tui -c Release -r ${{ matrix.rid }} $mode -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
       - name: Package
         shell: bash
         run: |
           name="clims-${GITHUB_REF_NAME}-${{ matrix.rid }}"
+          if [ "${{ matrix.flavour }}" = "framework-dependent" ]; then name="$name-framework-dependent"; fi
           mkdir "$name"
           cp publish/Clims.Tui* "$name/" && rm -f "$name"/*.pdb
           cp LICENSE README.md CHANGELOG.md "$name/"
@@ -60,7 +71,7 @@ jobs:
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: package-${{ matrix.rid }}
+          name: package-${{ matrix.rid }}-${{ matrix.flavour }}
           path: |
             clims-*.zip
             clims-*.tar.gz

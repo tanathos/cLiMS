@@ -76,6 +76,19 @@ public static class SixelCovers
         }
     }
 
+    /// <summary>
+    /// Sends every image again. A terminal drops the images it shows when its window is resized (and some re-flow what is
+    /// left), and nothing in the app changes at that moment, so nothing would put them back.
+    /// </summary>
+    public static void Refresh()
+    {
+        foreach (var entry in Owners.Values.SelectMany(o => o.Values))
+        {
+            entry.Settle = SettleFrames;
+            entry.Item.IsDirty = true;
+        }
+    }
+
     /// <summary>Forgets every placement (the window that owned them is gone, for example when switching server).</summary>
     public static void ReleaseAll()
     {

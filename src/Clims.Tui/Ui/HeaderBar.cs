@@ -24,7 +24,7 @@ public sealed class HeaderBar : View
         Width = Dim.Fill();
 
         var brand = new BrandText { X = Pad, Y = 1, Width = 8, Height = 1 };
-        Search = new TextField { X = Pad + 9, Y = 1, Width = SearchWidth, Height = 1 };
+        Search = new SearchBox { Placeholder = "Search...", X = Pad + 9, Y = 1, Width = SearchWidth, Height = 1 };
         _status = new StatusText(player, syncStatus) { X = Pad + 9 + SearchWidth + 2, Y = 1, Width = Dim.Fill(Pad + ServerButtonWidth + 1), Height = 1 };
         var server = new ServerButton { X = Pos.AnchorEnd(Pad + ServerButtonWidth), Y = 1, Width = ServerButtonWidth, Height = 1 };
         server.Clicked += () => ServerClicked?.Invoke();

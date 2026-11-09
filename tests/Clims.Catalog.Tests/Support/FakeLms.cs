@@ -8,6 +8,15 @@ public sealed class FakeLms : ILmsClient, ILibraryApi, IServerApi
 {
     public List<Genre> Genres { get; } = new();
 
+    /// <summary>Extra genre links by genre id: tracks that carry that genre besides their own.</summary>
+    public Dictionary<int, List<int>> ExtraGenreTracks { get; } = new();
+
+    /// <summary>Genre-link requests (queries by genre id) received.</summary>
+    public int GenreTrackCalls { get; private set; }
+
+    /// <summary>Called with each genre-link query.</summary>
+    public Action<TrackQuery>? OnGenreQuery { get; set; }
+
     public List<Artist> Artists { get; } = new();
 
     public List<Album> Albums { get; } = new();
@@ -194,6 +203,16 @@ public sealed class FakeLms : ILmsClient, ILibraryApi, IServerApi
         {
             TrackAlbumQueries.Add(albumId);
             return Slice(Tracks.Where(t => t.AlbumId == albumId).ToList(), start, count);
+        }
+
+        if (query.GenreId is { } genreId)
+        {
+            // The sync's genre-link pass: every track of the genre (a track's own genre, plus the extra links a test adds).
+            GenreTrackCalls++;
+            OnGenreQuery?.Invoke(query);
+            var name = Genres.FirstOrDefault(g => g.Id == genreId)?.Name;
+            var extra = ExtraGenreTracks.GetValueOrDefault(genreId) ?? new List<int>();
+            return Slice(Tracks.Where(t => (name is not null && t.Genre == name) || extra.Contains(t.Id)).ToList(), start, count);
         }
 
         TrackCalls++;

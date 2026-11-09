@@ -29,6 +29,7 @@ public sealed class MainWindow : Window
     private readonly FooterView _footer;
     private readonly QueueTab _queue;
     private readonly RecentTab _recent;
+    private readonly GenresTab _genres;
     private readonly WaveformService? _waves;
     private string _waveSignature = "";
     private bool _helpVisible;
@@ -69,13 +70,14 @@ public sealed class MainWindow : Window
         SetScheme(Theme.Dark);
 
         _header = new HeaderBar(player, () => catalog.Status) { X = 0, Y = 0 };
-        _tabs = new TabStrip("Search", "Library", "Queue", "Recently added") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
+        _tabs = new TabStrip("Search", "Library", "Queue", "Recently added", "Genres") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
 
         _search = new SearchTab();
         _library = new LibraryTab();
         _queue = new QueueTab(player, queues);
         _recent = new RecentTab(recentAlbums ?? ((_, _) => Task.FromResult<IReadOnlyList<int>>(Array.Empty<int>())));
-        _pages = new View[] { _search, _library, _queue, _recent };
+        _genres = new GenresTab();
+        _pages = new View[] { _search, _library, _queue, _recent, _genres };
         foreach (var page in _pages)
         {
             page.X = 0;
@@ -117,6 +119,7 @@ public sealed class MainWindow : Window
         _info.CloseRequested += CloseInfo;
 
         _tabs.SelectedChanged += ShowTab;
+        _tabs.TabClicked += _ => FocusPage();   // like the number keys: the page gets the keyboard, not the search box
         ShowTab(0);
         _tabs.Selected = 1;
 
@@ -195,6 +198,15 @@ public sealed class MainWindow : Window
         player.Changed += () => _app.Invoke(OnPlayerChanged);
         player.Notice += text => _app.Invoke(() => Notice(text));
         _queue.Notice += Notice;
+        _genres.Notice += Notice;
+        _genres.RandomRequested += OnRandomRequested;
+        _genres.ArtistChosen += albumId =>
+        {
+            if (_catalog.Current?.Album(albumId) is { } album)
+            {
+                ShowInLibrary(album, scrollToAlbum: false);
+            }
+        };
         _queue.ClearRequested += () => _tabs.ShowPrompt(
             "Clear the whole queue? Playback stops.",
             new PromptChoice('Y', "Clear", _player.ClearQueue),
@@ -331,10 +343,10 @@ public sealed class MainWindow : Window
 
     private string _tabTitle = "";
 
-    /// <summary>The terminal tab title: "cLiMS", with ▶ in front while a track plays and ⏸ while it is paused.</summary>
+    /// <summary>The terminal tab title: "cLiMS", or "cLiMS ▶ - Track name" (⏸ while paused) once a track is loaded.</summary>
     private void UpdateTabTitle()
     {
-        var title = _player.Current is null ? "cLiMS" : (_player.IsPlaying ? "▶ cLiMS" : "⏸ cLiMS");
+        var title = _player.Current is { } now ? $"cLiMS {(_player.IsPlaying ? "▶" : "⏸")} - {now.Track.Title}" : "cLiMS";
         if (title == _tabTitle)
         {
             return;
@@ -441,6 +453,7 @@ public sealed class MainWindow : Window
         };
         _library.SetCatalog(catalog, message);
         _recent.SetCatalog(catalog, message);
+        _genres.SetCatalog(catalog, message);
         _search.SetCatalog(catalog);
     }
 
@@ -473,6 +486,21 @@ public sealed class MainWindow : Window
         }
     }
 
+    /// <summary>A random queue from the Genres tab: appending just happens, replacing asks first (the music restarts).</summary>
+    private void OnRandomRequested(IReadOnlyList<(CatalogAlbum Album, CatalogTrack Track)> items, bool replace, string what)
+    {
+        if (!replace || _player.Queue.Count == 0)
+        {
+            _player.PlayTracks(items, replace);
+            return;
+        }
+
+        _tabs.ShowPrompt(
+            $"Replace the queue with {items.Count} random tracks of {what}? The music restarts (not gapless).",
+            new PromptChoice('Y', "Replace", () => _player.PlayTracks(items, true)),
+            new PromptChoice('N', "No", () => { }));
+    }
+
     private void StartSync() => _ = RunSyncAsync();
 
     private async Task RunSyncAsync()
@@ -495,6 +523,40 @@ public sealed class MainWindow : Window
         _searchService.Query(_header.Search.Text);
     }
 
+    private (int W, int H) _lastSize;
+    private DateTime _resizeSettledAt = DateTime.MinValue;
+    private int _resizeRefreshes;
+
+    /// <summary>
+    /// A terminal erases its sixel images when the window is resized, while the user is still dragging and for a moment after.
+    /// Once the size has stopped changing, send them again (twice, a little apart, as the terminal may finish later than we do).
+    /// </summary>
+    private void RedrawCoversAfterResize(DateTime now)
+    {
+        var size = (Viewport.Width, Viewport.Height);
+        if (size != _lastSize)
+        {
+            _lastSize = size;
+            _resizeRefreshes = 2;
+            _resizeSettledAt = now + TimeSpan.FromMilliseconds(400);
+            return;
+        }
+
+        if (_resizeRefreshes == 0 || now < _resizeSettledAt)
+        {
+            return;
+        }
+
+        _resizeRefreshes--;
+        _resizeSettledAt = now + TimeSpan.FromMilliseconds(1000);
+        SixelCovers.Refresh();
+        _info.SetNeedsDraw();
+        _library.Albums.SetNeedsDraw();
+        _recent.Albums.SetNeedsDraw();
+        _search.List.SetNeedsDraw();
+        _footer.SetNeedsDraw();
+    }
+
     private bool OnTick()
     {
         var now = DateTime.UtcNow;
@@ -506,6 +568,8 @@ public sealed class MainWindow : Window
             _recent.Albums.SetNeedsDraw();
             _search.List.SetNeedsDraw();
         }
+
+        RedrawCoversAfterResize(now);
 
         if (Interlocked.Exchange(ref _coversDirty, 0) == 1)
         {
@@ -711,6 +775,12 @@ public sealed class MainWindow : Window
             return;
         }
 
+        if (_tabs.Selected == 4 && _genres.HasFocus && _genres.HandleKey(key))
+        {
+            key.Handled = true;
+            return;
+        }
+
         if (_tabs.Selected == 2 && _queue.List.HasFocus && _queue.HandleKey(key))
         {
             key.Handled = true;
@@ -718,7 +788,8 @@ public sealed class MainWindow : Window
         }
 
         // Letters are type-ahead in the left list, and a/n mean add / play next in the album pane.
-        var typeAhead = _library.Artists.HasFocus;
+        // Digits switch tabs, except in the middle of typing a name to jump to (a name can start with a digit).
+        var typeAhead = (_library.Artists.HasFocus && _library.Artists.Typing) || (_tabs.Selected == 4 && _genres.TypingAhead);
         var albumKeys = _library.Albums.HasFocus;
         switch (ch)
         {
@@ -730,7 +801,7 @@ public sealed class MainWindow : Window
                     return false;
                 });
                 break;
-            case '1' or '2' or '3' or '4' when !typeAhead:
+            case '1' or '2' or '3' or '4' or '5' when !typeAhead:
                 if (ch == '4' && _tabs.Selected == 3)
                 {
                     _recent.Refresh(); // pressing 4 on the tab itself asks the server again
@@ -921,6 +992,7 @@ public sealed class MainWindow : Window
         _help.Visible = _helpVisible;
         if (_helpVisible)
         {
+            _help.ScrollToTop();
             // Sixel images sit above any text, so the pages underneath must stop showing theirs while help is open.
             foreach (var page in _pages)
             {
@@ -974,6 +1046,9 @@ public sealed class MainWindow : Window
                 break;
             case 3:
                 _recent.Albums.SetFocus();
+                break;
+            case 4:
+                _genres.FocusFirst();
                 break;
         }
     }

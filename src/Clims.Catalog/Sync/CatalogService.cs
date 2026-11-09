@@ -252,6 +252,7 @@ public sealed class CatalogService : ICatalogService
             }
 
             var tracks = await FetchTracksAsync(stages, ct).ConfigureAwait(false);
+            var genreTracks = await FetchGenreTracksAsync(genres, stages, ct).ConfigureAwait(false);
 
             var meta = new CatalogMeta(
                 server.Uuid ?? string.Empty,
@@ -261,7 +262,7 @@ public sealed class CatalogService : ICatalogService
                 server.ArtistCount,
                 server.GenreCount,
                 _options.Now());
-            var full = new Catalog(genres, artists, albums, tracks, meta);
+            var full = new Catalog(genres, artists, albums, tracks, meta, genreTracks: genreTracks);
             ct.ThrowIfCancellationRequested();
             await Task.Run(() => _store?.Save(full), CancellationToken.None).ConfigureAwait(false);
 
@@ -329,6 +330,41 @@ public sealed class CatalogService : ICatalogService
         }
 
         return all;
+    }
+
+    /// <summary>
+    /// A track can carry several genres, but the track listing reports only one. Asking the server for the tracks of each
+    /// genre (ids only, newest-first order, which is its cheapest) gives every link.
+    /// </summary>
+    private async Task<Dictionary<int, int[]>> FetchGenreTracksAsync(IReadOnlyList<CatalogGenre> genres, Progress stages, CancellationToken ct)
+    {
+        var map = new Dictionary<int, int[]>();
+        var done = 0;
+        Report(stages, "genre links", 0, Math.Max(1, genres.Count));
+        foreach (var genre in genres)
+        {
+            var query = new TrackQuery { GenreId = genre.Id, Tags = TrackTags.None, Sort = TrackSort.New };
+            var ids = new List<int>();
+            var start = 0;
+            var total = int.MaxValue;
+            while (start < total)
+            {
+                await WaitForIdleServerAsync(ct).ConfigureAwait(false);
+                var page = await _client.Library.GetTracksAsync(query, start, _options.TrackPageSize, ct).ConfigureAwait(false);
+                total = page.Total;
+                ids.AddRange(page.Items.Select(t => t.Id));
+                start += page.Items.Count;
+                if (page.Items.Count == 0)
+                {
+                    break;
+                }
+            }
+
+            map[genre.Id] = ids.ToArray();
+            Report(stages, "genre links", ++done, Math.Max(1, genres.Count));
+        }
+
+        return map;
     }
 
     /// <summary>Waits while the server scans: it answers slowly then, and a scan ends with player reconnects.</summary>
@@ -437,12 +473,12 @@ public sealed class CatalogService : ICatalogService
     /// <summary>Builds the progress text, for example <c>artists ✓ albums ✓ tracks 42%</c>.</summary>
     private sealed class Progress
     {
-        private static readonly string[] Order = { "genres", "artists", "albums", "tracks" };
+        private static readonly string[] Order = { "genres", "artists", "albums", "tracks", "genre links" };
         private readonly Dictionary<string, (int Done, int Total)> _stages = new();
 
         public string Text => string.Join(
             ' ',
-            Order.Where(o => o != "genres" || _stages.ContainsKey(o)).Select(o => !_stages.TryGetValue(o, out var s)
+            Order.Where(o => o is not ("genres" or "genre links") || _stages.ContainsKey(o)).Select(o => !_stages.TryGetValue(o, out var s)
                 ? $"{o} ·"
                 : s.Done >= s.Total ? $"{o} ✓" : $"{o} {100 * s.Done / Math.Max(1, s.Total)}%"));
 

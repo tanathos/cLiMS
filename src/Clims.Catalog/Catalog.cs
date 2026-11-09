@@ -31,13 +31,15 @@ public sealed partial class Catalog
         IEnumerable<CatalogAlbum> albums,
         IEnumerable<CatalogTrack> tracks,
         CatalogMeta? meta,
-        bool tracksLoaded = true)
+        bool tracksLoaded = true,
+        IReadOnlyDictionary<int, int[]>? genreTracks = null)
     {
         _genres = genres.ToList();
         _artists = artists.ToList();
         _albums = albums.ToList();
         Meta = meta;
         TracksLoaded = tracksLoaded;
+        GenreTracks = genreTracks;
 
         _albumById = new Dictionary<int, CatalogAlbum>(_albums.Count);
         foreach (var album in _albums)
@@ -95,6 +97,12 @@ public sealed partial class Catalog
 
     /// <summary>False while a first sync has loaded artists and albums but not yet the tracks.</summary>
     public bool TracksLoaded { get; }
+
+    /// <summary>
+    /// Every track of each genre, by genre id: a track can carry several genres, but the sync only reads one per track, so
+    /// this comes from asking the server track by genre. Null in an index made before this was stored (a resync fills it).
+    /// </summary>
+    public IReadOnlyDictionary<int, int[]>? GenreTracks { get; }
 
     /// <summary>Increases whenever an album's tracks are replaced, so views can tell something changed.</summary>
     public int Version => Volatile.Read(ref _version);

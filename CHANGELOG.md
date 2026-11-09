@@ -3,6 +3,28 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-09
+
+### Added
+- Cover cache: covers are kept in a SQLite file of their own (`covers-<server uuid>.db`) and filled lazily, so later launches show them without asking the server. The normal (300 px) and full-screen (900 px) covers each have a time to live and an optional entry limit in the `CoverCache` node of `settings.json` (on by default, 30 days; the full-screen covers keep the newest 50).
+- Genres explorer, a fifth tab (key `5`): pick a genre and the next column lists the genres that share at least one track with it, pick again to narrow further. The artists of the tracks tagged with the whole chain are listed underneath, and a random queue of 25, 50 or 100 of those tracks can replace the queue or be appended. Because a track can carry several genres (the track listing reports only one), the sync now also asks the server for the tracks of each genre (about 40 s more on a 20,000-track library) and the index stores those links. An index saved before this keeps working (each track has its one genre then); resync with F5 to get them all.
+- Genres explorer, bottom panel: "Items tagged Death Metal + Thrash Metal · N artists · N tracks". The artists are shown first; click "N tracks" to list the tracks instead (artist · album · title, with how many genres each carries), click "N artists" to go back. It stays empty until a genre is chosen and takes the bottom third of the tab. The filter uses the same ⌕ icon as the Library (or `Ctrl+F`).
+- The search box shows a dim "Search..." hint while it is empty and not focused.
+- The terminal title follows the player: `cLiMS ▶ - Track name` while playing, `cLiMS ⏸ - Track name` while paused, `cLiMS` with nothing loaded.
+
+### Changed
+- Releases ship two builds per platform: the default self-contained one is now compressed (about 45 MB instead of 96 MB), and a new `-framework-dependent` one (about 26 MB) needs the .NET 10 runtime installed.
+- Digit keys switch tabs even when a list with type-ahead has focus, unless a jump is in progress (they used to be typed into the list's type-ahead).
+- The `?` help scrolls (arrow keys, Page Up/Down, Home/End, the wheel) when it does not fit the window, and lists the Genres tab keys.
+
+### Fixed
+- Covers (Sixel images) no longer stay missing after the terminal window is resized: once the size stops changing they are sent to the terminal again.
+- Clicking the "5 Genres" tab (or any tab) puts the focus on its page; it used to leave it in the search box.
+- Dragging a scrollbar no longer selects whatever is under the pointer when the button is released, in the Library, Recently added, Search and Genres lists; and a scrollbar drag that passes over the Library's divider no longer starts resizing the column.
+- In the Genres tab, clicking a genre no longer scrolls its column so that the genre ends up on the last row, and switching to another tab and back keeps the whole chain of chosen genres (only the first one was kept).
+- Clicking a column title in the Genres tab no longer picks a genre, and no genre looks highlighted while nothing is chosen.
+- The CI timing test for the local search on 20,000 tracks no longer fails on a busy runner (it takes the fastest of several runs).
+
 ## [0.8.0] - 2026-11-08
 
 ### Added
@@ -43,3 +65,4 @@ First tagged release.
 
 [0.7.0]: https://github.com/tanathos/cLiMS/releases/tag/v0.7.0
 [0.8.0]: https://github.com/tanathos/cLiMS/releases/tag/v0.8.0
+[0.9.0]: https://github.com/tanathos/cLiMS/releases/tag/v0.9.0

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using Clims.Catalog;
 using Clims.Lms;
 using Terminal.Gui.Drawing;
 
@@ -8,7 +9,8 @@ namespace Clims.Tui.Ui;
 
 /// <summary>
 /// Fetches covers from the server only when a view shows them: 2 to 3 requests at a time, cancelled when scrolled
-/// away, kept in a memory-only LRU (no disk cache, as decided). The server resizes, so no local scaling is needed.
+/// away, kept in a memory LRU and, when a <see cref="CoverCacheStore"/> is given, also on disk (filled lazily, per
+/// resolution with its own time to live). The server resizes, so no local scaling is needed.
 /// </summary>
 public sealed class LmsCoverSource : ICoverSource, IDisposable
 {
@@ -17,6 +19,9 @@ public sealed class LmsCoverSource : ICoverSource, IDisposable
     private const string BigSuffix = "|big";
     private static readonly TimeSpan FailureBackoff = TimeSpan.FromSeconds(30);
 
+    private readonly Func<CoverCacheStore?>? _disk;
+    private readonly CoverCacheSettings _cacheSettings;
+    private readonly Func<DateTimeOffset> _clock;
     private readonly HttpClient _http;
     private readonly Uri _baseUri;
     private readonly AuthenticationHeaderValue? _auth;
@@ -30,8 +35,29 @@ public sealed class LmsCoverSource : ICoverSource, IDisposable
     private readonly Dictionary<object, HashSet<string>> _wanted = new();
 
     /// <summary>Creates the source. The <see cref="HttpClient"/> is not disposed by it.</summary>
-    public LmsCoverSource(HttpClient http, Uri baseUri, NetworkCredential? credentials = null, int capacity = 300, int concurrency = 3)
+    /// <param name="http">Client used for the downloads.</param>
+    /// <param name="baseUri">The server address.</param>
+    /// <param name="credentials">Login for a password-protected server.</param>
+    /// <param name="capacity">Covers kept in memory.</param>
+    /// <param name="concurrency">Downloads at a time.</param>
+    /// <param name="cache">
+    /// The disk cache, asked each time because it can only be opened once the server's UUID is known; null result: none.
+    /// </param>
+    /// <param name="cacheSettings">Which resolutions are cached and for how long (defaults when null).</param>
+    /// <param name="clock">Current time, replaceable in tests.</param>
+    public LmsCoverSource(
+        HttpClient http,
+        Uri baseUri,
+        NetworkCredential? credentials = null,
+        int capacity = 300,
+        int concurrency = 3,
+        Func<CoverCacheStore?>? cache = null,
+        CoverCacheSettings? cacheSettings = null,
+        Func<DateTimeOffset>? clock = null)
     {
+        _disk = cache;
+        _cacheSettings = cacheSettings ?? new CoverCacheSettings();
+        _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _http = http;
         _baseUri = baseUri;
         _capacity = Math.Max(10, capacity);
@@ -141,13 +167,31 @@ public sealed class LmsCoverSource : ICoverSource, IDisposable
             var big = id.EndsWith(BigSuffix, StringComparison.Ordinal);
             var plain = big ? id[..^BigSuffix.Length] : id;
             var size = big ? BigRequestSize : RequestSize;
-            using var request = new HttpRequestMessage(HttpMethod.Get, ArtworkUrl.Cover(_baseUri, plain, size, size));
-            request.Headers.Authorization = _auth;
-            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            // Disk first (off the UI thread), then the server; only an image that decodes is stored.
+            var tier = big ? _cacheSettings.Big : _cacheSettings.Normal;
+            var store = _cacheSettings.Enabled && tier.Active ? _disk?.Invoke() : null;
+            CoverImage? image = null;
+            if (store is not null)
+            {
+                var stored = await Task.Run(() => store.Get(plain, size, tier.Ttl, _clock()), ct).ConfigureAwait(false);
+                image = stored is null ? null : CoverImage.Decode(stored, id);
+            }
 
-            var image = CoverImage.Decode(bytes, id) ?? throw new InvalidDataException("Not an image.");
+            if (image is null)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, ArtworkUrl.Cover(_baseUri, plain, size, size));
+                request.Headers.Authorization = _auth;
+                using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+                var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+
+                image = CoverImage.Decode(bytes, id) ?? throw new InvalidDataException("Not an image.");
+                if (store is not null)
+                {
+                    await Task.Run(() => store.Put(plain, size, bytes, _clock(), tier.Ttl, tier.MaxEntries), CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+
             lock (_gate)
             {
                 _cache[id] = _lru.AddFirst((id, image));

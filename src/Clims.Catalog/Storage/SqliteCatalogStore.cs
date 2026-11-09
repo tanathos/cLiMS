@@ -94,7 +94,7 @@ public sealed class SqliteCatalogStore : ICatalogStore
                 }
             }
 
-            return new Catalog(genres, artists, albums, tracks, catalogMeta);
+            return new Catalog(genres, artists, albums, tracks, catalogMeta, genreTracks: ReadGenreTracks(connection));
         }
         catch (SqliteException)
         {
@@ -116,7 +116,7 @@ public sealed class SqliteCatalogStore : ICatalogStore
         EnsureSchema(connection);
         using var tx = connection.BeginTransaction();
 
-        foreach (var table in new[] { "tracks", "albums", "artists", "genres", "meta" })
+        foreach (var table in new[] { "track_genres", "tracks", "albums", "artists", "genres", "meta" })
         {
             Exec(connection, tx, $"DELETE FROM {table}");
         }
@@ -182,6 +182,7 @@ public sealed class SqliteCatalogStore : ICatalogStore
         }
 
         InsertTracks(connection, tx, catalog.SnapshotTracks());
+        InsertGenreTracks(connection, tx, catalog.GenreTracks);
 
         foreach (var (key, value) in new (string, string?)[]
                  {
@@ -256,6 +257,56 @@ public sealed class SqliteCatalogStore : ICatalogStore
         }
     }
 
+    private static void InsertGenreTracks(SqliteConnection connection, SqliteTransaction tx, IReadOnlyDictionary<int, int[]>? links)
+    {
+        if (links is null)
+        {
+            return;
+        }
+
+        using var cmd = Command(connection, "INSERT INTO track_genres(genre_id, track_id) VALUES ($g, $t)", tx);
+        var genre = cmd.Parameters.Add("$g", SqliteType.Integer);
+        var track = cmd.Parameters.Add("$t", SqliteType.Integer);
+        foreach (var (genreId, trackIds) in links)
+        {
+            genre.Value = genreId;
+            foreach (var id in trackIds)
+            {
+                track.Value = id;
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        Exec(connection, tx, "CREATE INDEX IF NOT EXISTS ix_track_genres_genre ON track_genres(genre_id)");
+    }
+
+    /// <summary>The genre links, or null when this index was saved before they existed (or has none).</summary>
+    private static Dictionary<int, int[]>? ReadGenreTracks(SqliteConnection connection)
+    {
+        try
+        {
+            var lists = new Dictionary<int, List<int>>();
+            using var cmd = Command(connection, "SELECT genre_id, track_id FROM track_genres");
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                var genreId = r.GetInt32(0);
+                if (!lists.TryGetValue(genreId, out var list))
+                {
+                    lists[genreId] = list = new List<int>();
+                }
+
+                list.Add(r.GetInt32(1));
+            }
+
+            return lists.Count == 0 ? null : lists.ToDictionary(p => p.Key, p => p.Value.ToArray());
+        }
+        catch (SqliteException)
+        {
+            return null; // an index from before the table existed
+        }
+    }
+
     private static CatalogTrack ReadTrack(SqliteDataReader r) => new(
         r.GetInt32(0),
         r.GetInt32(1),
@@ -305,6 +356,7 @@ public sealed class SqliteCatalogStore : ICatalogStore
             null,
             "CREATE TABLE IF NOT EXISTS tracks(id INTEGER PRIMARY KEY, album_id INTEGER NOT NULL, title TEXT NOT NULL, artist TEXT, artist_id INTEGER, disc INTEGER NOT NULL, number INTEGER NOT NULL, duration_ms INTEGER NOT NULL, genre TEXT, url TEXT)");
         Exec(connection, null, "CREATE INDEX IF NOT EXISTS ix_tracks_album ON tracks(album_id)");
+        Exec(connection, null, "CREATE TABLE IF NOT EXISTS track_genres(genre_id INTEGER NOT NULL, track_id INTEGER NOT NULL)");
     }
 
     private SqliteConnection Open()

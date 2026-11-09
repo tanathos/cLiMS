@@ -167,4 +167,62 @@ public class SqliteStoreTests
         Assert.EndsWith("catalog-abc.db", CatalogPaths.For("a/b\\c:", "x"));
         Assert.EndsWith("catalog-unknown.db", CatalogPaths.For("", "x"));
     }
+
+    [Fact]
+    public void Genre_links_survive_save_and_load()
+    {
+        using var dir = new TempFolder();
+        var store = new SqliteCatalogStore(dir.File("links.db"));
+        var plain = Sample();
+        var original = new Catalog(
+            plain.Genres,
+            plain.Artists,
+            plain.Albums,
+            plain.SnapshotTracks(),
+            plain.Meta,
+            genreTracks: new Dictionary<int, int[]> { [1] = new[] { 1000, 1001 }, [2] = new[] { 1001 } });
+        store.Save(original);
+
+        var loaded = store.Load()!;
+        Assert.NotNull(original.GenreTracks);
+        Assert.Equal(original.GenreTracks!.Keys.Order(), loaded.GenreTracks!.Keys.Order());
+        foreach (var (genre, ids) in original.GenreTracks)
+        {
+            Assert.Equal(ids.Order(), loaded.GenreTracks[genre].Order());
+        }
+    }
+
+    [Fact]
+    public void An_index_saved_before_genre_links_existed_still_loads_without_them()
+    {
+        using var dir = new TempFolder();
+        var path = dir.File("old.db");
+        new SqliteCatalogStore(path).Save(Sample());
+        using (var connection = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = "DROP TABLE track_genres";
+            cmd.ExecuteNonQuery();
+        }
+
+        var loaded = new SqliteCatalogStore(path).Load();
+
+        Assert.NotNull(loaded);
+        Assert.Null(loaded!.GenreTracks);
+        Assert.True(loaded.TracksLoaded);
+    }
+
+    [Fact]
+    public void Saving_without_links_replaces_the_links_of_an_earlier_save()
+    {
+        using var dir = new TempFolder();
+        var store = new SqliteCatalogStore(dir.File("replace.db"));
+        var withLinks = Sample();
+        store.Save(withLinks);
+        var without = new Catalog(withLinks.Genres, withLinks.Artists, withLinks.Albums, withLinks.SnapshotTracks(), withLinks.Meta);
+        store.Save(without);
+
+        Assert.Null(store.Load()!.GenreTracks);
+    }
 }

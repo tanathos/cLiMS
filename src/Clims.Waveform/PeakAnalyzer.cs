@@ -12,7 +12,12 @@ public static class PeakAnalyzer
 
     /// <summary>Reads the whole (seekable) stream and returns its peaks.</summary>
     /// <exception cref="UnsupportedAudioException">The format is not FLAC, Ogg or WAV.</exception>
-    public static PeakProfile Analyze(Stream stream, int points = DefaultPoints, CancellationToken cancellationToken = default)
+    public static PeakProfile Analyze(Stream stream, int points = DefaultPoints, CancellationToken cancellationToken = default) =>
+        AnalyzeAll(stream, points, cancellationToken).Peaks;
+
+    /// <summary>Like <see cref="Analyze"/>, and also computes the spectrum over time in the same pass.</summary>
+    /// <exception cref="UnsupportedAudioException">The format is not FLAC, MP3, Ogg or WAV.</exception>
+    public static TrackAnalysis AnalyzeAll(Stream stream, int points = DefaultPoints, CancellationToken cancellationToken = default)
     {
         var tag = Sniff(stream);
         return tag switch
@@ -59,25 +64,26 @@ public static class PeakAnalyzer
         return System.Text.Encoding.Latin1.GetString(magic).Select(c => char.IsControl(c) ? '?' : c).Aggregate("", (s, c) => s + c);
     }
 
-    private static PeakProfile FromMp3(Stream stream, int points, CancellationToken ct)
+    private static TrackAnalysis FromMp3(Stream stream, int points, CancellationToken ct)
     {
         using var mp3 = new NLayer.MpegFile(stream);
         var channels = mp3.Channels;
         var frames = (long)(mp3.Duration.TotalSeconds * mp3.SampleRate);
         var peaks = new float[points];
+        var spectrum = new SpectrumBuilder(mp3.SampleRate);
         var buffer = new float[channels * 8192];
         long frame = 0;
         int got;
         while ((got = mp3.ReadSamples(buffer, 0, buffer.Length)) > 0)
         {
             ct.ThrowIfCancellationRequested();
-            Accumulate(peaks, buffer, got, channels, ref frame, frames);
+            Accumulate(peaks, buffer, got, channels, ref frame, frames, spectrum);
         }
 
-        return Finish(peaks, TimeSpan.FromSeconds(frame / (double)mp3.SampleRate));
+        return new TrackAnalysis(Finish(peaks, TimeSpan.FromSeconds(frame / (double)mp3.SampleRate)), spectrum.Finish());
     }
 
-    private static PeakProfile FromWaveStream(WaveStream reader, int points, CancellationToken ct)
+    private static TrackAnalysis FromWaveStream(WaveStream reader, int points, CancellationToken ct)
     {
         using (reader)
         {
@@ -85,48 +91,53 @@ public static class PeakAnalyzer
             var channels = samples.WaveFormat.Channels;
             var frames = reader.Length / Math.Max(1, reader.WaveFormat.BlockAlign);
             var peaks = new float[points];
+            var spectrum = new SpectrumBuilder(samples.WaveFormat.SampleRate);
             var buffer = new float[channels * 8192];
             long frame = 0;
             int got;
             while ((got = samples.Read(buffer, 0, buffer.Length)) > 0)
             {
                 ct.ThrowIfCancellationRequested();
-                Accumulate(peaks, buffer, got, channels, ref frame, frames);
+                Accumulate(peaks, buffer, got, channels, ref frame, frames, spectrum);
             }
 
-            return Finish(peaks, TimeSpan.FromSeconds(frame / (double)samples.WaveFormat.SampleRate));
+            return new TrackAnalysis(Finish(peaks, TimeSpan.FromSeconds(frame / (double)samples.WaveFormat.SampleRate)), spectrum.Finish());
         }
     }
 
-    private static PeakProfile FromVorbis(Stream stream, int points, CancellationToken ct)
+    private static TrackAnalysis FromVorbis(Stream stream, int points, CancellationToken ct)
     {
         using var reader = new VorbisReader(stream, closeOnDispose: false);
         var channels = reader.Channels;
         var frames = reader.TotalSamples;
         var peaks = new float[points];
+        var spectrum = new SpectrumBuilder(reader.SampleRate);
         var buffer = new float[channels * 8192];
         long frame = 0;
         int got;
         while ((got = reader.ReadSamples(buffer, 0, buffer.Length)) > 0)
         {
             ct.ThrowIfCancellationRequested();
-            Accumulate(peaks, buffer, got, channels, ref frame, frames);
+            Accumulate(peaks, buffer, got, channels, ref frame, frames, spectrum);
         }
 
-        return Finish(peaks, TimeSpan.FromSeconds(frame / (double)reader.SampleRate));
+        return new TrackAnalysis(Finish(peaks, TimeSpan.FromSeconds(frame / (double)reader.SampleRate)), spectrum.Finish());
     }
 
     /// <summary>Folds interleaved samples into the slice each frame belongs to (by position in the expected length).</summary>
-    internal static void Accumulate(float[] peaks, float[] buffer, int count, int channels, ref long frame, long totalFrames)
+    internal static void Accumulate(float[] peaks, float[] buffer, int count, int channels, ref long frame, long totalFrames, SpectrumBuilder? spectrum = null)
     {
         var total = Math.Max(1, totalFrames);
         for (var i = 0; i + channels <= count; i += channels, frame++)
         {
             var slice = (int)Math.Min(peaks.Length - 1, frame * peaks.Length / total);
             var max = peaks[slice];
+            var sum = 0f;
             for (var c = 0; c < channels; c++)
             {
-                var a = Math.Abs(buffer[i + c]);
+                var v = buffer[i + c];
+                sum += v;
+                var a = Math.Abs(v);
                 if (a > max)
                 {
                     max = a;
@@ -134,6 +145,7 @@ public static class PeakAnalyzer
             }
 
             peaks[slice] = max;
+            spectrum?.Push(sum / channels);
         }
     }
 

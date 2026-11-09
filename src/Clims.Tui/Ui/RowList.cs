@@ -1,3 +1,4 @@
+using Terminal.Gui.Drawing;
 using Terminal.Gui.Drivers;
 using Terminal.Gui.Input;
 
@@ -22,6 +23,9 @@ public sealed class RowList : PaintView
     }
 
     public bool TypeAhead { get; init; }
+
+    /// <summary>True while the user is in the middle of typing a name to jump to (a pause of about a second ends it).</summary>
+    public bool Typing => TypeAhead && _typed.Length > 0 && (DateTime.UtcNow - _typedAt).TotalMilliseconds <= 900;
 
     public bool Zebra { get; init; }
 
@@ -48,6 +52,17 @@ public sealed class RowList : PaintView
 
     public int SelectedIndex => _selected;
 
+    /// <summary>Index of the first visible row (clamped when drawn); lets a caller that reloads the same rows keep the scroll position.</summary>
+    public int Offset
+    {
+        get => _offset;
+        set
+        {
+            _offset = Math.Max(0, value);
+            SetNeedsDraw();
+        }
+    }
+
     public Row? SelectedRow => _selected >= 0 && _selected < _rows.Count ? _rows[_selected] : null;
 
     public event Action<Row>? SelectionChanged;
@@ -55,6 +70,13 @@ public sealed class RowList : PaintView
     public event Action<Row>? RowActivated;
 
     public void SelectIndex(int index) => Select(index, raise: true);
+
+    /// <summary>Nothing highlighted until the user moves or clicks.</summary>
+    public void ClearSelection()
+    {
+        _selected = -1;
+        SetNeedsDraw();
+    }
 
     protected override void Paint()
     {
@@ -87,7 +109,14 @@ public sealed class RowList : PaintView
 
             FillRow(y, 0, contentWidth, attr);
             var right = row.Right.Length > 0 ? row.Right + " " : "";
-            Put(1, y, Clip(row.Text, contentWidth - 1 - right.Length), attr);
+            var shown = Clip(row.Text, contentWidth - 1 - right.Length);
+            Put(1, y, shown, attr);
+            if (row.Bold is { } bold && bold.Start < shown.Length)
+            {
+                var bolded = new Attribute(attr.Foreground, attr.Background, attr.Style | TextStyle.Bold);
+                Put(1 + bold.Start, y, shown.Substring(bold.Start, Math.Min(bold.Length, shown.Length - bold.Start)), bolded);
+            }
+
             if (IconFor?.Invoke(row) is { } icon && IconX(row) + icon.Length < contentWidth - right.Length)
             {
                 Put(IconX(row), y, icon, i == _selected ? attr : new Attribute(Theme.Accent, attr.Background));
@@ -145,6 +174,11 @@ public sealed class RowList : PaintView
 
     protected override bool OnMouseEvent(Mouse mouse)
     {
+        if (StrayClick(mouse))
+        {
+            return true;
+        }
+
         // Wheel works on the hovered list whether or not it has focus.
         if (mouse.Flags.HasFlag(MouseFlags.WheeledDown))
         {
@@ -158,18 +192,19 @@ public sealed class RowList : PaintView
             return true;
         }
 
+        if (ScrollbarMouse(mouse, _rows.Count > H, y =>
+            {
+                _offset = OffsetFromScrollbar(y, _rows.Count, H);
+                SetNeedsDraw();
+            }))
+        {
+            return true;
+        }
+
         var click = mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) || mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
         var doubleClick = mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked);
-        var press = mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed);
-        if ((click || press) && mouse.Position is { } p)
+        if (click && mouse.Position is { } p)
         {
-            if (p.X >= W - 1 && _rows.Count > H)
-            {
-                _offset = OffsetFromScrollbar(p.Y, _rows.Count, H);
-                SetNeedsDraw();
-                return true;
-            }
-
             if (click)
             {
                 SetFocus();

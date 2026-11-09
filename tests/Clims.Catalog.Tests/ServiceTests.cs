@@ -648,4 +648,37 @@ public class CatalogServiceTests
 
         Assert.Single(probe.Statuses); // identical statuses are not re-announced
     }
+
+    [Fact]
+    public async Task The_sync_asks_the_server_for_the_tracks_of_every_genre_and_keeps_all_the_links()
+    {
+        // Track 1000 is a "Metal" track by its own genre; the server also files it under Jazz.
+        var lms = FakeLms.WithLibrary();
+        lms.ExtraGenreTracks[2] = new List<int> { 1000 };
+        var store = new MemoryStore();
+        using var service = Build.Service(lms, store);
+        await service.StartAsync();
+        await service.SyncAsync();
+
+        Assert.True(lms.GenreTrackCalls >= lms.Genres.Count); // one request per page of each genre
+        var links = service.Current!.GenreTracks!;
+        Assert.Contains(1000, links[1]);
+        Assert.Contains(1000, links[2]);
+        Assert.Same(service.Current, store.Saved);
+        Assert.NotNull(store.Saved!.GenreTracks);
+    }
+
+    [Fact]
+    public async Task The_genre_link_pass_asks_for_ids_only_in_the_cheap_sort()
+    {
+        var lms = FakeLms.WithLibrary();
+        TrackQuery? seen = null;
+        lms.OnGenreQuery = q => seen = q;
+        using var service = Build.Service(lms, new MemoryStore());
+        await service.StartAsync();
+        await service.SyncAsync();
+
+        Assert.Equal(TrackTags.None, seen!.Tags);
+        Assert.Equal(TrackSort.New, seen.Sort);
+    }
 }

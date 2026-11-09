@@ -105,6 +105,28 @@ public sealed class FakePlayer : IPlayerController
         Notice?.Invoke(action == QueueAction.Add ? "Added to the queue (demo)." : "Will play next (demo).");
     }
 
+    public void PlayTracks(IReadOnlyList<(CatalogAlbum Album, CatalogTrack Track)> tracks, bool replace)
+    {
+        if (tracks.Count == 0)
+        {
+            return;
+        }
+
+        if (replace)
+        {
+            _items.Clear();
+            _items.AddRange(tracks);
+            IsPlaying = true;
+            Go(0);
+            return;
+        }
+
+        _items.AddRange(tracks);
+        Changed?.Invoke();
+        Notice?.Invoke("Added to the queue (demo).");
+    }
+
+
     public void JumpTo(int index) => Go(index);
 
     public void RemoveFromQueue(int index)

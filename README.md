@@ -11,6 +11,7 @@ Browse a large library, search it as you type, see real cover art in the termina
 ## Features
 - **Library** by Album Artist, Genre or Year, with albums, genres in italic, track lists and covers. The left column is resizable, sortable and filterable.
 - **Recently added:** a fourth tab with the albums the server added last, in the Library's layout (covers, track lists), newest first.
+- **Genres explorer:** a fifth tab. Pick a genre and the next column lists the genres that share at least one track with it; pick again to narrow further (Rock, then Heavy Metal, then Thrash Metal). The artists of the tracks tagged with the whole chain are listed underneath, and a random queue of 25, 50 or 100 of those tracks can replace or join the queue. Needs a resync once: a track can carry several genres, which the sync now reads from the server genre by genre.
 - **Instant search** on every keystroke over a local index (about 2 ms on 20 000 tracks). The server's own search fills in while the index is incomplete.
 - **Real covers** as Sixel images (with half-block, quadrant and braille fallbacks for other terminals).
 - **Playback** on your LMS player: play/pause, seek, volume, next/previous, status kept in step through server events.
@@ -21,13 +22,17 @@ Browse a large library, search it as you type, see real cover art in the termina
 - Read-only toward your library: nothing is synced, and no player state changes, without you asking.
 
 ## Screenshots
-The Library, with covers, genres in italic, a resizable and filterable left column, and the player footer (cover, waveform, controls):
+The Library, with covers, genres in italic, a resizable and filterable left column, and the player footer (cover, waveform, controls). The search box shows a hint until you focus it, and the terminal title follows the player (`cLiMS ▶ - Track name`):
 
 ![Library](screenshots/library.png)
 
 The Recently added tab: the newest 50 albums on the server, newest first:
 
 ![Recently added](screenshots/recent.png)
+
+The Genres explorer: Death Metal, then Thrash Metal, then Experimental, each column narrowing to the genres that share tracks with the choices so far. The artists of the tracks tagged with all three are listed underneath (click "75 tracks" to list the tracks instead), and a random queue can be started from them:
+
+![Genres](screenshots/genres.png)
 
 Click the cover in the player to see the playing album full screen:
 
@@ -50,8 +55,8 @@ The built-in key reference (`?`):
 ![Help](screenshots/help.png)
 
 ## Requirements
-- [.NET 10 SDK](https://dotnet.microsoft.com/download) to build from source (or a published single-file build, which needs no .NET).
-- A true-colour terminal. [Windows Terminal](https://aka.ms/terminal) 1.22 or later is the reference and gives Sixel covers. Minimum comfortable size is 100x30; below that the footer drops the cover and waveform but keeps the controls.
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) to build from source, or a published build: the default download needs no .NET, the `-framework-dependent` one needs the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0).
+- A true-colour terminal. [Windows Terminal](https://aka.ms/terminal) 1.22 or later is the reference and gives Sixel covers. Minimum comfortable size is 100x30; below that the footer drops the cover and waveform but keeps the controls (the `?` help scrolls when it does not fit).
 - A Lyrion Music Server reachable from your PC (web port 9000, command line port 9090).
 
 ## Quick start
@@ -94,7 +99,21 @@ Notes:
 | `--demo` | Built-in fake library and player, no server |
 | `--driver windows\|dotnet\|ansi` | Force a Terminal.Gui driver |
 
-Files, all in `%LOCALAPPDATA%\cLiMS`: `settings.json`, `catalog-<server uuid>.db` (one index per server), `queues.json` (saved queues), `clims.log` (crashes and server problems, cut to its newest half past 1 MB; nothing is ever printed to the console while the UI runs). `CLIMS_PERF=<file>` writes per-view paint timings on exit.
+Files, all in `%LOCALAPPDATA%\cLiMS`: `settings.json`, `catalog-<server uuid>.db` (one index per server), `covers-<server uuid>.db` (cover cache), `queues.json` (saved queues), `clims.log` (crashes and server problems, cut to its newest half past 1 MB; nothing is ever printed to the console while the UI runs). `CLIMS_PERF=<file>` writes per-view paint timings on exit.
+
+### Cover cache
+
+Covers are also kept on disk, in `covers-<server uuid>.db` next to the index (a separate file, so a resync never touches it and you can delete it alone). It is filled lazily: a cover is stored the first time a view shows it, and later launches read it from disk instead of asking the server. Each resolution has its own rules in the `CoverCache` node of `settings.json`; every value is optional and the defaults are:
+
+```json
+"CoverCache": {
+  "Enabled": true,
+  "Normal": { "TtlDays": 30, "MaxEntries": 0 },
+  "Big":    { "TtlDays": 30, "MaxEntries": 50 }
+}
+```
+
+`Normal` is the 300 px cover in lists and the player (about 27 KB each, roughly 54 MB for 2,000 albums); `Big` is the 900 px full-screen cover (about 144 KB each, so only the newest 50 are kept). A cover older than `TtlDays` is fetched again; `TtlDays` of 0 turns that resolution off; `MaxEntries` of 0 means no limit; `Enabled: false` turns the cache off (covers still load, from the server, into memory). A broken or locked cache file is ignored, never an error.
 
 ## Header status
 `○ Not synced` · `◐ Sync in progress, live search only · artists ✓ albums ✓ tracks 42%` · `● Synced (2 h ago)` · `◔ Server changed, resync pending` · `✕ Offline (using local index)` · `✕ Login required (F2)` · `◇ Demo data (no server)`. Click it, or press `F5`, to resync or cancel a running sync.
@@ -105,7 +124,7 @@ Press `?` in the app for the same list.
 | Key | Action |
 |---|---|
 | `/` | Focus the search box (typing switches to the Search tab and searches at once; `Esc` clears and returns to the previous tab, `Enter`/`Down` jumps to results) |
-| `1` `2` `3` `4` | Search / Library / Queue / Recently added tab (click the tab strip too; `4` on the tab again asks the server for the newest albums) |
+| `1` `2` `3` `4` `5` | Search / Library / Queue / Recently added / Genres tab (click the tab strip too; `4` on the tab again asks the server for the newest albums) |
 | `Tab` | Move focus between panes |
 | letters | Type-ahead in the left list (artist, genre or year) |
 | `F6` | Switch the left list: Album Artist / Genre / Year (or click the ≡ icon in its header); click the ▾/▴ arrow to sort ascending/descending; drag the divider to resize the column (22 characters to half the screen); the ⌕ next to "All ..." (or `Ctrl+F`) turns that row into a filter field, `x` or `Esc` closes it |
@@ -113,6 +132,7 @@ Press `?` in the app for the same list.
 | Right click | On an album cover (whole album) or a track: menu with Play and Enqueue (arrows, `Enter` and `Esc` work in it too) |
 | `a` / `n` | Add the highlighted track to the end of the queue / play it next (gapless); `A` / `N` do the same for the whole album |
 | Recently added tab | The Library's album list (same keys: `Enter` plays, `a` / `n` and `A` / `N` queue) with only the newest 50 albums, newest first |
+| Genres tab | `Up` `Down` pick a genre, `Enter` or `Right` go to the next column of genres that share a track with it, `Left` or `Backspace` back, `Ctrl+F` filter the active column, `Esc` clear; `Alt+R` random queue that replaces the queue (asks first), `Alt+Q` random queue appended, `[` `]` queue size 25 / 50 / 100 |
 | Queue tab | `Enter` play that entry, `x` or `Delete` remove, `Shift+Up/Down` move, `c` clear (asks), `s` save under a name, `o` saved queues (`Enter` replace after asking, `a` append, `x` delete, `Esc` back) |
 | `Space` | Play / pause |
 | `Left` `Right` | Seek -10 s / +10 s |
@@ -138,11 +158,15 @@ dotnet test
 $env:CLIMS_LMS_URL = "http://host:9000/"      # read-only integration tests; a full sync takes about 1.5 minutes
 $env:CLIMS_CATALOG_DB = "<path to catalog-*.db>"   # times the local search on your saved index, no server needed
 ```
-Prebuilt single-file builds are on the [Releases page](https://github.com/tanathos/cLiMS/releases).
+Prebuilt single-file builds are on the [Releases page](https://github.com/tanathos/cLiMS/releases), in two flavours per platform: the default one is self-contained (about 45 MB, no .NET needed), the `-framework-dependent` one is smaller (about 26 MB) but needs the .NET 10 runtime installed.
 
-Single-file build (about 100 MB, no .NET needed on the target):
+Self-contained single-file build (about 45 MB, no .NET needed on the target):
 ```
-dotnet publish src/Clims.Tui -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+dotnet publish src/Clims.Tui -c Release -r win-x64 --self-contained -p:EnableCompressionInSingleFile=true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+```
+Framework-dependent single-file build (about 26 MB, needs the .NET 10 runtime; compression is not available here):
+```
+dotnet publish src/Clims.Tui -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) builds and tests on Windows and Ubuntu and publishes the Windows build as an artifact.
 
@@ -169,11 +193,13 @@ Done so far (details in [`docs/sprint.md`](docs/sprint.md)):
 | 6 | First run: server discovery, connect screen with address form, password-protected servers, per-server index, `F2` / `⇄ Server` | Done. Auth is tested against fakes only (no password-protected server was available) |
 | 7 | Recently added tab (key `4`) from LMS `albums sort:new` | Done |
 | 0.7.0 | First tagged release: MIT license, changelog, release workflow for Windows, Linux and macOS | Done |
+| 0.8.0 | Full-screen album view, album context menu, sort label, queue position in the player | Done |
+| 0.9.0 | Genres explorer (tab `5`) with random queues, cover cache on disk, compressed and framework-dependent builds, mouse and resize fixes | Done |
 
 Deferred: player selector, live visualiser, themes and key binding configuration, remembering several servers at once.
 
 ## Releases
-Versions follow [Semantic Versioning](https://semver.org/) (`0.y.z` until 1.0: minor versions may change behaviour). Each release is a git tag `vX.Y.Z` with a GitHub Release holding single-file builds for `win-x64`, `linux-x64` and `osx-arm64` (zip or tar.gz, plus `SHA256SUMS`). Changes are listed in [`CHANGELOG.md`](CHANGELOG.md). Download from the [Releases page](https://github.com/tanathos/cLiMS/releases); `Clims.Tui --version` prints the version. The builds are not code-signed, so Windows SmartScreen warns on first run, and only Windows Terminal has been tested.
+Versions follow [Semantic Versioning](https://semver.org/) (`0.y.z` until 1.0: minor versions may change behaviour). Each release is a git tag `vX.Y.Z` with a GitHub Release holding single-file builds for `win-x64`, `linux-x64` and `osx-arm64` (zip or tar.gz, plus `SHA256SUMS`), each as a self-contained build and a smaller `-framework-dependent` one that needs the .NET 10 runtime. Changes are listed in [`CHANGELOG.md`](CHANGELOG.md). Download from the [Releases page](https://github.com/tanathos/cLiMS/releases); `Clims.Tui --version` prints the version. The builds are not code-signed, so Windows SmartScreen warns on first run, and only Windows Terminal has been tested.
 
 To cut a release:
 1. Set `<Version>` in [`Directory.Build.props`](Directory.Build.props) (the only place the version lives) and move the "Unreleased" notes in `CHANGELOG.md` under a new `## [X.Y.Z] - date` heading.
