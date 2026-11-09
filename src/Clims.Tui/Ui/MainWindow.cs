@@ -992,6 +992,7 @@ public sealed class MainWindow : Window
         _help.Visible = _helpVisible;
         if (_helpVisible)
         {
+            _help.ScrollToTop();
             // Sixel images sit above any text, so the pages underneath must stop showing theirs while help is open.
             foreach (var page in _pages)
             {

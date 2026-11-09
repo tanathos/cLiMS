@@ -22,13 +22,17 @@ Browse a large library, search it as you type, see real cover art in the termina
 - Read-only toward your library: nothing is synced, and no player state changes, without you asking.
 
 ## Screenshots
-The Library, with covers, genres in italic, a resizable and filterable left column, and the player footer (cover, waveform, controls):
+The Library, with covers, genres in italic, a resizable and filterable left column, and the player footer (cover, waveform, controls). The search box shows a hint until you focus it, and the terminal title follows the player (`cLiMS ▶ - Track name`):
 
 ![Library](screenshots/library.png)
 
 The Recently added tab: the newest 50 albums on the server, newest first:
 
 ![Recently added](screenshots/recent.png)
+
+The Genres explorer: Death Metal, then Thrash Metal, then Experimental, each column narrowing to the genres that share tracks with the choices so far. The artists of the tracks tagged with all three are listed underneath (click "75 tracks" to list the tracks instead), and a random queue can be started from them:
+
+![Genres](screenshots/genres.png)
 
 Click the cover in the player to see the playing album full screen:
 
@@ -52,7 +56,7 @@ The built-in key reference (`?`):
 
 ## Requirements
 - [.NET 10 SDK](https://dotnet.microsoft.com/download) to build from source, or a published build: the default download needs no .NET, the `-framework-dependent` one needs the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0).
-- A true-colour terminal. [Windows Terminal](https://aka.ms/terminal) 1.22 or later is the reference and gives Sixel covers. Minimum comfortable size is 100x30; below that the footer drops the cover and waveform but keeps the controls.
+- A true-colour terminal. [Windows Terminal](https://aka.ms/terminal) 1.22 or later is the reference and gives Sixel covers. Minimum comfortable size is 100x30; below that the footer drops the cover and waveform but keeps the controls (the `?` help scrolls when it does not fit).
 - A Lyrion Music Server reachable from your PC (web port 9000, command line port 9090).
 
 ## Quick start
@@ -189,6 +193,8 @@ Done so far (details in [`docs/sprint.md`](docs/sprint.md)):
 | 6 | First run: server discovery, connect screen with address form, password-protected servers, per-server index, `F2` / `⇄ Server` | Done. Auth is tested against fakes only (no password-protected server was available) |
 | 7 | Recently added tab (key `4`) from LMS `albums sort:new` | Done |
 | 0.7.0 | First tagged release: MIT license, changelog, release workflow for Windows, Linux and macOS | Done |
+| 0.8.0 | Full-screen album view, album context menu, sort label, queue position in the player | Done |
+| 0.9.0 | Genres explorer (tab `5`) with random queues, cover cache on disk, compressed and framework-dependent builds, mouse and resize fixes | Done |
 
 Deferred: player selector, live visualiser, themes and key binding configuration, remembering several servers at once.
 

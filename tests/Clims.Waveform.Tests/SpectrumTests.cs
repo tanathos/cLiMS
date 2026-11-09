@@ -44,4 +44,18 @@ public sealed class SpectrumTests
         using var b = new MemoryStream(Audio.Wav(1, 1));
         Assert.Equal(PeakAnalyzer.Analyze(a, 50).Peaks, PeakAnalyzer.AnalyzeAll(b, 50).Peaks.Peaks);
     }
+
+    [Theory]
+    [InlineData(44100, 2)]
+    [InlineData(48000, 2)]
+    [InlineData(96000, 2)]
+    [InlineData(22050, 1)]
+    public void Real_world_sample_rates_and_channel_counts_are_analysed(int rate, int channels)
+    {
+        using var stream = new MemoryStream(Audio.Wav(quiet: 1, loud: 2, channels: channels, rate: rate));
+        var analysis = PeakAnalyzer.AnalyzeAll(stream);
+
+        Assert.InRange(analysis.Spectrum.FrameCount, 55, 61); // three seconds at 20 frames a second
+        Assert.Equal(255, analysis.Spectrum.At(TimeSpan.FromSeconds(2)).ToArray().Max());
+    }
 }
