@@ -62,7 +62,7 @@ jobs:
           name="clims-${GITHUB_REF_NAME}-${{ matrix.rid }}"
           if [ "${{ matrix.flavour }}" = "framework-dependent" ]; then name="$name-framework-dependent"; fi
           mkdir "$name"
-          cp publish/Clims.Tui* "$name/" && rm -f "$name"/*.pdb
+          cp publish/clims* "$name/" && rm -f "$name"/*.pdb
           cp LICENSE README.md CHANGELOG.md "$name/"
           if [ "${{ matrix.rid }}" = "win-x64" ]; then
             7z a "$name.zip" "$name" > /dev/null

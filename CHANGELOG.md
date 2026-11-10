@@ -3,6 +3,28 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-10
+
+### Added
+
+- Three waveform styles in the footer: the block characters, braille (twice the columns) and a Sixel image (braille where the terminal has no Sixel). Click the waveform to switch; the style at start-up is the `Waveform` setting in `settings.json` (`Blocks`, `Braille` or `Sixel`; missing means `Blocks`).
+- Lyrics in the full-screen album view, under the album details. Synced lyrics highlight the line being sung and keep it in the middle; plain ones scroll (Up, Down, Page Up/Down, the wheel; synced lyrics follow the music again after 8 seconds). `[` and `]` shift the timing by half a second, `R` searches again, `L` turns online lookup on.
+- Lyrics store: found lyrics are kept for good in `lyrics.db` (one file for all servers, never expired), so a song is never searched twice and stored lyrics show offline. A search that found nothing is remembered for a day (`Lyrics.MissRetryDays` in `settings.json`, 0 to search every time); enabling another provider searches again at once, and a provider that could not be reached leaves nothing behind.
+- Lyrics from the track itself, tried before any provider and not needing online lookup: the lyrics in the file's tags (asked from the server through its lyrics tag; LRC text comes out synced, junk like `XXX|` is ignored) and `.lrc` / `.txt` files next to the track (named like the audio file, or an `.lrc` in the folder named with the title), located through the new `Lyrics.MusicPathMap` setting (the server's music folder as this PC sees it, for example `/mnt/Music` to `\\nas\Music`). A share that cannot be reached is not remembered as "no lyrics". A share that needs a login takes `Lyrics.MusicShareUser` and `Lyrics.MusicSharePassword`; the password is encrypted (Windows) and removed from `settings.json` at the next launch.
+- Lyrics providers: LRCLIB (synced, free, no key), DarkLyrics (metal, plain text, one page fills the whole album) and lyrics.ovh (plain text). Online lookup is off by default and is turned on with `L` in the album view or `Lyrics.OnlineLookup`; only the artist, album, title and length are sent. See the new "Lyrics" section of the README.
+
+- Album view progress bars at the bottom: the playing track's, and, when the queue has more than one track, the whole queue's. The queue bar has one stretch per track, as long as the track and separated by a constant gap (drawn in half cells for precision); when there are too many tracks for gaps, the stretches touch and alternate between four shades of the accent colour. The queue's total length ends the bar.
+- Queue tab: `X` removes every entry after the selected one.
+- Hover highlight in light gray on clickable things: the tabs, the "⇄ Server" button and status icon, the transport buttons, the artist and album links in the player, and the artist, genre and year links on album lists. (It needs a terminal that reports mouse movement, such as Windows Terminal.)
+
+### Changed
+- The album view now covers the whole screen. The cover has a one-character margin on the left and one row above and below; the artist starts on the cover's first row, and the album's year sits next to its title. A "Track" line was added to the details, and "Runtime" shows the length of the current track (it showed the whole album's).
+- The album view's details (artist, album, genre, runtime, format) are anchored to the top of the cover and a little closer together, to leave room for the lyrics. Lines already sung fade out in three steps.
+- Queue tab: the heading shows "Queue" on the left and "N tracks · total · remaining" on the right; the keys are listed on the last row, separated by dots.
+
+### Fixed
+- Queue tab: removing an entry no longer scrolls the list so that the selection ends up on the bottom row.
+
 ## [0.9.0] - 2026-11-09
 
 ### Added
@@ -66,3 +88,4 @@ First tagged release.
 [0.7.0]: https://github.com/tanathos/cLiMS/releases/tag/v0.7.0
 [0.8.0]: https://github.com/tanathos/cLiMS/releases/tag/v0.8.0
 [0.9.0]: https://github.com/tanathos/cLiMS/releases/tag/v0.9.0
+[0.9.1]: https://github.com/tanathos/cLiMS/releases/tag/v0.9.1

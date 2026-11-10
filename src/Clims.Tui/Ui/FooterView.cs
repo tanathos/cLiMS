@@ -41,6 +41,8 @@ public sealed class FooterView : PaintView
     /// <summary>The cover cells never change between frames, so the sixel is not re-sent every frame (that flickered).</summary>
     protected override bool ResendSixelsOnPaint => false;
 
+    protected override bool TracksHover => true;
+
     protected override int ClearFromX => ShowCover ? CoverCols : 0;
 
     public bool ShowWaveform { get; set; } = true;
@@ -48,6 +50,8 @@ public sealed class FooterView : PaintView
     protected override void Paint()
     {
         _buttons.Clear();
+        _wave = (0, 0);
+        _still = null;
         const string hint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-5 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
         if (_player.Current is not { } now)
         {
@@ -104,13 +108,14 @@ public sealed class FooterView : PaintView
     {
         const string sep = "  ·  ";
         var link = new Attribute(Theme.Fg, Theme.Bg, TextStyle.Underline);
+        var linkHover = new Attribute(Theme.HoverFg, Theme.Bg, TextStyle.Underline);
         var artist = now.Track.Artist ?? now.Album.ArtistName;
         var end = x + width;
 
         _artistBox = _albumBox = (0, 0);
         var cx = x;
         var s = Clip(artist, Math.Max(0, end - cx));
-        var next = Put(cx, 1, s, link);
+        var next = Put(cx, 1, s, Over(cx, cx + s.Length, 1) ? linkHover : link);
         _artistBox = (cx, next);
         cx = next;
         if (cx >= end)
@@ -120,7 +125,7 @@ public sealed class FooterView : PaintView
 
         cx = Put(cx, 1, Clip(sep, end - cx), Theme.Dim);
         s = Clip(now.Album.Title, Math.Max(0, end - cx));
-        next = Put(cx, 1, s, link);
+        next = Put(cx, 1, s, Over(cx, cx + s.Length, 1) ? linkHover : link);
         _albumBox = (cx, next);
         cx = next;
         if (cx >= end)
@@ -270,35 +275,81 @@ public sealed class FooterView : PaintView
         else
         {
             // Not drawn yet: say why instead of leaving a hole (no colour-only or silent states).
+            _wave = (x, x + width);
+            Reclaim(x, y, width, 2);
             PaintPending(track, x, y, width, "waveform");
             return;
         }
 
+        _wave = (x, x + width);
         var played = (int)(width * Fraction(track));
-        var top = new char[width];
-        var bottom = new char[width];
-        for (var i = 0; i < width; i++)
+        // The waveform is background decoration: a softer accent and a dimmer rest than the rest of the player.
+        var doneColour = Theme.Mix(Theme.Accent, Theme.Bg, 0.35);
+        var todoColour = Theme.Mix(Theme.FgDim, Theme.Bg, 0.45);
+        if (WaveformStyle == WaveformStyle.Sixel && PaintWaveformImage(track, peaks, x, y, width, played, doneColour, todoColour))
         {
-            var from = i * peaks.Length / width;
-            var to = Math.Max(from + 1, (i + 1) * peaks.Length / width);
-            var peak = 0f;
-            for (var k = from; k < to; k++)
-            {
-                peak = Math.Max(peak, peaks[k]);
-            }
-
-            var level = (int)(peak * 16);
-            bottom[i] = Blocks[Math.Min(level, 8)];
-            top[i] = level > 8 ? Blocks[level - 8] : ' ';
+            return;
         }
 
-        // The waveform is background decoration: a softer accent and a dimmer rest than the rest of the player.
-        var done = new Attribute(Theme.Mix(Theme.Accent, Theme.Bg, 0.35), Theme.Bg);
-        var todo = new Attribute(Theme.Mix(Theme.FgDim, Theme.Bg, 0.45), Theme.Bg);
+        Reclaim(x, y, width, 2);
+        var (topText, bottomText) = WaveformStyle == WaveformStyle.Blocks ? WaveformGlyphs.Blocks(peaks, width) : WaveformGlyphs.Braille(peaks, width);
+        var top = topText.ToCharArray();
+        var bottom = bottomText.ToCharArray();
+        var done = new Attribute(doneColour, Theme.Bg);
+        var todo = new Attribute(todoColour, Theme.Bg);
         Put(x, y, new string(top, 0, played), done);
         Put(x + played, y, new string(top, played, width - played), todo);
         Put(x, y + 1, new string(bottom, 0, played), done);
         Put(x + played, y + 1, new string(bottom, played, width - played), todo);
+    }
+
+    /// <summary>How the waveform is drawn; a click on it moves to the next style (this run only).</summary>
+    public WaveformStyle WaveformStyle { get; set; } = WaveformStyle.Blocks;
+
+    private (int X0, int X1) _wave;
+    private System.Drawing.Rectangle? _still;
+    private System.Drawing.Size _stillSize;
+    private CoverImage? _waveImage;
+    private int _wavePlayed = -1;
+
+    /// <summary>The waveform image does not move between frames: the per-frame clear must not wipe it.</summary>
+    protected override System.Drawing.Rectangle? StillCells => _stillSize == new System.Drawing.Size(W, H) ? _still : null;
+
+    /// <summary>
+    /// The waveform as a sixel. The image is made again each time the played part grows by a cell (a few seconds), not every
+    /// frame. False when no sixel can be shown (no terminal support, or a popup is open): the caller draws braille instead.
+    /// </summary>
+    private bool PaintWaveformImage(CatalogTrack track, float[] peaks, int x, int y, int width, int played, Color done, Color todo)
+    {
+        if (!SixelCovers.Available)
+        {
+            return false;
+        }
+
+        var cell = SixelCovers.CellPixels;
+        // The label (and so the placement) stays the same while the played part grows: only the pixels change.
+        var label = $"wave:{track.Id}:{width}x{cell.Width}x{cell.Height}";
+        if (_waveImage?.Label != label || _wavePlayed != played)
+        {
+            _wavePlayed = played;
+            var pixels = WaveformImage.Render(peaks, width * cell.Width, 2 * cell.Height, cell.Width / 2, played * cell.Width, done, todo, Theme.Bg);
+            var old = _waveImage;
+            _waveImage = CoverImage.FromPixels(pixels, label);
+            if (old is not null)
+            {
+                SixelCovers.Forget(old);
+                old.Dispose();
+            }
+        }
+
+        if (!DrawSixel(_waveImage, x, y, width, 2))
+        {
+            return false;
+        }
+
+        _still = new System.Drawing.Rectangle(x, y, width, 2);
+        _stillSize = new System.Drawing.Size(W, H);
+        return true;
     }
 
     private void PaintControls(int x0)
@@ -331,7 +382,7 @@ public sealed class FooterView : PaintView
     private int Button(int x, int y, string label, Action run)
     {
         var text = $"[ {label} ]";
-        var end = Put(x, y, text, new Attribute(Theme.Fg, Theme.BgAlt));
+        var end = Put(x, y, text, Over(x, x + text.Length, y) ? Theme.Hover : new Attribute(Theme.Fg, Theme.BgAlt));
         _buttons.Add((x, end, run));
         return end;
     }
@@ -363,6 +414,12 @@ public sealed class FooterView : PaintView
                 AlbumClicked?.Invoke(playing.Album);
                 return true;
             }
+        }
+
+        if (p.Y is 2 or 3 && p.X >= _wave.X0 && p.X < _wave.X1 && mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked))
+        {
+            WaveformStyle = (WaveformStyle)(((int)WaveformStyle + 1) % Enum.GetValues<WaveformStyle>().Length);
+            return true;
         }
 
         if (p.Y == 0 && p.X >= _seek.X0 && p.X < _seek.X1)

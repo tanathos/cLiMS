@@ -1,5 +1,7 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Clims.Catalog;
+using Clims.Tui.Ui;
 
 namespace Clims.Tui;
 
@@ -13,6 +15,16 @@ public sealed record AppSettings(string? LmsUrl = null, string? ServerUuid = nul
 {
     /// <summary>The cover cache options (the "CoverCache" node). Written back on save, so the defaults are visible in the file.</summary>
     public CoverCacheSettings CoverCache { get; init; } = new();
+
+    /// <summary>The lyrics options (the "Lyrics" node), written back on save like <see cref="CoverCache"/>.</summary>
+    public LyricsSettings Lyrics { get; init; } = new();
+
+    /// <summary>The footer's waveform style at start-up: "Blocks" (the default), "Braille" or "Sixel". Click the waveform to switch for the session.</summary>
+    public string Waveform { get; init; } = nameof(WaveformStyle.Blocks);
+
+    /// <summary><see cref="Waveform"/> as a style; anything unrecognised is the default.</summary>
+    [JsonIgnore]
+    public WaveformStyle WaveformStyle => Enum.TryParse<WaveformStyle>(Waveform, ignoreCase: true, out var style) && Enum.IsDefined(style) ? style : WaveformStyle.Blocks;
 
     private static string FilePath => Path.Combine(CatalogPaths.DataFolder, "settings.json");
 

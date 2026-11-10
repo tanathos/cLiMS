@@ -15,6 +15,7 @@ public sealed class QueueTab : View
     private readonly IPlayerController _player;
     private readonly SavedQueueStore _store;
     private readonly NameBar _nameBar;
+    private readonly Legend _legend;
     private bool _showSaved;
     private string _signature = "";
 
@@ -28,7 +29,8 @@ public sealed class QueueTab : View
 
         List = new RowList { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(1) };
         _nameBar = new NameBar { X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1, Visible = false };
-        Add(List, _nameBar);
+        _legend = new Legend { X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1 };
+        Add(List, _legend, _nameBar);
         List.RowActivated += OnActivated;
         Rebuild(force: true);
     }
@@ -64,6 +66,20 @@ public sealed class QueueTab : View
             if (entry is not null)
             {
                 _player.RemoveFromQueue(entry.Index);
+            }
+
+            return true;
+        }
+
+        if (Is(key, 'X'))
+        {
+            if (entry is not null)
+            {
+                // From the end, so the indexes still to remove do not shift.
+                for (var i = _player.Queue.Count - 1; i > entry.Index; i--)
+                {
+                    _player.RemoveFromQueue(i);
+                }
             }
 
             return true;
@@ -145,12 +161,14 @@ public sealed class QueueTab : View
     public void CancelNaming()
     {
         _nameBar.Visible = false;
+        _legend.Visible = true;
         List.SetFocus();
         SetNeedsDraw();
     }
 
     private int? _pendingSelection;
     private bool _positioned;
+    private bool _wasSaved;
 
     private static bool Is(Key key, char c) => !key.IsCtrl && !key.IsAlt && key.AsRune.Value == c;
 
@@ -198,6 +216,7 @@ public sealed class QueueTab : View
 
         _nameBar.Field.Text = $"Queue {DateTime.Now:yyyy-MM-dd HH:mm}";
         _nameBar.Visible = true;
+        _legend.Visible = false;
         _nameBar.Field.SetFocus();
         SetNeedsDraw();
     }
@@ -227,12 +246,24 @@ public sealed class QueueTab : View
         }
 
         _signature = signature;
+        _legend.Items = _showSaved
+            ? [("Enter", "replace the queue"), ("a", "append"), ("x", "delete"), ("Esc", "back")]
+            : [("Enter", "play"), ("x", "remove"), ("X", "remove all after selection"), ("Shift+↑↓", "move"), ("c", "clear"), ("s", "save"), ("o", "saved queues")];
         var keep = List.SelectedIndex;
+        var scroll = List.Offset;
+        var sameView = _wasSaved == _showSaved && _positioned;
+        _wasSaved = _showSaved;
         var rows = _showSaved ? SavedRows() : QueueRows(queue);
         List.Rows = rows;
+        if (sameView)
+        {
+            // Setting the rows scrolls back to the top: put the list where it was, so removing a track does not move the view.
+            List.Offset = scroll;
+        }
 
         var target = _pendingSelection is { } p ? p + 1 : keep;     // +1: the heading row
         _pendingSelection = null;
+        target = Math.Min(target, rows.Count - 1);                  // the last row was removed: stay on the new last one
         if (target >= 0 && target < rows.Count && rows[target].Kind != RowKind.Header)
         {
             List.SelectIndex(target);
@@ -262,9 +293,7 @@ public sealed class QueueTab : View
 
         var total = TimeSpan.FromTicks(queue.Sum(e => e.Track.Duration.Ticks));
         var left = TimeSpan.FromTicks(queue.Where(e => e.Index > _player.QueueIndex).Sum(e => e.Track.Duration.Ticks));
-        rows.Add(new Row(
-            $"Queue — {queue.Count} tracks, {Format(total)}   ·   {Format(left)} after the current track   ·   Enter play  x remove  Shift+↑↓ move  c clear  s save  o saved queues",
-            Kind: RowKind.Header));
+        rows.Add(new Row("Queue", $"{queue.Count} tracks · {Format(total)} · {Format(left)} remaining", Kind: RowKind.Header));
         foreach (var e in queue)
         {
             var marker = e.Index == _player.QueueIndex ? (_player.IsPlaying ? "▶" : "▮") : " ";
@@ -280,7 +309,7 @@ public sealed class QueueTab : View
     private List<Row> SavedRows()
     {
         var saved = _store.List();
-        var rows = new List<Row> { new($"Saved queues ({saved.Count})   ·   Enter replace the queue  a append  x delete  Esc back", Kind: RowKind.Header) };
+        var rows = new List<Row> { new($"Saved queues ({saved.Count})", Kind: RowKind.Header) };
         if (saved.Count == 0)
         {
             rows.Add(new Row("Nothing saved yet. Press Esc, then s to save the current queue.", Kind: RowKind.More));
@@ -292,6 +321,39 @@ public sealed class QueueTab : View
 
     private static string Format(TimeSpan t) =>
         t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes:00}:{t.Seconds:00}";
+
+    /// <summary>The keys of the tab on its last row: "key label" pairs separated by a centred dot.</summary>
+    private sealed class Legend : PaintView
+    {
+        private IReadOnlyList<(string Key, string Label)> _items = [];
+
+        public IReadOnlyList<(string Key, string Label)> Items
+        {
+            get => _items;
+            set
+            {
+                _items = value;
+                SetNeedsDraw();
+            }
+        }
+
+        protected override void Paint()
+        {
+            var x = 1;
+            var key = new Attribute(Theme.Accent, Theme.Bg);
+            var label = new Attribute(Theme.FgDim, Theme.Bg);
+            for (var i = 0; i < _items.Count; i++)
+            {
+                if (i > 0)
+                {
+                    x = Put(x, 0, " · ", label);
+                }
+
+                x = Put(x, 0, _items[i].Key + " ", key);
+                x = Put(x, 0, _items[i].Label, label);
+            }
+        }
+    }
 
     /// <summary>"Save queue as:" and a text field, on the last row of the tab.</summary>
     private sealed class NameBar : View

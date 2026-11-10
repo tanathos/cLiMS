@@ -15,6 +15,8 @@ public sealed class ContextMenu : PaintView
 
     protected override bool Dimmable => false;
 
+    protected override bool TracksHover => true;
+
     public int Selected => _selected;
 
     public IReadOnlyList<MenuEntry> Entries => _entries;
@@ -122,10 +124,12 @@ public sealed class ContextMenu : PaintView
         Put(0, H - 1, "└" + new string('─', W - 2) + "┘", frame);
         for (var i = 0; i < _entries.Count; i++)
         {
-            var on = i == _selected;
+            // The entry under the pointer is light gray; the keyboard's choice (blue) shows only while the pointer is elsewhere.
+            var hovered = Over(1, W - 1, i + 1);
+            var on = i == _selected && !(Pointer is { } p && p.X > 0 && p.X < W - 1 && p.Y >= 1 && p.Y <= _entries.Count);
             Put(0, i + 1, "│", frame);
             Put(W - 1, i + 1, "│", frame);
-            Put(1, i + 1, (" " + _entries[i].Label).PadRight(W - 2), on ? chosen : text);
+            Put(1, i + 1, (" " + _entries[i].Label).PadRight(W - 2), hovered ? Theme.Hover : on ? chosen : text);
         }
     }
 }

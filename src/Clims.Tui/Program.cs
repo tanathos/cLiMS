@@ -72,6 +72,8 @@ while (true)
             d.Force16Colors = false;
         }
 
+        // Plain mouse movement (no button) is reported here: the hover highlights follow it.
+        app.Mouse.MouseEvent += (_, mouse) => PaintView.PointerAt(mouse.ScreenPosition);
         SixelCovers.ReleaseAll();
         SixelCovers.Driver = app.Driver;
         // A fresh screen: images left by the previous window are not repainted by cell writes that did not change.
@@ -108,7 +110,7 @@ while (true)
 
         using var session = new Session(connection, settings, Arg("--player"));
         using var search = new SearchService(() => session.Catalog.Current, session.Library);
-        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums);
+        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, settings.WaveformStyle);
 
         // Start talking to the server only once the UI loop is running, so its events have somewhere to go.
         app.AddTimeout(TimeSpan.FromMilliseconds(50), () =>

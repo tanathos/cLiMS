@@ -88,7 +88,9 @@ public sealed class HeaderBar : View
 
         public event Action? Clicked;
 
-        protected override void Paint() => Put(0, 0, "⇄ Server", new Attribute(Theme.Fg, Theme.BgAlt));
+        protected override bool TracksHover => true;
+
+        protected override void Paint() => Put(0, 0, "⇄ Server", Pointer is null ? new Attribute(Theme.Fg, Theme.BgAlt) : Theme.Hover);
 
         protected override bool OnMouseEvent(Mouse mouse)
         {
@@ -126,6 +128,8 @@ public sealed class HeaderBar : View
 
         protected override Attribute Base => OnHeader(Theme.Fg);
 
+        protected override bool TracksHover => true;
+
         protected override void Paint()
         {
             // Right-aligned "name ●": only the icon is clickable, the status text is shown when it is clicked.
@@ -134,7 +138,7 @@ public sealed class HeaderBar : View
             var x = Math.Max(0, W - name.Length - symbol.Length);
             x = Put(x, 0, name, OnHeader(Theme.Fg));
             _icon = (x, x + symbol.Length);
-            Put(x, 0, symbol, OnHeader(color));
+            Put(x, 0, symbol, OnHeader(Over(_icon.X0, _icon.X1, 0) ? Theme.HoverFg : color));
         }
 
         protected override bool OnMouseEvent(Mouse mouse)

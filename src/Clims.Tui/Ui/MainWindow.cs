@@ -31,6 +31,7 @@ public sealed class MainWindow : Window
     private readonly RecentTab _recent;
     private readonly GenresTab _genres;
     private readonly WaveformService? _waves;
+    private readonly LyricsFeed? _lyrics;
     private string _waveSignature = "";
     private bool _helpVisible;
     private bool _infoVisible;
@@ -42,6 +43,7 @@ public sealed class MainWindow : Window
     private int _currentTab = -1;
     private int _tabBeforeSearch = 1;
     private DateTime _lastTick = DateTime.UtcNow;
+    private DateTime _lastSlowDraw = DateTime.MinValue;
     private DateTime _noticeUntil = DateTime.MinValue;
     private int _coversDirty;
     private bool _sixelSeen;
@@ -56,9 +58,12 @@ public sealed class MainWindow : Window
         IPlayerController player,
         SavedQueueStore queues,
         WaveformService? waves = null,
-        RecentAlbumsSource? recentAlbums = null)
+        RecentAlbumsSource? recentAlbums = null,
+        LyricsFeed? lyrics = null,
+        WaveformStyle waveformStyle = WaveformStyle.Blocks)
     {
         _waves = waves;
+        _lyrics = lyrics;
         _app = app;
         _catalog = catalog;
         _searchService = search;
@@ -86,17 +91,17 @@ public sealed class MainWindow : Window
             page.Height = Dim.Fill(FooterView.Rows);
         }
 
-        _footer = new FooterView(player, waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows };
+        _footer = new FooterView(player, waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows, WaveformStyle = waveformStyle };
         _help.X = 0;
         _help.Y = HeaderBar.Rows + 1;
         _help.Width = Dim.Fill();
         _help.Height = Dim.Fill(FooterView.Rows);
         _help.Visible = false;
-        // Two rows above and below and two columns left and right stay visible, dimmed.
-        _info.X = 2;
-        _info.Y = 2;
-        _info.Width = Dim.Fill(2);
-        _info.Height = Dim.Fill(2);
+        // The album view covers the whole screen.
+        _info.X = 0;
+        _info.Y = 0;
+        _info.Width = Dim.Fill();
+        _info.Height = Dim.Fill();
         _info.Visible = false;
 
         Add(_header, _header.Search, _tabs);
@@ -196,6 +201,11 @@ public sealed class MainWindow : Window
         _app.AddTimeout(FrameInterval, OnTick);
         UpdateTabTitle();
         player.Changed += () => _app.Invoke(OnPlayerChanged);
+        if (lyrics is not null)
+        {
+            lyrics.Changed += () => _app.Invoke(PushLyrics);
+        }
+
         player.Notice += text => _app.Invoke(() => Notice(text));
         _queue.Notice += Notice;
         _genres.Notice += Notice;
@@ -371,6 +381,9 @@ public sealed class MainWindow : Window
             if (_player.Current is { } playing)
             {
                 _info.Show(playing, _catalog.Current);
+                PushQueue();
+                _lyrics?.Show(playing);
+                PushLyrics();
             }
             else
             {
@@ -596,12 +609,25 @@ public sealed class MainWindow : Window
         _footer.ShowCover = Viewport.Width >= MinWidth;
         _footer.ShowWaveform = Viewport.Height >= MinHeight;
         // While the album view is open the screen under it stays still: repainting it would wipe the cover image (a sixel is erased by any text written over it).
-        if (!_infoVisible)
+        // Once a second is enough (the clock shows whole seconds; changes of state redraw at once). Every redraw makes the driver
+        // reposition the terminal's cursor, which restarts its blink: ten a second made a text field's cursor flicker.
+        var secondPassed = now - _lastSlowDraw >= TimeSpan.FromSeconds(1);
+        if (secondPassed)
         {
-            _footer.SetNeedsDraw();
+            _lastSlowDraw = now;
+            if (!_infoVisible)
+            {
+                _footer.SetNeedsDraw();
+            }
+
+            _header.Refresh();
         }
 
-        _header.Refresh();
+        if (_infoVisible)
+        {
+            _info.Tick(_player.Elapsed, now);
+        }
+
         return true;
     }
 
@@ -675,6 +701,18 @@ public sealed class MainWindow : Window
             else if (key == Key.CursorRight || key == Key.CursorLeft)
             {
                 _player.Seek(TimeSpan.FromSeconds(key == Key.CursorRight ? 10 : -10));
+            }
+            else if (c is 'r' or 'R')
+            {
+                _lyrics?.Show(_player.Current, refresh: true);
+            }
+            else if (c is 'l' or 'L')
+            {
+                _lyrics?.EnableOnline();
+            }
+            else
+            {
+                _info.HandleLyricsKey(key);
             }
 
             key.Handled = true;
@@ -881,6 +919,9 @@ public sealed class MainWindow : Window
         _infoVisible = true;
         _info.Show(null, null); // forget the last album: the first show always paints
         _info.Show(now, _catalog.Current);
+        PushQueue();
+        _lyrics?.Show(now);
+        PushLyrics();
         // Sixel images sit above any text and cannot be dimmed: while the view is open everything under it draws its covers in cells.
         PaintView.Dimmed = true;
         ReleaseSixels();
@@ -964,6 +1005,16 @@ public sealed class MainWindow : Window
         _recent.Albums.ResetCovers();
         _search.List.ResetCovers();
         _footer.ResetCovers();
+    }
+
+    private void PushQueue() => _info.SetQueue(_player.Queue.Select(e => e.Track.Duration).ToList(), _player.QueueIndex);
+
+    private void PushLyrics()
+    {
+        if (_lyrics is not null && _infoVisible)
+        {
+            _info.SetLyrics(_lyrics.State, _lyrics.Result, _lyrics.CanEnableOnline);
+        }
     }
 
     private void CloseInfo()

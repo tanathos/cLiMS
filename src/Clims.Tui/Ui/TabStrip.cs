@@ -86,6 +86,8 @@ public sealed class TabStrip : PaintView
         return true;
     }
 
+    protected override bool TracksHover => true;
+
     protected override void Paint()
     {
         _spans.Clear();
@@ -95,7 +97,9 @@ public sealed class TabStrip : PaintView
         for (var i = 0; i < _titles.Length; i++)
         {
             var label = $" {i + 1} {_titles[i]} ";
-            var attr = i == _selected ? new Attribute(Theme.Bg, Theme.Accent) : new Attribute(Theme.Fg, Theme.BgAlt);
+            var attr = i == _selected ? new Attribute(Theme.Bg, Theme.Accent)
+                : Over(x, x + label.Length, 0) ? Theme.Hover
+                : new Attribute(Theme.Fg, Theme.BgAlt);
             _spans.Add((x, x + label.Length));
             x = Put(x, 0, label, attr) + 1;
         }
@@ -119,7 +123,7 @@ public sealed class TabStrip : PaintView
         var x = Put(start, 0, text + " ", new Attribute(_choices.Length > 0 ? Theme.Warn : Theme.FgDim, Theme.BgAlt));
         for (var i = 0; i < buttons.Length; i++)
         {
-            var end = Put(x, 0, buttons[i], new Attribute(Theme.Bg, Theme.Accent));
+            var end = Put(x, 0, buttons[i], Over(x, x + buttons[i].Length, 0) ? Theme.Hover : new Attribute(Theme.Bg, Theme.Accent));
             _choiceSpans.Add((x, end, _choices[i]));
             x = end + 1;
         }

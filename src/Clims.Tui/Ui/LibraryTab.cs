@@ -325,12 +325,15 @@ public sealed class LibraryTab : View
 
         protected override Attribute Base => new(Theme.Fg, Theme.BgAlt);
 
+        protected override bool TracksHover => true;
+
         protected override void Paint()
         {
             FillRow(0, 0, W, Base);
-            Put(IconX, 0, "≡", new Attribute(Theme.Fg, Theme.BgSelectedDim));
+            // Only the colour changes under the pointer, not the background.
+            Put(IconX, 0, "≡", new Attribute(Over(0, IconX + 2, 0) ? Theme.HoverFg : Theme.Fg, Theme.BgSelectedDim));
             Put(IconX + 2, 0, DimensionName, new Attribute(Theme.Accent, Theme.BgAlt));
-            Put(ArrowX, 0, Descending ? "▴" : "▾", new Attribute(Theme.Accent, Theme.BgAlt));
+            Put(ArrowX, 0, Descending ? "▴" : "▾", new Attribute(Over(ArrowX - 1, ArrowX + 2, 0) ? Theme.HoverFg : Theme.Accent, Theme.BgAlt));
             var hint = "F6";
             Put(W - hint.Length - 2, 0, hint, new Attribute(Theme.FgDim, Theme.BgAlt));
         }

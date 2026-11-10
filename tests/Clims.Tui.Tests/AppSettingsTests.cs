@@ -52,4 +52,30 @@ public class AppSettingsTests
 
         Assert.Equal(saved.CoverCache, back.CoverCache);
     }
+
+    [Fact]
+    public void Lyrics_are_shown_when_stored_but_not_searched_online_by_default_and_a_miss_is_retried_after_a_day()
+    {
+        var settings = System.Text.Json.JsonSerializer.Deserialize<AppSettings>("""{"LmsUrl":"http://h/"}""")!;
+
+        Assert.True(settings.Lyrics.Enabled);
+        Assert.False(settings.Lyrics.OnlineLookup);
+        Assert.Equal(["lrclib"], settings.Lyrics.Providers);
+        Assert.Equal(1, settings.Lyrics.MissRetryDays);
+    }
+
+    [Fact]
+    public void The_lyrics_node_can_be_changed_in_the_file_and_survives_a_round_trip()
+    {
+        var json = """{"Lyrics":{"OnlineLookup":true,"Providers":["lrclib","darklyrics"],"MissRetryDays":3}}""";
+        var settings = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json)!;
+
+        Assert.True(settings.Lyrics.OnlineLookup);
+        Assert.Equal(["lrclib", "darklyrics"], settings.Lyrics.Providers);
+        Assert.Equal(3, settings.Lyrics.MissRetryDays);
+
+        var back = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(System.Text.Json.JsonSerializer.Serialize(settings))!;
+        Assert.Equal(settings.Lyrics.Providers, back.Lyrics.Providers);
+        Assert.True(back.Lyrics.OnlineLookup);
+    }
 }
