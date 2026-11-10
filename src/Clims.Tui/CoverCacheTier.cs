@@ -6,8 +6,10 @@ namespace Clims.Tui;
 public sealed record CoverCacheTier(int TtlDays = 30, int MaxEntries = 0)
 {
     /// <summary>True when covers of this resolution are stored at all.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool Active => TtlDays > 0;
 
     /// <summary>The time to live as a span.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public TimeSpan Ttl => TimeSpan.FromDays(Math.Max(0, TtlDays));
 }

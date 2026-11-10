@@ -62,7 +62,8 @@ if (uri is not null)
 }
 
 // Nothing to connect to and demo not asked for: the first thing the user sees is the connect screen.
-var askFirst = connection is null && !demoOnly;
+var explicitAddress = Arg("--lms") is not null || Environment.GetEnvironmentVariable("CLIMS_LMS_URL") is not null;
+var askFirst = !demoOnly && (connection is null || (!explicitAddress && !store.Current.Startup.AutoConnect));
 var exitCode = 0;
 while (true)
 {
@@ -110,7 +111,7 @@ while (true)
 
         using var session = new Session(connection, store, Arg("--player"));
         using var search = new SearchService(() => session.Catalog.Current, session.Library);
-        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, store.Current.Ui.Waveform.Style);
+        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, store.Current.Ui.Waveform.Style, store.Current.Ui.Waveform.Enabled, store.Current.Startup.View);
 
         // Start talking to the server only once the UI loop is running, so its events have somewhere to go.
         app.AddTimeout(TimeSpan.FromMilliseconds(50), () =>

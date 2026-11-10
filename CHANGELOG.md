@@ -7,6 +7,13 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 - Cover styles per place: `UI.Covers` in `settings.json` sets the style (`Sixel`, `HalfBlock`, `Quadrant`, `Braille`) separately for the footer, the lists (library, recently added, search, genres) and the full-screen cover, and `SixelFallback` the style used where Sixel is not possible. The lists also have a size, `Small` (16x8 cells), `Medium` (24x12, the default) or `Large` (32x16).
 
+- `Startup` in `settings.json`: `View` (`Library`, `Recent`, `Queue`, `Genres` or `Search`) is the tab shown first, and `AutoConnect: false` opens the connect screen at every start (`Esc` keeps the saved server; an address given with `--lms` or `CLIMS_LMS_URL` still connects at once).
+- `UI.Waveform.Enabled: false` hides the waveform and stops downloading waveform files.
+
+### Fixed
+
+- The cover cache node of `settings.json` no longer writes its computed `Active` and `Ttl` values.
+
 ### Changed
 
 - `F3` now changes the cover style of the lists, or of the full-screen cover while it is open (the footer keeps its own style), and `F4` cycles the three list cover sizes instead of two. Both last for the session; the defaults come from the settings.

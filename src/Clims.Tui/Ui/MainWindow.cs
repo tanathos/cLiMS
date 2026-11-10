@@ -1,3 +1,4 @@
+using Clims.Tui.Settings;
 using Clims.Catalog;
 using Clims.Tui.Data;
 using Clims.Waveform;
@@ -31,6 +32,7 @@ public sealed class MainWindow : Window
     private readonly RecentTab _recent;
     private readonly GenresTab _genres;
     private readonly WaveformService? _waves;
+    private readonly bool _waveformEnabled;
     private readonly LyricsFeed? _lyrics;
     private string _waveSignature = "";
     private bool _helpVisible;
@@ -60,9 +62,12 @@ public sealed class MainWindow : Window
         WaveformService? waves = null,
         RecentAlbumsSource? recentAlbums = null,
         LyricsFeed? lyrics = null,
-        WaveformStyle waveformStyle = WaveformStyle.Blocks)
+        WaveformStyle waveformStyle = WaveformStyle.Blocks,
+        bool waveformEnabled = true,
+        StartupView startupView = StartupView.Library)
     {
-        _waves = waves;
+        _waveformEnabled = waveformEnabled;
+        _waves = waveformEnabled ? waves : null;
         _lyrics = lyrics;
         _app = app;
         _catalog = catalog;
@@ -91,7 +96,7 @@ public sealed class MainWindow : Window
             page.Height = Dim.Fill(FooterView.Rows);
         }
 
-        _footer = new FooterView(player, waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows, WaveformStyle = waveformStyle };
+        _footer = new FooterView(player, _waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows, WaveformStyle = waveformStyle };
         _help.X = 0;
         _help.Y = HeaderBar.Rows + 1;
         _help.Width = Dim.Fill();
@@ -126,7 +131,7 @@ public sealed class MainWindow : Window
         _tabs.SelectedChanged += ShowTab;
         _tabs.TabClicked += _ => FocusPage();   // like the number keys: the page gets the keyboard, not the search box
         ShowTab(0);
-        _tabs.Selected = 1;
+        _tabs.Selected = startupView.TabIndex();
 
         _header.Search.TextChanged += (_, _) => OnSearchTextChanged();
         _header.SyncClicked += OfferResync;
@@ -607,7 +612,7 @@ public sealed class MainWindow : Window
         _player.Tick(now - _lastTick);
         _lastTick = now;
         _footer.ShowCover = Viewport.Width >= MinWidth;
-        _footer.ShowWaveform = Viewport.Height >= MinHeight;
+        _footer.ShowWaveform = _waveformEnabled && Viewport.Height >= MinHeight;
         // While the album view is open the screen under it stays still: repainting it would wipe the cover image (a sixel is erased by any text written over it).
         // Once a second is enough (the clock shows whole seconds; changes of state redraw at once). Every redraw makes the driver
         // reposition the terminal's cursor, which restarts its blink: ten a second made a text field's cursor flicker.

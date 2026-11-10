@@ -67,6 +67,34 @@ public class UserSettingsTests
         Assert.Equal(WaveformStyle.Blocks, Read("""{"Servers":[]}""").Ui.Waveform.Style);
     }
 
+    [Theory]
+    [InlineData(StartupView.Search, 0)]
+    [InlineData(StartupView.Library, 1)]
+    [InlineData(StartupView.Queue, 2)]
+    [InlineData(StartupView.Recent, 3)]
+    [InlineData(StartupView.Genres, 4)]
+    public void The_start_view_names_a_tab(StartupView view, int tab) => Assert.Equal(tab, view.TabIndex());
+
+    [Fact]
+    public void The_start_view_and_waveform_switch_are_read_from_the_file()
+    {
+        var s = Read("""{"Startup":{"View":"genres","AutoConnect":false},"UI":{"Waveform":{"Enabled":false}}}""");
+
+        Assert.Equal(StartupView.Genres, s.Startup.View);
+        Assert.False(s.Startup.AutoConnect);
+        Assert.False(s.Ui.Waveform.Enabled);
+    }
+
+    [Fact]
+    public void Computed_cache_values_are_not_written_to_the_file()
+    {
+        var text = JsonSerializer.Serialize(new UserSettings(), SettingsJson.Options);
+
+        Assert.DoesNotContain("\"Active\"", text);
+        Assert.DoesNotContain("\"Ttl\"", text);
+        Assert.Contains("\"TtlDays\"", text);
+    }
+
     [Fact]
     public void WithServer_adds_a_server_named_after_its_host_and_makes_it_the_one_to_open()
     {
