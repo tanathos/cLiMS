@@ -32,6 +32,7 @@ public sealed class HelpOverlay : PaintView
         ("Queue tab", ""),
         ("Enter", "Play that entry"),
         ("x  Delete", "Remove the entry"),
+        ("X", "Remove every entry after the selected one"),
         ("Shift+Up  Shift+Down", "Move the entry"),
         ("c", "Clear the queue (asks first)"),
         ("s", "Save the queue under a name (kept on this PC, by file address)"),

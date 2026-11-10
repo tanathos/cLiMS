@@ -15,6 +15,9 @@ public sealed class AlbumsView : PaintView
 {
     private const int HeadingRows = 2;
 
+    /// <summary>Covers never reach into the pinned heading.</summary>
+    protected override int ClipTop => HeadingRows;
+
     private MusicCatalog? _catalog;
     private IReadOnlyList<CatalogAlbum> _albums = Array.Empty<CatalogAlbum>();
     private IReadOnlyList<CatalogAlbum> _source = Array.Empty<CatalogAlbum>();
@@ -135,7 +138,7 @@ public sealed class AlbumsView : PaintView
                 _selAlbum = i;
                 _selTrack = 0;
                 Relayout();
-                _offset = Math.Clamp(_tops[i], 0, Math.Max(0, _totalRows - H));
+                _offset = Math.Clamp(_tops[i] - HeadingRows, 0, Math.Max(0, _totalRows - H));
                 SetNeedsDraw();
                 return true;
             }
@@ -256,17 +259,6 @@ public sealed class AlbumsView : PaintView
         // A resize can leave the old offset past the new maximum.
         _offset = Math.Clamp(_offset, 0, Math.Max(0, _totalRows - H));
 
-        var headingW = W - 3;
-        if (Sortable)
-        {
-            var label = SortLabel;
-            headingW = W - 2 - label.Length - 3;
-            Put(W - 2 - label.Length, -_offset, label, new Attribute(Theme.Accent, Theme.Bg));
-        }
-
-        Put(1, -_offset, Clip(_heading, Math.Max(1, headingW)), new Attribute(Theme.Accent, Theme.Bg));
-        Put(1, 1 - _offset, new string('─', Math.Max(0, W - 3)), Theme.Dim);
-
         var visible = new List<int>();
         for (var i = FirstVisible(); i < _albums.Count; i++)
         {
@@ -279,6 +271,23 @@ public sealed class AlbumsView : PaintView
             PaintAlbum(_albums[i], i, top);
             visible.Add(_albums[i].Id);
         }
+
+        // The heading stays where it is: drawn last, over whatever scrolled up under it.
+        for (var y = 0; y < HeadingRows; y++)
+        {
+            FillRow(y, 0, W, Theme.Normal);
+        }
+
+        var headingW = W - 3;
+        if (Sortable)
+        {
+            var label = SortLabel;
+            headingW = W - 2 - label.Length - 3;
+            Put(W - 2 - label.Length, 0, label, new Attribute(Theme.Accent, Theme.Bg));
+        }
+
+        Put(1, 0, Clip(_heading, Math.Max(1, headingW)), new Attribute(Theme.Accent, Theme.Bg));
+        Put(1, 1, new string('─', Math.Max(0, W - 3)), Theme.Dim);
 
         PaintScrollbar(_totalRows, _offset, H);
 
@@ -349,7 +358,8 @@ public sealed class AlbumsView : PaintView
             {
                 // Links: underlined (genres also italic).
                 var style = part.Genre is not null ? TextStyle.Italic | TextStyle.Underline : TextStyle.Underline;
-                Put(TextX + part.X, top + 1, Clip(part.Text, textW - part.X), new Attribute(Theme.FgDim, Theme.Bg, style));
+                var hovered = _hoverLink == (index, part.X);
+                Put(TextX + part.X, top + 1, Clip(part.Text, textW - part.X), new Attribute(hovered ? Theme.HoverFg : Theme.FgDim, Theme.Bg, style));
             }
         }
 
@@ -551,6 +561,11 @@ public sealed class AlbumsView : PaintView
             return;
         }
 
+        if (y < HeadingRows)
+        {
+            return; // the pinned heading
+        }
+
         var row = y + _offset;
         for (var i = FirstVisible(); i < _albums.Count && _tops[i] <= row; i++)
         {
@@ -585,6 +600,56 @@ public sealed class AlbumsView : PaintView
         }
     }
 
+    private (int Album, int X)? _hoverLink;
+
+    protected override bool TracksHover => true;
+
+    /// <summary>Only a change of the link under the pointer repaints: the covers must not be redrawn for every cell it crosses.</summary>
+    protected override void OnPointerMoved()
+    {
+        var link = Pointer is { } p ? LinkAt(p.X, p.Y) : null;
+        if (link != _hoverLink)
+        {
+            _hoverLink = link;
+            SetNeedsDraw();
+        }
+    }
+
+    /// <summary>The album and the column (within the details line) of the link (artist, genre, year) at this cell, if any.</summary>
+    private (int Album, int X)? LinkAt(int x, int y)
+    {
+        if (_catalog is not { } catalog)
+        {
+            return null;
+        }
+
+        if (y < HeadingRows)
+        {
+            return null;
+        }
+
+        var row = y + _offset;
+        for (var i = FirstVisible(); i < _albums.Count && _tops[i] <= row; i++)
+        {
+            if (row != _tops[i] + 1)
+            {
+                continue;
+            }
+
+            var (_, parts) = Details(_albums[i], catalog.Summary(_albums[i].Id).Genres);
+            foreach (var part in parts)
+            {
+                var start = TextX + part.X;
+                if ((part.Genre is not null || part.Year > 0 || part.Artist) && x >= start && x < Math.Min(start + part.Text.Length, TextX + TextWidth))
+                {
+                    return (i, part.X);
+                }
+            }
+        }
+
+        return null;
+    }
+
     private void HitTest(int x, int y, bool play)
     {
         if (_catalog is not { } catalog)
@@ -592,12 +657,17 @@ public sealed class AlbumsView : PaintView
             return;
         }
 
-        var row = y + _offset;
-        if (Sortable && row == 0 && x >= W - 2 - SortLabel.Length - 1)
+        if (y < HeadingRows)
         {
-            ToggleSort();
+            if (Sortable && y == 0 && x >= W - 2 - SortLabel.Length - 1)
+            {
+                ToggleSort();
+            }
+
             return;
         }
+
+        var row = y + _offset;
 
         for (var i = FirstVisible(); i < _albums.Count && _tops[i] <= row; i++)
         {
@@ -695,9 +765,9 @@ public sealed class AlbumsView : PaintView
     {
         var slots = LayoutOf(_albums[_selAlbum]).Slots;
         var line = _tops[_selAlbum] + 3 + (_selTrack < slots.Length ? slots[_selTrack].Row : 0);
-        if (line < _offset)
+        if (line < _offset + HeadingRows)
         {
-            _offset = Math.Max(0, _tops[_selAlbum]);
+            _offset = Math.Max(0, _tops[_selAlbum] - HeadingRows);
         }
         else if (line >= _offset + H)
         {

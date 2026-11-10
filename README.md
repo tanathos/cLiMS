@@ -35,7 +35,7 @@ The Genres explorer: Death Metal, then Thrash Metal, then Experimental, each col
 
 ![Genres](screenshots/genres.png)
 
-Click the cover in the player to see the playing album full screen:
+Click the cover in the player to see the playing album full screen: the cover on the left; on the right the artist, album and year, the track, genre, length and format, the lyrics, and at the bottom a progress bar for the track and, when the queue has more than one track, one for the whole queue. The queue bar is cut into one stretch per track, as long as the track, with a gap between them; with too many tracks for gaps, the stretches touch and alternate between shades of the accent colour.
 
 ![Full-screen cover](screenshots/cover.png)
 
@@ -156,7 +156,7 @@ Press `?` in the app for the same list.
 | `a` / `n` | Add the highlighted track to the end of the queue / play it next (gapless); `A` / `N` do the same for the whole album |
 | Recently added tab | The Library's album list (same keys: `Enter` plays, `a` / `n` and `A` / `N` queue) with only the newest 50 albums, newest first |
 | Genres tab | `Up` `Down` pick a genre, `Enter` or `Right` go to the next column of genres that share a track with it, `Left` or `Backspace` back, `Ctrl+F` filter the active column, `Esc` clear; `Alt+R` random queue that replaces the queue (asks first), `Alt+Q` random queue appended, `[` `]` queue size 25 / 50 / 100 |
-| Queue tab | `Enter` play that entry, `x` or `Delete` remove, `Shift+Up/Down` move, `c` clear (asks), `s` save under a name, `o` saved queues (`Enter` replace after asking, `a` append, `x` delete, `Esc` back) |
+| Queue tab | `Enter` play that entry, `x` or `Delete` remove, `X` remove everything after the selected entry, `Shift+Up/Down` move, `c` clear (asks), `s` save under a name, `o` saved queues (`Enter` replace after asking, `a` append, `x` delete, `Esc` back) |
 | `Space` | Play / pause |
 | `Left` `Right` | Seek -10 s / +10 s |
 | `Alt+n` `Alt+p` | Next / previous track (work everywhere, also while typing) |

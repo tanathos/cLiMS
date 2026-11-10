@@ -41,6 +41,8 @@ public sealed class FooterView : PaintView
     /// <summary>The cover cells never change between frames, so the sixel is not re-sent every frame (that flickered).</summary>
     protected override bool ResendSixelsOnPaint => false;
 
+    protected override bool TracksHover => true;
+
     protected override int ClearFromX => ShowCover ? CoverCols : 0;
 
     public bool ShowWaveform { get; set; } = true;
@@ -104,13 +106,14 @@ public sealed class FooterView : PaintView
     {
         const string sep = "  ·  ";
         var link = new Attribute(Theme.Fg, Theme.Bg, TextStyle.Underline);
+        var linkHover = new Attribute(Theme.HoverFg, Theme.Bg, TextStyle.Underline);
         var artist = now.Track.Artist ?? now.Album.ArtistName;
         var end = x + width;
 
         _artistBox = _albumBox = (0, 0);
         var cx = x;
         var s = Clip(artist, Math.Max(0, end - cx));
-        var next = Put(cx, 1, s, link);
+        var next = Put(cx, 1, s, Over(cx, cx + s.Length, 1) ? linkHover : link);
         _artistBox = (cx, next);
         cx = next;
         if (cx >= end)
@@ -120,7 +123,7 @@ public sealed class FooterView : PaintView
 
         cx = Put(cx, 1, Clip(sep, end - cx), Theme.Dim);
         s = Clip(now.Album.Title, Math.Max(0, end - cx));
-        next = Put(cx, 1, s, link);
+        next = Put(cx, 1, s, Over(cx, cx + s.Length, 1) ? linkHover : link);
         _albumBox = (cx, next);
         cx = next;
         if (cx >= end)
@@ -331,7 +334,7 @@ public sealed class FooterView : PaintView
     private int Button(int x, int y, string label, Action run)
     {
         var text = $"[ {label} ]";
-        var end = Put(x, y, text, new Attribute(Theme.Fg, Theme.BgAlt));
+        var end = Put(x, y, text, Over(x, x + text.Length, y) ? Theme.Hover : new Attribute(Theme.Fg, Theme.BgAlt));
         _buttons.Add((x, end, run));
         return end;
     }

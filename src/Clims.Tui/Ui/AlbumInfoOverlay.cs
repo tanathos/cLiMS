@@ -26,6 +26,9 @@ public sealed class AlbumInfoOverlay : PaintView
     private int _lastLine = -2;
     private int _bodyHeight = 1;
     private DateTime _scrolledAt = DateTime.MinValue;
+    private IReadOnlyList<TimeSpan> _queue = [];
+    private int _queueIndex;
+    private int _shownSecond = -1;
 
     public AlbumInfoOverlay()
     {
@@ -105,7 +108,7 @@ public sealed class AlbumInfoOverlay : PaintView
         var dim = Theme.Dim;
         // As tall as the panel; the width follows from the shape of a cell, so the cover stays square.
         var cell = SixelCovers.CellPixels;
-        var rows = H;
+        var rows = Math.Max(2, H - 2);
         var cols = Math.Max(2, rows * cell.Height / Math.Max(1, cell.Width));
         var maxCols = Math.Max(8, W * 55 / 100);
         if (cols > maxCols)
@@ -114,8 +117,9 @@ public sealed class AlbumInfoOverlay : PaintView
             rows = Math.Max(4, cols * cell.Width / Math.Max(1, cell.Height));
         }
 
-        const int left = 0;
-        var top = (H - rows) / 2;
+        // One column of margin on the left, one row above and below.
+        const int left = 1;
+        var top = 1 + (Math.Max(2, H - 2) - rows) / 2;
         var big = new CoverKey(album.ArtworkId, album.Id, Big: true);
         var small = new CoverKey(album.ArtworkId, album.Id);
         // The large picture takes a moment to arrive: show the list-size one meanwhile.
@@ -143,13 +147,13 @@ public sealed class AlbumInfoOverlay : PaintView
 
         var summary = _catalog?.Summary(album.Id);
         var genres = summary is { Genres.Count: > 0 } ? string.Join("; ", summary.Genres) : (now.Track.Genre ?? "");
-        var runtime = summary is { TrackCount: > 0 } ? $"{(int)Math.Round(summary.Duration.TotalMinutes)} min" : "unknown";
+        var runtime = now.Track.Duration > TimeSpan.Zero ? FormatTime(now.Track.Duration) : "unknown";
         var urls = (_catalog?.TracksOf(album.Id).Select(t => t.Url) ?? []).Append(now.Track.Url);
         var (formats, lossless) = FormatsOf(urls);
 
         var artist = album.ArtistName.Length > 0 ? album.ArtistName : now.Track.Artist ?? "";
         // Anchored to the top of the cover: the lyrics take the rest of the column below.
-        var y0 = top + 1; // one empty line above the artist
+        var y0 = top;
         Put(x, y0, Clip(artist, width), new Attribute(Theme.Accent, Theme.Bg));
         var yearText = album.Year > 0 ? "  " + album.Year.ToString(CultureInfo.InvariantCulture) : "";
         var titleEnd = Put(x, y0 + 1, Clip(album.Title, width - yearText.Length), new Attribute(Theme.Fg, Theme.Bg, TextStyle.Bold));
@@ -182,7 +186,145 @@ public sealed class AlbumInfoOverlay : PaintView
             Put(cx, line, lossless ? "  lossless" : "  lossy", dim);
         }
 
-        PaintLyrics(x, y0 + 9, y0 + 10,Math.Min(top + rows, H - 2) - 1, width);
+        // Progress bars sit just above the hint, one empty row between: the playlist's (when there is one) under the track's.
+        var multi = _queue.Count > 1;
+        var barsTop = H - (multi ? 5 : 4);
+        if (multi)
+        {
+            PaintQueueBar(x, barsTop, width);
+        }
+
+        PaintTrackBar(x, barsTop + (multi ? 1 : 0), width, now.Track.Duration);
+        PaintLyrics(x, y0 + 9, y0 + 10, barsTop - 2, width);
+    }
+
+    private const int TimeW = 8;
+
+    private void PaintTrackBar(int x, int y, int width, TimeSpan length)
+    {
+        var barW = width - 2 * TimeW;
+        if (barW < 4)
+        {
+            return;
+        }
+
+        var shown = length > TimeSpan.Zero && _elapsed > length ? length : _elapsed;
+        var sections = Sections([length], barW);
+        var filled = sections.Count > 0 && length > TimeSpan.Zero ? sections[0].End * shown.TotalSeconds / length.TotalSeconds : 0;
+        Put(x, y, FormatTime(shown).PadRight(TimeW), new Attribute(Theme.Fg, Theme.Bg));
+        DrawBar(x + TimeW, y, barW, filled, sections);
+        Put(x + TimeW + barW + 1, y, FormatTime(length), new Attribute(Theme.FgDim, Theme.Bg));
+    }
+
+    private void PaintQueueBar(int x, int y, int width)
+    {
+        var barW = width - 2 * TimeW;
+        var total = TimeSpan.FromTicks(_queue.Sum(d => d.Ticks));
+        if (barW < 4 || total <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        var before = TimeSpan.FromTicks(_queue.Take(Math.Max(0, _queueIndex)).Sum(d => d.Ticks));
+        var done = before + _elapsed;
+        var sections = Sections(_queue, barW);
+        // The playhead is inside the playing track's section; the gaps between tracks are skipped over.
+        double filled = 0;
+        if (_queueIndex >= 0 && _queueIndex < sections.Count)
+        {
+            var (start, end) = sections[_queueIndex];
+            var length = _queue[_queueIndex].TotalSeconds;
+            filled = start + (length > 0 ? Math.Min(1.0, _elapsed.TotalSeconds / length) : 0) * (end - start);
+        }
+
+        Put(x, y, FormatTime(done).PadRight(TimeW), new Attribute(Theme.Fg, Theme.Bg));
+        DrawBar(x + TimeW, y, barW, filled, sections);
+        Put(x + TimeW + barW + 1, y, FormatTime(total), new Attribute(Theme.FgDim, Theme.Bg));
+    }
+
+    /// <summary>Draws the sections as heavy lines with blank gaps between them; <paramref name="filled"/> is the playhead in half cells.</summary>
+    private void DrawBar(int x, int y, int cells, double filled, IReadOnlyList<(int Start, int End)> sections)
+    {
+        var on = new Attribute(Theme.Accent, Theme.Bg);
+        var off = new Attribute(Theme.Rgb(70, 76, 92), Theme.Bg);
+        int At(int unit) => sections.ToList().FindIndex(s => unit >= s.Start && unit < s.End);
+        // No room for gaps: neighbouring tracks are told apart by alternating shades instead.
+        var touching = sections.Count > 1 && sections[1].Start == sections[0].End;
+        // Four shades, in an order where neighbours always differ a lot.
+        double[] steps = [1.0, 0.6, 0.82, 0.45];
+        Color Shade(int section, bool played) => played
+            ? Theme.Mix(Theme.Bg, Theme.Accent, steps[section % 4])
+            : Theme.Mix(Theme.Bg, Theme.Rgb(95, 102, 122), steps[section % 4]);
+        for (var c = 0; c < cells; c++)
+        {
+            int l = At(2 * c), r = At(2 * c + 1);
+            if (l < 0 && r < 0)
+            {
+                continue;
+            }
+
+            // Two tracks meeting in one cell: the one that starts there wins (a line has one colour per cell).
+            var glyph = l >= 0 && r >= 0 ? "━" : l >= 0 ? "╸" : "╺";
+            var played = filled > (l >= 0 ? 2 * c : 2 * c + 1);
+            Put(x + c, y, glyph, touching ? new Attribute(Shade(r >= 0 ? r : l, played), Theme.Bg) : played ? on : off);
+        }
+    }
+
+    /// <summary>
+    /// The tracks as stretches of a bar <paramref name="cells"/> wide, in half cells (start inclusive, end exclusive), each as
+    /// long as the track and separated by a constant gap of one cell (half a cell, or none, when there are too many tracks to fit).
+    /// </summary>
+    public static IReadOnlyList<(int Start, int End)> Sections(IReadOnlyList<TimeSpan> durations, int cells)
+    {
+        var result = new List<(int, int)>();
+        var total = durations.Sum(d => d.TotalSeconds);
+        var units = cells * 2;
+        if (total <= 0 || units < 4)
+        {
+            return result;
+        }
+
+        var gaps = durations.Count - 1;
+        var gap = 2;
+        while (gap > 0 && gap * gaps > units / 2)
+        {
+            gap--;
+        }
+
+        var room = units - gap * gaps;
+        double cumulative = 0;
+        var start = 0;
+        for (var i = 0; i < durations.Count; i++)
+        {
+            cumulative += durations[i].TotalSeconds;
+            var end = i == durations.Count - 1 ? units : (int)Math.Round(room * cumulative / total) + gap * i;
+            end = Math.Min(units, Math.Max(end, start + 1));
+            result.Add((start, end));
+            start = end + gap;
+        }
+
+        return result;
+    }
+
+    /// <summary>m:ss, or h:mm:ss from one hour on.</summary>
+    public static string FormatTime(TimeSpan time)
+    {
+        var seconds = (long)Math.Max(0, Math.Floor(time.TotalSeconds));
+        return seconds >= 3600
+            ? $"{seconds / 3600}:{seconds / 60 % 60:00}:{seconds % 60:00}"
+            : $"{seconds / 60}:{seconds % 60:00}";
+    }
+
+    /// <summary>The lengths of the queued tracks in play order, and which one is playing; drives the playlist bar.</summary>
+    public void SetQueue(IReadOnlyList<TimeSpan> durations, int index)
+    {
+        if (index == _queueIndex && durations.SequenceEqual(_queue))
+        {
+            return;
+        }
+
+        (_queue, _queueIndex) = (durations.ToList(), index);
+        SetNeedsDraw();
     }
 
     private void PaintLyrics(int x, int headerY, int bodyTop, int bodyBottom, int width)
@@ -286,6 +428,13 @@ public sealed class AlbumInfoOverlay : PaintView
     public void Tick(TimeSpan elapsed, DateTime now)
     {
         _elapsed = elapsed;
+        var second = (int)elapsed.TotalSeconds;
+        if (second != _shownSecond)
+        {
+            _shownSecond = second;
+            SetNeedsDraw(); // the progress bars
+        }
+
         if (_lyrics is not { IsSynced: true } lyrics)
         {
             return;

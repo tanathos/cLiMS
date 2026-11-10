@@ -72,6 +72,8 @@ while (true)
             d.Force16Colors = false;
         }
 
+        // Plain mouse movement (no button) is reported here: the hover highlights follow it.
+        app.Mouse.MouseEvent += (_, mouse) => PaintView.PointerAt(mouse.ScreenPosition);
         SixelCovers.ReleaseAll();
         SixelCovers.Driver = app.Driver;
         // A fresh screen: images left by the previous window are not repainted by cell writes that did not change.

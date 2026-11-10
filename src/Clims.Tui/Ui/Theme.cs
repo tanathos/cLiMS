@@ -23,6 +23,15 @@ public static class Theme
     public static readonly Color Bad = Rgb(228, 104, 104);
     public static readonly Color Warn = Rgb(240, 190, 90);
 
+    /// <summary>Light gray shown under the pointer on clickable things (dark text on it, or light text for links).</summary>
+    public static readonly Color HoverBg = Rgb(160, 166, 180);
+
+    /// <summary>Text colour of a link under the pointer.</summary>
+    public static readonly Color HoverFg = Rgb(250, 251, 253);
+
+    /// <summary>A button or tab under the pointer.</summary>
+    public static Attribute Hover => new(Bg, HoverBg);
+
     /// <summary>Scheme for stock views (the search TextField); owner-drawn views paint with the attributes below.</summary>
     public static Scheme Dark => new(Normal)
     {

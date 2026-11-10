@@ -714,6 +714,8 @@ public sealed class GenresTab : View
             SetNeedsDraw();
         }
 
+        protected override bool TracksHover => true;
+
         protected override void Paint()
         {
             _parts.Clear();
@@ -734,16 +736,18 @@ public sealed class GenresTab : View
                 var cx = Put(x, 0, label, dim);
                 foreach (var s in Sizes)
                 {
-                    var next = Put(cx, 0, $"[{s}]", s == _size ? new Attribute(Theme.Accent, back, TextStyle.Bold) : dim);
+                    var text = $"[{s}]";
+                    var next = Put(cx, 0, text, Over(cx, cx + text.Length, 0) ? new Attribute(Theme.HoverFg, back, TextStyle.Bold)
+                        : s == _size ? new Attribute(Theme.Accent, back, TextStyle.Bold) : dim);
                     _sizes.Add((cx, next, s));
                     cx = next + 1;
                 }
 
                 cx += 1;
                 var button = new Attribute(Theme.Fg, Theme.BgSelected);
-                var playEnd = Put(cx, 0, "[ ▶ Play ]", button);
+                var playEnd = Put(cx, 0, "[ ▶ Play ]", Over(cx, cx + 10, 0) ? Theme.Hover : button);
                 _play = (cx, playEnd);
-                var addEnd = Put(playEnd + 1, 0, "[ + Add ]", button);
+                var addEnd = Put(playEnd + 1, 0, "[ + Add ]", Over(playEnd + 1, playEnd + 10, 0) ? Theme.Hover : button);
                 _add = (playEnd + 1, addEnd);
             }
 
