@@ -42,6 +42,8 @@ public sealed class MainWindow : Window
     private readonly ClickShield _shield = new();
     private readonly AlbumInfoOverlay _info = new();
     private readonly HelpOverlay _help = new();
+    private readonly SettingsOverlay? _settings;
+    private bool _settingsVisible;
     private int _currentTab = -1;
     private int _tabBeforeSearch = 1;
     private DateTime _lastTick = DateTime.UtcNow;
@@ -52,6 +54,9 @@ public sealed class MainWindow : Window
 
     /// <summary>Set when the user pressed F2: the host closes the window and shows the connect screen.</summary>
     public bool ChangeServerRequested { get; private set; }
+
+    /// <summary>Set with <see cref="ChangeServerRequested"/> when the user chose a server in the settings: connect to it without the connect screen (its key: UUID or address).</summary>
+    public string? RequestedServer { get; private set; }
 
     public MainWindow(
         IApplication app,
@@ -64,7 +69,9 @@ public sealed class MainWindow : Window
         LyricsFeed? lyrics = null,
         WaveformStyle waveformStyle = WaveformStyle.Blocks,
         bool waveformEnabled = true,
-        StartupView startupView = StartupView.Library)
+        StartupView startupView = StartupView.Library,
+        SettingsStore? settings = null,
+        string? connectedUrl = null)
     {
         _waveformEnabled = waveformEnabled;
         _waves = waveformEnabled ? waves : null;
@@ -102,6 +109,20 @@ public sealed class MainWindow : Window
         _help.Width = Dim.Fill();
         _help.Height = Dim.Fill(FooterView.Rows);
         _help.Visible = false;
+        if (settings is not null)
+        {
+            var model = new SettingsModel(settings, connectedUrl);
+            _settings = new SettingsOverlay(model) { X = 0, Y = HeaderBar.Rows + 1, Width = Dim.Fill(), Height = Dim.Fill(FooterView.Rows), Visible = false };
+            model.Changed += OnSettingsChanged;
+            model.AddRequested += RequestServerChange;
+            model.SwitchRequested += key =>
+            {
+                RequestedServer = key;
+                RequestServerChange();
+            };
+            _settings.CloseRequested += ToggleSettings;
+        }
+
         // The album view covers the whole screen.
         _info.X = 0;
         _info.Y = 0;
@@ -112,6 +133,11 @@ public sealed class MainWindow : Window
         Add(_header, _header.Search, _tabs);
         Add(_pages);
         Add(_help);
+        if (_settings is not null)
+        {
+            Add(_settings);
+        }
+
         Add(_footer);
         Add(_info);
         _shield.Visible = false;
@@ -136,6 +162,7 @@ public sealed class MainWindow : Window
         _header.Search.TextChanged += (_, _) => OnSearchTextChanged();
         _header.SyncClicked += OfferResync;
         _header.ServerClicked += RequestServerChange;
+        _header.SettingsClicked += ToggleSettings;
         _search.PlayRequested += Play;
         _search.QueueRequested += OnQueueRequested;
         _search.Notice += Notice;
@@ -286,6 +313,13 @@ public sealed class MainWindow : Window
 
     private void ShowTab(int index)
     {
+        if (_settingsVisible)
+        {
+            // A tab was clicked while the settings page is open: the page gives way to it.
+            _settingsVisible = false;
+            _settings!.Visible = false;
+        }
+
         if (index == 0 && _currentTab > 0)
         {
             _tabBeforeSearch = _currentTab;
@@ -661,6 +695,21 @@ public sealed class MainWindow : Window
             return;
         }
 
+        if (_settings is not null && SettingsOverlay.IsToggleKey(key) && !_settingsVisible && !_infoVisible && !_menuVisible && !_helpVisible)
+        {
+            ToggleSettings();
+            key.Handled = true;
+            return;
+        }
+
+        // While the settings page is open it takes every key (F10 and Esc close it).
+        if (_settingsVisible)
+        {
+            _settings!.HandleKey(key);
+            key.Handled = true;
+            return;
+        }
+
         if (_menuVisible)
         {
             if (key == Key.CursorDown)
@@ -914,7 +963,7 @@ public sealed class MainWindow : Window
 
     private void OpenInfo()
     {
-        if (_infoVisible || _helpVisible || _player.Current is not { } now)
+        if (_infoVisible || _helpVisible || _settingsVisible || _player.Current is not { } now)
         {
             return;
         }
@@ -951,7 +1000,7 @@ public sealed class MainWindow : Window
 
     private void OpenMenu(IReadOnlyList<MenuEntry> entries, System.Drawing.Point at)
     {
-        if (_menuVisible || _infoVisible || _helpVisible)
+        if (_menuVisible || _infoVisible || _helpVisible || _settingsVisible)
         {
             return;
         }
@@ -1047,33 +1096,78 @@ public sealed class MainWindow : Window
         if (_helpVisible)
         {
             _help.ScrollToTop();
-            // Sixel images sit above any text, so the pages underneath must stop showing theirs while help is open.
-            foreach (var page in _pages)
-            {
-                page.Visible = false;
-            }
-
-            SixelCovers.Release(_library.Albums);
-            SixelCovers.Release(_search.List);
-            SixelCovers.Release(_recent.Albums);
-            CoverArt.Source.Want(_library.Albums, Array.Empty<CoverKey>());
-            CoverArt.Source.Want(_search.List, Array.Empty<CoverKey>());
-            CoverArt.Source.Want(_recent.Albums, Array.Empty<CoverKey>());
-            _refresher.SetVisible(Array.Empty<CatalogAlbum>());
+            HidePages();
             _help.SetFocus();
         }
         else
         {
-            ShowTab(_currentTab);
-            FocusPage();
-            _library.Albums.ResetCovers();
-            _library.Albums.SetNeedsDraw();
-            _recent.Albums.ResetCovers();
-            _recent.Albums.SetNeedsDraw();
-            _search.List.SetNeedsDraw();
+            RestorePages();
         }
 
         SetNeedsDraw();
+    }
+
+    /// <summary>Sixel images sit above any text, so the pages underneath must stop showing theirs while a page of text is open over them.</summary>
+    private void HidePages()
+    {
+        foreach (var page in _pages)
+        {
+            page.Visible = false;
+        }
+
+        SixelCovers.Release(_library.Albums);
+        SixelCovers.Release(_search.List);
+        SixelCovers.Release(_recent.Albums);
+        CoverArt.Source.Want(_library.Albums, Array.Empty<CoverKey>());
+        CoverArt.Source.Want(_search.List, Array.Empty<CoverKey>());
+        CoverArt.Source.Want(_recent.Albums, Array.Empty<CoverKey>());
+        _refresher.SetVisible(Array.Empty<CatalogAlbum>());
+    }
+
+    private void RestorePages()
+    {
+        ShowTab(_currentTab);
+        FocusPage();
+        _library.Albums.ResetCovers();
+        _library.Albums.SetNeedsDraw();
+        _recent.Albums.ResetCovers();
+        _recent.Albums.SetNeedsDraw();
+        _search.List.SetNeedsDraw();
+    }
+
+    /// <summary>Opens or closes the settings page (F10 or the gear in the header).</summary>
+    private void ToggleSettings()
+    {
+        if (_settings is null || _infoVisible || _menuVisible || _helpVisible)
+        {
+            return;
+        }
+
+        _settingsVisible = !_settingsVisible;
+        _settings.Visible = _settingsVisible;
+        if (_settingsVisible)
+        {
+            _settings.Reset();
+            HidePages();
+            _settings.SetFocus();
+        }
+        else
+        {
+            RestorePages();
+        }
+
+        SetNeedsDraw();
+    }
+
+    /// <summary>A setting was changed (and saved): what can be applied now is.</summary>
+    private void OnSettingsChanged(UserSettings settings)
+    {
+        CoverArt.Apply(settings.Ui.Covers);
+        _footer.WaveformStyle = settings.Ui.Waveform.Style;
+        _library.Albums.Relayout();
+        _recent.Albums.Relayout();
+        _footer.ResetCovers();
+        _footer.SetNeedsDraw();
     }
 
     private void LeaveSearch()

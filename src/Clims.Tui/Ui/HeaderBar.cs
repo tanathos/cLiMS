@@ -14,6 +14,7 @@ public sealed class HeaderBar : View
     private const int Pad = 2;
     private const int SearchWidth = 44;
     private const int ServerButtonWidth = 8; // exactly the width of "⇄ Server"
+    private const int GearWidth = 3; // " ⚙ "
 
     private readonly StatusText _status;
 
@@ -25,12 +26,14 @@ public sealed class HeaderBar : View
 
         var brand = new BrandText { X = Pad, Y = 1, Width = 8, Height = 1 };
         Search = new SearchBox { Placeholder = "Search...", X = Pad + 9, Y = 1, Width = SearchWidth, Height = 1 };
-        _status = new StatusText(player, syncStatus) { X = Pad + 9 + SearchWidth + 2, Y = 1, Width = Dim.Fill(Pad + ServerButtonWidth + 1), Height = 1 };
+        _status = new StatusText(player, syncStatus) { X = Pad + 9 + SearchWidth + 2, Y = 1, Width = Dim.Fill(Pad + ServerButtonWidth + 1 + GearWidth + 1), Height = 1 };
         var server = new ServerButton { X = Pos.AnchorEnd(Pad + ServerButtonWidth), Y = 1, Width = ServerButtonWidth, Height = 1 };
+        var gear = new GearButton { X = Pos.AnchorEnd(Pad + ServerButtonWidth + 1 + GearWidth), Y = 1, Width = GearWidth, Height = 1 };
         server.Clicked += () => ServerClicked?.Invoke();
+        gear.Clicked += () => SettingsClicked?.Invoke();
         _status.Clicked += () => SyncClicked?.Invoke();
         Add(new Backdrop { X = 0, Y = 0, Width = Dim.Fill(), Height = Rows });
-        Add(brand, _status, server);
+        Add(brand, _status, gear, server);
     }
 
     /// <summary>The search box. It is not a child of the bar (a focusable parent would pull focus to it on any click in the bar): the main window adds it next to the bar.</summary>
@@ -38,6 +41,9 @@ public sealed class HeaderBar : View
 
     /// <summary>The "Server" button was clicked: open the connect screen.</summary>
     public event Action? ServerClicked;
+
+    /// <summary>The gear was clicked: open or close the settings page.</summary>
+    public event Action? SettingsClicked;
 
     /// <summary>The sync status text was clicked: offer "Resync now" or "Cancel".</summary>
     public event Action? SyncClicked;
@@ -91,6 +97,28 @@ public sealed class HeaderBar : View
         protected override bool TracksHover => true;
 
         protected override void Paint() => Put(0, 0, "⇄ Server", Pointer is null ? new Attribute(Theme.Fg, Theme.BgAlt) : Theme.Hover);
+
+        protected override bool OnMouseEvent(Mouse mouse)
+        {
+            if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked))
+            {
+                Clicked?.Invoke();
+                return true;
+            }
+
+            return base.OnMouseEvent(mouse);
+        }
+    }
+
+    private sealed class GearButton : PaintView
+    {
+        protected override Attribute Base => OnHeader(Theme.Fg);
+
+        public event Action? Clicked;
+
+        protected override bool TracksHover => true;
+
+        protected override void Paint() => Put(0, 0, " ⚙ ", Pointer is null ? new Attribute(Theme.Fg, Theme.BgAlt) : Theme.Hover);
 
         protected override bool OnMouseEvent(Mouse mouse)
         {

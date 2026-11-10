@@ -5,6 +5,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ### Added
 
+- A settings page (`F10`, `Alt+S` or the ⚙ at the top right) with a tab for Servers, UI, Lyrics, Cache and Startup. Every change is saved at once; cover and waveform styles apply immediately, the rows marked ↻ at the next start. The Servers tab is the server switcher: connect to a saved server (with its saved login) without the connect screen, choose the one that opens at start, rename, remove (the server in use cannot be removed) or add one.
+- `CLIMS_DATA` names another data folder (settings, caches, lyrics, log), for tests and portable use.
 - Cover styles per place: `UI.Covers` in `settings.json` sets the style (`Sixel`, `HalfBlock`, `Quadrant`, `Braille`) separately for the footer, the lists (library, recently added, search, genres) and the full-screen cover, and `SixelFallback` the style used where Sixel is not possible. The lists also have a size, `Small` (16x8 cells), `Medium` (24x12, the default) or `Large` (32x16).
 
 - `Startup` in `settings.json`: `View` (`Library`, `Recent`, `Queue`, `Genres` or `Search`) is the tab shown first, and `AutoConnect: false` opens the connect screen at every start (`Esc` keeps the saved server; an address given with `--lms` or `CLIMS_LMS_URL` still connects at once).

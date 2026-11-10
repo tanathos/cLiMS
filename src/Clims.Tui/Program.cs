@@ -68,6 +68,7 @@ var exitCode = 0;
 while (true)
 {
     var changeServer = false;
+    string? nextServer = null;
     try
     {
         CrashLog.Info($"cLiMS starting ({(connection is null ? "demo" : connection.Uri.ToString())})");
@@ -111,7 +112,7 @@ while (true)
 
         using var session = new Session(connection, store, Arg("--player"));
         using var search = new SearchService(() => session.Catalog.Current, session.Library);
-        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, store.Current.Ui.Waveform.Style, store.Current.Ui.Waveform.Enabled, store.Current.Startup.View);
+        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, store.Current.Ui.Waveform.Style, store.Current.Ui.Waveform.Enabled, store.Current.Startup.View, store, connection?.Uri.ToString());
 
         // Start talking to the server only once the UI loop is running, so its events have somewhere to go.
         app.AddTimeout(TimeSpan.FromMilliseconds(50), () =>
@@ -127,6 +128,7 @@ while (true)
             return false;
         });
         changeServer = main.ChangeServerRequested;
+        nextServer = main.RequestedServer;
         PerfStats.Dump();
     }
     catch (Exception ex)
@@ -142,6 +144,16 @@ while (true)
     if (!changeServer)
     {
         break;
+    }
+
+    // A server chosen in the settings: connect to it with the login saved for it, without the connect screen.
+    if (nextServer is not null && store.Current.Find(nextServer, nextServer) is { Url: { } nextUrl } chosen && ServerUrl.Normalize(nextUrl) is { } nextUri)
+    {
+        var chosenPassword = SecretStore.Unprotect(chosen.ProtectedPassword);
+        connection = new Connection(nextUri, string.IsNullOrEmpty(chosen.Username) ? null : new NetworkCredential(chosen.Username, chosenPassword ?? ""));
+        store.Update(s => s.WithServer(nextUrl, chosen.Uuid));
+        askFirst = false;
+        continue;
     }
 
     askFirst = true; // F2: back to the connect screen, with the current server filled in
