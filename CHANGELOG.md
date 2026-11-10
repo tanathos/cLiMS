@@ -3,6 +3,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Changed
+
+- `settings.json` has a new layout (version 2): a `Servers` list (address, login, player and lyrics settings of each server), `Startup`, `Cache.Covers` (was `CoverCache`) and `UI.Waveform.Style` (was `Waveform`), written indented. At the first launch an old file is renamed to `settings.v1.json` (a numbered name if that exists) and the converted settings are saved as `settings.json`; the backup is never touched again. The lyrics options of a server moved into its `Servers` entry, with the share keys grouped under `Lyrics.Files`.
+
 ## [0.9.1] - 2026-11-10
 
 ### Added

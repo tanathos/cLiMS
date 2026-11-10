@@ -1,5 +1,6 @@
 using Clims.Catalog;
 using Clims.Tui.Data;
+using Clims.Tui.Settings;
 using Clims.Tui.Ui;
 
 namespace Clims.Tui.Tests;
@@ -28,7 +29,7 @@ public class RecentTabTests
     [Fact]
     public async Task The_demo_session_lists_its_newest_albums_first()
     {
-        using var session = new Session(null, new AppSettings(null, null, null, null, null), null);
+        using var session = new Session(null, new SettingsStore(Path.Combine(Path.GetTempPath(), "clims-demo-" + Guid.NewGuid().ToString("N"))), null);
         var ids = await session.RecentAlbums(5, CancellationToken.None);
         Assert.Equal(5, ids.Count);
         Assert.Equal(ids.OrderByDescending(i => i), ids);

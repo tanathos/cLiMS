@@ -2,6 +2,7 @@
 using Clims.Catalog;
 using Clims.Tui;
 using Clims.Tui.Data;
+using Clims.Tui.Settings;
 using Clims.Tui.Ui;
 using Terminal.Gui.App;
 
@@ -44,16 +45,18 @@ string? PasswordFromArgs()
 }
 
 var driver = Arg("--driver");
-var settings = AppSettings.Load();
-var requested = Arg("--lms") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_URL") ?? settings.LmsUrl;
+var store = new SettingsStore();
+store.Load();
+var requested = Arg("--lms") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_URL") ?? store.Current.ActiveServer?.Url;
 var demoOnly = args.Contains("--demo");
-var uri = demoOnly ? null : AppSettings.NormalizeUrl(requested);
+var uri = demoOnly ? null : ServerUrl.Normalize(requested);
 
 Connection? connection = null;
 if (uri is not null)
 {
-    var user = Arg("--user") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_USER") ?? settings.Username;
-    var password = PasswordFromArgs() ?? SecretStore.Unprotect(settings.ProtectedPassword);
+    var saved = store.Current.Find(uri.ToString());
+    var user = Arg("--user") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_USER") ?? saved?.Username;
+    var password = PasswordFromArgs() ?? SecretStore.Unprotect(saved?.ProtectedPassword);
     connection = new Connection(uri, string.IsNullOrEmpty(user) ? null : new NetworkCredential(user, password ?? ""));
 }
 
@@ -93,14 +96,10 @@ while (true)
             if (answer.Choice == ConnectChoice.Connected)
             {
                 connection = new Connection(answer.Uri!, string.IsNullOrEmpty(answer.Username) ? null : new NetworkCredential(answer.Username, answer.Password ?? ""));
-                settings = settings with
-                {
-                    LmsUrl = answer.Uri!.ToString(),
-                    ServerUuid = answer.Uuid ?? (settings.LmsUrl == answer.Uri.ToString() ? settings.ServerUuid : null),
-                    Username = answer.Username,
-                    ProtectedPassword = SecretStore.Protect(answer.Password),
-                };
-                settings.Save();
+                store.Update(s => s.WithServer(
+                    answer.Uri!.ToString(),
+                    answer.Uuid,
+                    server => server with { Username = answer.Username, ProtectedPassword = SecretStore.Protect(answer.Password) }));
             }
             else if (answer.Choice == ConnectChoice.Demo)
             {
@@ -108,9 +107,9 @@ while (true)
             }
         }
 
-        using var session = new Session(connection, settings, Arg("--player"));
+        using var session = new Session(connection, store, Arg("--player"));
         using var search = new SearchService(() => session.Catalog.Current, session.Library);
-        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, settings.WaveformStyle);
+        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, store.Current.Ui.Waveform.Style);
 
         // Start talking to the server only once the UI loop is running, so its events have somewhere to go.
         app.AddTimeout(TimeSpan.FromMilliseconds(50), () =>

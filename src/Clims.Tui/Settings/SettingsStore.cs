@@ -18,46 +18,93 @@ public sealed class SettingsStore
 
     public string FilePath => Path.Combine(Folder, "settings.json");
 
-    /// <summary>The settings, converted from version 1 when needed. Never throws: unreadable files give the defaults.</summary>
+    /// <summary>The settings as loaded or last changed through <see cref="Update"/> (the defaults before <see cref="Load"/>).</summary>
+    public UserSettings Current { get; private set; } = new();
+
+    /// <summary>Changes the current settings and saves them.</summary>
+    public UserSettings Update(Func<UserSettings, UserSettings> change)
+    {
+        lock (_lock)
+        {
+            Current = change(Current);
+            Save(Current);
+            return Current;
+        }
+    }
+
+    /// <summary>The settings, converted from version 1 when needed (they become <see cref="Current"/>). Never throws: unreadable files give the defaults.</summary>
     public UserSettings Load()
     {
         lock (_lock)
         {
-            try
-            {
-                if (!File.Exists(FilePath))
-                {
-                    return new UserSettings();
-                }
+            Current = Read();
+            return Current;
+        }
+    }
 
-                var text = File.ReadAllText(FilePath);
-                UserSettings settings;
-                bool migrate;
-                try
-                {
-                    migrate = SettingsMigration.IsOldVersion(text);
-                    settings = migrate ? SettingsMigration.FromV1(text) : JsonSerializer.Deserialize<UserSettings>(text, SettingsJson.Options) ?? new UserSettings();
-                }
-                catch (JsonException)
-                {
-                    // Not readable: keep it as the backup and start from the defaults.
-                    Backup();
-                    return new UserSettings();
-                }
-
-                if (migrate)
-                {
-                    Backup();
-                    Write(settings);
-                }
-
-                return settings;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    private UserSettings Read()
+    {
+        try
+        {
+            if (!File.Exists(FilePath))
             {
                 return new UserSettings();
             }
+
+            var text = File.ReadAllText(FilePath);
+            UserSettings settings;
+            bool migrate;
+            try
+            {
+                migrate = SettingsMigration.IsOldVersion(text);
+                settings = migrate ? SettingsMigration.FromV1(text) : JsonSerializer.Deserialize<UserSettings>(text, SettingsJson.Options) ?? new UserSettings();
+            }
+            catch (JsonException)
+            {
+                // Not readable: keep it as the backup and start from the defaults.
+                Backup();
+                return new UserSettings();
+            }
+
+            if (migrate)
+            {
+                Backup();
+                Write(settings);
+            }
+            else if (ProtectSharePasswords(settings) is { } protectedSettings)
+            {
+                settings = protectedSettings;
+                Write(settings);
+            }
+
+            return settings;
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new UserSettings();
+        }
+    }
+
+    /// <summary>
+    /// A share password typed into the file as plain text is encrypted and removed (where encryption is possible).
+    /// Returns the changed settings, or null when there was nothing to protect.
+    /// </summary>
+    private static UserSettings? ProtectSharePasswords(UserSettings settings)
+    {
+        var changed = false;
+        var servers = settings.Servers.Select(server =>
+        {
+            var files = server.Lyrics.Files;
+            if (files.SharePassword is not { Length: > 0 } plain || SecretStore.Protect(plain) is not { } protectedValue)
+            {
+                return server;
+            }
+
+            changed = true;
+            return server with { Lyrics = server.Lyrics with { Files = files with { SharePassword = null, ProtectedSharePassword = protectedValue } } };
+        }).ToList();
+
+        return changed ? settings with { Servers = servers } : null;
     }
 
     /// <summary>Writes the file (indented), through a temporary file so that a failure cannot leave it half written.</summary>

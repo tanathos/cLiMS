@@ -1,5 +1,6 @@
 using System.Net;
 using Clims.Lms;
+using Clims.Tui.Settings;
 
 namespace Clims.Tui.Ui;
 
@@ -122,7 +123,7 @@ public sealed class ConnectModel
             return null;
         }
 
-        var uri = AppSettings.NormalizeUrl(address, DefaultPort);
+        var uri = ServerUrl.Normalize(address, DefaultPort);
         if (uri is null)
         {
             Fail("That does not look like an address. Use a host name or IP, optionally with :port.", null);
