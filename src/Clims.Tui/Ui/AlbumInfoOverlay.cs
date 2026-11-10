@@ -124,7 +124,7 @@ public sealed class AlbumInfoOverlay : PaintView
         var small = new CoverKey(album.ArtworkId, album.Id);
         // The large picture takes a moment to arrive: show the list-size one meanwhile.
         WantCover(big);
-        DrawCover(left, top, cols, rows, CoverArt.Source.TryGet(big) is null ? small : big);
+        DrawCover(left, top, cols, rows, CoverArt.Source.TryGet(big) is null ? small : big, CoverPlace.FullScreen);
 
         var x = left + cols + 5;
         var width = W - x - 3;

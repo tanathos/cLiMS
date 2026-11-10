@@ -373,8 +373,8 @@ public abstract class PaintView : View
         return x + text.Length;
     }
 
-    /// <summary>Draws a cover in the current <see cref="CoverArt.Mode"/>; cells outside the view are skipped so it scrolls like text.</summary>
-    protected void DrawCover(int x, int y, int cols, int rows, CoverKey key)
+    /// <summary>Draws a cover in the style chosen for <paramref name="place"/>; cells outside the view are skipped so it scrolls like text.</summary>
+    protected void DrawCover(int x, int y, int cols, int rows, CoverKey key, CoverPlace place)
     {
         _wantedCovers.Add(key);
         var image = CoverArt.Source.TryGet(key);
@@ -384,11 +384,12 @@ public abstract class PaintView : View
             return;
         }
 
-        if (CoverArt.UseSixel && DrawSixel(image, x, y, cols, rows))
+        if (CoverArt.UsesSixel(place) && DrawSixel(image, x, y, cols, rows))
         {
             return;
         }
 
+        var cellMode = CoverArt.CellMode(place);
         _drawnCovers.Add(new Rect(x, y, cols, rows));
         for (var r = 0; r < rows; r++)
         {
@@ -406,7 +407,7 @@ public abstract class PaintView : View
                     continue;
                 }
 
-                var (glyph, fg, bg) = CoverArt.Glyph(image, c, r, cols, rows);
+                var (glyph, fg, bg) = CoverArt.Glyph(image, c, r, cols, rows, cellMode);
                 Use(new Attribute(fg, bg));
                 Move(cx, cy);
                 AddStr(glyph);

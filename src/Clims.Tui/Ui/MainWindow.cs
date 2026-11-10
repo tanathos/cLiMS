@@ -869,20 +869,18 @@ public sealed class MainWindow : Window
                 }
                 else if (key == Key.F3)
                 {
-                    do
-                    {
-                        CoverArt.Mode = (CoverMode)(((int)CoverArt.Mode + 1) % 4);
-                    }
-                    while (CoverArt.Mode == CoverMode.Sixel && !SixelCovers.Available);
-
+                    // The style of the place in front: the full-screen cover while it is open, else the lists. For this session only.
+                    var place = _infoVisible ? CoverPlace.FullScreen : CoverPlace.Library;
+                    CoverArt.SetStyle(place, CoverArt.NextStyle(place));
                     _library.Albums.ResetCovers();
                     _library.Albums.SetNeedsDraw();
                     _recent.Albums.ResetCovers();
                     _recent.Albums.SetNeedsDraw();
+                    _info.SetNeedsDraw();
                 }
                 else if (key == Key.F4)
                 {
-                    CoverArt.Large = !CoverArt.Large;
+                    CoverArt.LibrarySize = CoverArt.NextSize(CoverArt.LibrarySize);
                     _library.Albums.Relayout();
                     _recent.Albums.Relayout();
                 }

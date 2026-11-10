@@ -17,7 +17,7 @@ public sealed class HelpOverlay : PaintView
         ("+  -", "Volume"),
         ("F2  ⇄ Server", "Connect to another server or enter a login (button at the top right)"),
         ("F5", "Resync the library, or cancel a running sync"),
-        ("F3  F4", "Cover rendering mode / list cover size"),
+        ("F3  F4", "Cover style / list cover size"),
         ("?  Ctrl+Q", "This help / Quit"),
         ("Library and search results", ""),
         ("Enter  double click", "Play (replaces the queue, restarts the stream), open an artist or genre; a single click only selects"),

@@ -122,7 +122,7 @@ public sealed class ResultsView : PaintView
             default:
                 if (item.Cover is { } key)
                 {
-                    DrawCover(1, y, ThumbCols, ThumbRows, key);
+                    DrawCover(1, y, ThumbCols, ThumbRows, key, CoverPlace.Library);
                 }
 
                 break;

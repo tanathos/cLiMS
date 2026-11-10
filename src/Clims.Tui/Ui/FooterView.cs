@@ -69,7 +69,7 @@ public sealed class FooterView : PaintView
         var x0 = 1;
         if (ShowCover)
         {
-            DrawCover(0, 0, CoverCols, CoverRows, new CoverKey(album.ArtworkId, album.Id));
+            DrawCover(0, 0, CoverCols, CoverRows, new CoverKey(album.ArtworkId, album.Id), CoverPlace.Footer);
             x0 = CoverCols + 2;
         }
 

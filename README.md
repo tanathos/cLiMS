@@ -163,8 +163,8 @@ Press `?` in the app for the same list.
 | `+` `-` | Volume |
 | `F2` | Connect screen: another server, or a login |
 | `F5` | Resync the library, or cancel a running sync |
-| `F3` | Cycle cover rendering: Sixel (default, real pixels), half-block, quadrant, braille |
-| `F4` | Toggle list cover size: 24x12 cells (default) / 16x8 |
+| `F3` | Cycle the cover style of the lists (of the full-screen cover while it is open): Sixel (default, real pixels), half-block, quadrant, braille. For this session; the defaults are in `UI.Covers` of `settings.json` |
+| `F4` | Cycle the list cover size: 24x12 cells (`Medium`, default), 32x16 (`Large`), 16x8 (`Small`) |
 | `Y` / `L` / `N` / `Enter` / `Esc` | Answer a question shown in the tab strip (`Enter` = first answer, `Esc` = last) |
 | `?` | Key reference |
 | `Ctrl+Q` | Quit (`Esc` never quits; it only closes or goes back) |

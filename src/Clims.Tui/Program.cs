@@ -47,6 +47,7 @@ string? PasswordFromArgs()
 var driver = Arg("--driver");
 var store = new SettingsStore();
 store.Load();
+CoverArt.Apply(store.Current.Ui.Covers);
 var requested = Arg("--lms") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_URL") ?? store.Current.ActiveServer?.Url;
 var demoOnly = args.Contains("--demo");
 var uri = demoOnly ? null : ServerUrl.Normalize(requested);

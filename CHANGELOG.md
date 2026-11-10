@@ -3,7 +3,13 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- Cover styles per place: `UI.Covers` in `settings.json` sets the style (`Sixel`, `HalfBlock`, `Quadrant`, `Braille`) separately for the footer, the lists (library, recently added, search, genres) and the full-screen cover, and `SixelFallback` the style used where Sixel is not possible. The lists also have a size, `Small` (16x8 cells), `Medium` (24x12, the default) or `Large` (32x16).
+
 ### Changed
+
+- `F3` now changes the cover style of the lists, or of the full-screen cover while it is open (the footer keeps its own style), and `F4` cycles the three list cover sizes instead of two. Both last for the session; the defaults come from the settings.
 
 - `settings.json` has a new layout (version 2): a `Servers` list (address, login, player and lyrics settings of each server), `Startup`, `Cache.Covers` (was `CoverCache`) and `UI.Waveform.Style` (was `Waveform`), written indented. At the first launch an old file is renamed to `settings.v1.json` (a numbered name if that exists) and the converted settings are saved as `settings.json`; the backup is never touched again. The lyrics options of a server moved into its `Servers` entry, with the share keys grouped under `Lyrics.Files`.
 
