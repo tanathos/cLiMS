@@ -54,8 +54,11 @@ public abstract class PaintView : View
     /// <summary>Rows at the top that scrolling content must not draw into (a pinned heading): covers stay below them.</summary>
     protected virtual int ClipTop => 0;
 
+    /// <summary>Cells holding a sixel that has not moved (a view that is not <see cref="StableSixels"/>): the per-frame clear skips them.</summary>
+    protected virtual System.Drawing.Rectangle? StillCells => null;
+
     /// <summary>Terminal.Gui would clear the whole viewport (and erase a still sixel) before painting; the clear is ours.</summary>
-    protected override bool OnClearingViewport() => StableSixels || ClearFromX > 0 || base.OnClearingViewport();
+    protected override bool OnClearingViewport() => StableSixels || ClearFromX > 0 || StillCells is not null || base.OnClearingViewport();
 
     private readonly record struct Rect(int X, int Y, int Cols, int Rows);
 
@@ -76,12 +79,18 @@ public abstract class PaintView : View
         }
 
         Use(Base);
+        var still = StillCells;
         for (var y = 0; y < H; y++)
         {
             var from = Math.Clamp(ClearFromX, 0, W);
             var spans = StableSixels
                 ? _blanked.Values.Where(r => y >= r.Y && y < r.Y + r.Rows).Select(Guarded).OrderBy(r => r.X).ToList()
                 : null;
+            if (still is { } keep && y >= keep.Y && y < keep.Y + keep.Height)
+            {
+                spans = (spans ?? new List<Rect>()).Append(new Rect(keep.X, keep.Y, keep.Width, keep.Height)).OrderBy(r => r.X).ToList();
+            }
+
             if (spans is not { Count: > 0 })
             {
                 Move(from, y);
@@ -375,18 +384,8 @@ public abstract class PaintView : View
             return;
         }
 
-        // A sixel cannot be clipped, so only covers fully inside the view use it; the rest fall back to cells.
-        var inside = x >= 0 && y >= ClipTop && x + cols <= W && y + rows <= H;
-        if (inside && CoverArt.UseSixel && !(Dimmed && Dimmable) && !(Dimmable && InHole(ViewportToScreen(new System.Drawing.Point(x, y)), cols, rows)))
+        if (CoverArt.UseSixel && DrawSixel(image, x, y, cols, rows))
         {
-            var blankKey = $"{x},{y},{cols},{rows}|{image.Label}";
-            _blankedNow[blankKey] = new Rect(x, y, cols, rows);
-            if ((ResendSixelsOnPaint && !StableSixels) || !_blanked.ContainsKey(blankKey))
-            {
-                FillBlank(x, y, cols, rows);
-            }
-
-            _sixels.Add(new SixelPlacement(image, cols, rows, ViewportToScreen(new System.Drawing.Point(x, y))));
             return;
         }
 
@@ -413,6 +412,39 @@ public abstract class PaintView : View
                 AddStr(glyph);
             }
         }
+    }
+
+    /// <summary>
+    /// Shows <paramref name="image"/> as a sixel in the given cells. False (nothing drawn) when a sixel cannot be used: no
+    /// terminal support, the image is not fully inside the view (a sixel cannot be clipped), or a modal view or popup is open.
+    /// </summary>
+    protected bool DrawSixel(CoverImage image, int x, int y, int cols, int rows)
+    {
+        var inside = x >= 0 && y >= ClipTop && x + cols <= W && y + rows <= H;
+        if (!inside || !SixelCovers.Available || (Dimmed && Dimmable) || (Dimmable && InHole(ViewportToScreen(new System.Drawing.Point(x, y)), cols, rows)))
+        {
+            return false;
+        }
+
+        var blankKey = $"{x},{y},{cols},{rows}|{image.Label}";
+        _blankedNow[blankKey] = new Rect(x, y, cols, rows);
+        if ((ResendSixelsOnPaint && !StableSixels) || !_blanked.ContainsKey(blankKey))
+        {
+            FillBlank(x, y, cols, rows);
+        }
+
+        _sixels.Add(new SixelPlacement(image, cols, rows, ViewportToScreen(new System.Drawing.Point(x, y))));
+        return true;
+    }
+
+    /// <summary>
+    /// Blanks the cells and marks them as drawn this frame, for content that takes the place of a sixel (or of a placeholder):
+    /// the image under them is overwritten, and the clean-up of moved sixels leaves what is drawn there alone.
+    /// </summary>
+    protected void Reclaim(int x, int y, int cols, int rows)
+    {
+        _drawnCovers.Add(new Rect(x, y, cols, rows));
+        FillBlank(x, y, cols, rows);
     }
 
     /// <summary>A dim block with a note in the middle: shown while a cover is being fetched, or when an album has none.</summary>

@@ -21,6 +21,8 @@ public static class SixelCovers
         public SixelToRender Item { get; } = item;
 
         public int Settle { get; set; }
+
+        public CoverImage? Image { get; set; }
     }
 
     public static IDriver? Driver { get; set; }
@@ -47,6 +49,15 @@ public static class SixelCovers
         {
             if (previous is not null && previous.TryGetValue(placement.Key, out var existing))
             {
+                // Same place and name, new pixels (the waveform grows): swap the data in place. A new key would rebuild the whole
+                // queue and send every image, the covers too, again for several frames, which flickers.
+                if (!ReferenceEquals(existing.Image, placement.Image))
+                {
+                    existing.Item.SixelData = Encode(placement);
+                    existing.Item.IsDirty = true;
+                    existing.Image = placement.Image;
+                }
+
                 // A still image is sent again for a few frames after it appears or the queue is rebuilt: the cells
                 // under it are rewritten in the first frames, which would otherwise erase it. After that it stays put.
                 if (resend || existing.Settle > 0)
@@ -65,7 +76,7 @@ public static class SixelCovers
                 ScreenPosition = placement.Screen,
                 Id = placement.Key + "#" + ++_nextId,
                 IsDirty = true,
-            }) { Settle = SettleFrames };
+            }) { Settle = SettleFrames, Image = placement.Image };
         }
 
         var changed = previous is null || !previous.Keys.SequenceEqual(next.Keys);
@@ -103,6 +114,15 @@ public static class SixelCovers
         if (Owners.Remove(owner))
         {
             Rebuild();
+        }
+    }
+
+    /// <summary>Drops the encoded data of an image that is replaced all the time (the waveform), so the cache does not grow.</summary>
+    public static void Forget(CoverImage image)
+    {
+        foreach (var key in Encoded.Keys.Where(k => ReferenceEquals(k.Item1, image)).ToList())
+        {
+            Encoded.Remove(key);
         }
     }
 

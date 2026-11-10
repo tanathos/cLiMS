@@ -16,14 +16,14 @@ Browse a large library, search it as you type, see real cover art in the termina
 - **Real covers** as Sixel images (with half-block, quadrant and braille fallbacks for other terminals).
 - **Playback** on your LMS player: play/pause, seek, volume, next/previous, status kept in step through server events.
 - **Queue** you can reorder, trim and clear, plus **named saved queues** kept on your PC.
-- **Waveform** of the current track, decoded from the real file (FLAC, MP3, Ogg, WAV).
+- **Waveform** of the current track, decoded from the real file (FLAC, MP3, Ogg, WAV). Click it to change its look: block characters, braille, or a Sixel image. The style at start-up is the `Waveform` value in `settings.json` (`Blocks`, `Braille`, `Sixel`).
 - **Lyrics** in the full-screen album view: synced lines follow the music (highlighted and kept in the middle), plain ones scroll. Found once, stored for good in `lyrics.db`, so a song is never searched twice. Online lookup (LRCLIB, optionally DarkLyrics and lyrics.ovh) is off until you turn it on. See [Lyrics](#lyrics).
 - **First-run connect screen:** finds servers on your network, or takes an address by hand, with optional username and password. Password-protected servers are supported everywhere. See [Connecting to a server](#connecting-to-a-server).
 - **Offline friendly:** every server gets its own saved index (`catalog-<server uuid>.db`), so browsing works while the server is away, and switching servers never mixes libraries.
 - Read-only toward your library: nothing is synced, and no player state changes, without you asking.
 
 ## Screenshots
-The Library, with covers, genres in italic, a resizable and filterable left column, and the player footer (cover, waveform, controls). The search box shows a hint until you focus it, and the terminal title follows the player (`cLiMS ▶ - Track name`):
+The Library, with covers, genres in italic, a resizable and filterable left column whose heading stays pinned while the albums scroll, and the player footer (cover, waveform, controls). The waveform here is the Sixel style; click it to change the look (blocks, braille, Sixel). The search box shows a hint until you focus it, and the terminal title follows the player (`cLiMS ▶ - Track name`):
 
 ![Library](screenshots/library.png)
 
@@ -31,7 +31,7 @@ The Recently added tab: the newest 50 albums on the server, newest first:
 
 ![Recently added](screenshots/recent.png)
 
-The Genres explorer: Death Metal, then Thrash Metal, then Experimental, each column narrowing to the genres that share tracks with the choices so far. The artists of the tracks tagged with all three are listed underneath (click "75 tracks" to list the tracks instead), and a random queue can be started from them:
+The Genres explorer: Death Metal, then Thrash Metal, then Experimental, each column narrowing to the genres that share tracks with the choices so far. The artists of the tracks tagged with all three are listed underneath (click "74 tracks" to list the tracks instead), and a random queue can be started from them:
 
 ![Genres](screenshots/genres.png)
 

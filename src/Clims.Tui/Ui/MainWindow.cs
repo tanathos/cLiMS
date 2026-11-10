@@ -59,7 +59,8 @@ public sealed class MainWindow : Window
         SavedQueueStore queues,
         WaveformService? waves = null,
         RecentAlbumsSource? recentAlbums = null,
-        LyricsFeed? lyrics = null)
+        LyricsFeed? lyrics = null,
+        WaveformStyle waveformStyle = WaveformStyle.Blocks)
     {
         _waves = waves;
         _lyrics = lyrics;
@@ -90,7 +91,7 @@ public sealed class MainWindow : Window
             page.Height = Dim.Fill(FooterView.Rows);
         }
 
-        _footer = new FooterView(player, waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows };
+        _footer = new FooterView(player, waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows, WaveformStyle = waveformStyle };
         _help.X = 0;
         _help.Y = HeaderBar.Rows + 1;
         _help.Width = Dim.Fill();
