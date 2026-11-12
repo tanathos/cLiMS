@@ -29,6 +29,21 @@ public static class SettingItems
         },
     };
 
+    /// <summary>One of the named <paramref name="options"/> (names, not an enum); a step goes to the next (or previous) one, round the end.</summary>
+    public static SettingItem Pick(string label, Func<UserSettings, string> get, Func<UserSettings, string, UserSettings> set, IReadOnlyList<string> options, string hint = "", bool restart = false) => new()
+    {
+        Label = label,
+        Kind = SettingKind.Choice,
+        Hint = hint,
+        NeedsRestart = restart,
+        Value = get,
+        Change = (s, delta) =>
+        {
+            var index = options.ToList().FindIndex(o => string.Equals(o, get(s), StringComparison.OrdinalIgnoreCase));
+            return set(s, options[((index < 0 ? 0 : index) + delta % options.Count + options.Count) % options.Count]);
+        },
+    };
+
     /// <summary>A number between <paramref name="min"/> and <paramref name="max"/>, changed by <paramref name="step"/>.</summary>
     /// <param name="zeroText">Shown instead of 0, when 0 has a meaning ("no limit", "off").</param>
     public static SettingItem Number(string label, Func<UserSettings, int> get, Func<UserSettings, int, UserSettings> set, int min, int max, int step, string? zeroText = null, string hint = "", bool restart = false) => new()

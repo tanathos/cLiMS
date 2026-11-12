@@ -1,6 +1,7 @@
 using Clims.Tui.Settings;
 using Terminal.Gui.Drivers;
 using Terminal.Gui.Input;
+using Terminal.Gui.ViewBase;
 
 namespace Clims.Tui.Ui;
 
@@ -16,15 +17,103 @@ public sealed class SettingsOverlay : PaintView
     private const int ValueX = 34;
     private const int HintX = 60;
 
+    /// <summary>The icon after a colour's swatch: clicking it opens the colour picker.</summary>
+    private const string PickIcon = "✎";
+    private const int PickIconDx = 3;
+
     private readonly SettingsModel _model;
-    private readonly List<(int X0, int X1)> _tabSpans = new();
     private int _offset;
+
+    /// <summary>Shows the colour picker (what the colour is for, the colour now) and returns the chosen colour, or null. Set by the main window.</summary>
+    public Func<string, Terminal.Gui.Drawing.Color, Terminal.Gui.Drawing.Color?>? PickColor { get; set; }
+
+    /// <summary>True while the colour picker is open: the window's keys then belong to it.</summary>
+    public bool PickerOpen { get; private set; }
+
+    /// <summary>Opens the colour picker for the selected colour row; a chosen colour is applied at once.</summary>
+    public void OpenColorPicker()
+    {
+        if (PickColor is null || !_model.CanPickColor || _model.CurrentColor is not { } now)
+        {
+            return;
+        }
+
+        PickerOpen = true;
+        try
+        {
+            if (PickColor(_model.Current!.Label, now) is { } chosen)
+            {
+                _model.SetColor(chosen);
+            }
+        }
+        finally
+        {
+            PickerOpen = false;
+            SetNeedsDraw();
+        }
+    }
 
     public SettingsOverlay(SettingsModel model)
     {
         _model = model;
         // Focusable, so that hiding the pages under it does not hand the keyboard to the search box.
         CanFocus = true;
+        // The tab row is a view of its own: hovering a tab repaints one row, not the whole page.
+        _tabs = new TabRow(model) { X = 0, Y = TabsY, Width = Dim.Fill(), Height = 1 };
+        _tabs.PageChosen += () =>
+        {
+            _offset = 0;
+            SetNeedsDraw();
+        };
+        Add(_tabs);
+    }
+
+    private readonly TabRow _tabs;
+
+    private sealed class TabRow : PaintView
+    {
+        private readonly SettingsModel _model;
+        private readonly List<(int X0, int X1)> _spans = new();
+
+        public TabRow(SettingsModel model) => _model = model;
+
+        public event Action? PageChosen;
+
+        protected override bool TracksHover => true;
+
+        protected override void Paint()
+        {
+            _spans.Clear();
+            var x = 2;
+            for (var i = 0; i < _model.Pages.Count; i++)
+            {
+                var label = $" {_model.Pages[i].Title} ";
+                var attr = i == _model.PageIndex ? Theme.Selected : Over(x, x + label.Length, 0) ? Theme.Hover : new Attribute(Theme.Fg, Theme.BgAlt);
+                _spans.Add((x, x + label.Length));
+                x = Put(x, 0, label, attr) + 1;
+            }
+        }
+
+        protected override bool OnMouseEvent(Mouse mouse)
+        {
+            if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && mouse.Position is { } p)
+            {
+                for (var i = 0; i < _spans.Count; i++)
+                {
+                    if (p.X >= _spans[i].X0 && p.X < _spans[i].X1)
+                    {
+                        _model.SetPage(i);
+                        PageChosen?.Invoke();
+                        SetNeedsDraw();
+                        return true;
+                    }
+                }
+
+                return true;
+            }
+
+            return base.OnMouseEvent(mouse);
+        }
     }
 
     /// <summary>Esc was pressed (or the key that opens the page): the page is to be closed.</summary>
@@ -53,16 +142,6 @@ public sealed class SettingsOverlay : PaintView
         Put(2, 1, "cLiMS settings", head);
         Put(18, 1, Clip("Esc close · Tab next tab · ↑↓ select · ←→ change · Enter change or edit · changes are saved at once", W - 20), dim);
 
-        _tabSpans.Clear();
-        var x = 2;
-        for (var i = 0; i < _model.Pages.Count; i++)
-        {
-            var label = $" {_model.Pages[i].Title} ";
-            var attr = i == _model.PageIndex ? Theme.Selected : new Attribute(Theme.Fg, Theme.BgAlt);
-            _tabSpans.Add((x, x + label.Length));
-            x = Put(x, TabsY, label, attr) + 1;
-        }
-
         var items = _model.Items;
         _offset = Math.Clamp(_offset, 0, Math.Max(0, items.Count - Room));
         if (_model.Selected < _offset)
@@ -90,7 +169,15 @@ public sealed class SettingsOverlay : PaintView
                 Put(ValueX - 3, y, "↻", selected ? rowAttr : new Attribute(Theme.Warn, Theme.Bg));
             }
 
-            var valueX = Put(ValueX, y, ValueText(item, selected), selected ? rowAttr : ValueAttr(item));
+            var textX = ValueX;
+            if (item.Swatch is { } swatch)
+            {
+                Put(ValueX, y, "██", new Attribute(swatch(_model.Snapshot), rowAttr.Background));
+                Put(ValueX + PickIconDx, y, PickIcon, selected ? rowAttr : new Attribute(Theme.Accent, Theme.Bg));
+                textX += PickIconDx + 2;
+            }
+
+            var valueX = Put(textX, y, ValueText(item, selected), selected ? rowAttr : ValueAttr(item));
             if (item.Hint.Length > 0 && W > HintX + 8)
             {
                 Put(Math.Max(HintX, valueX + 2), y, Clip(item.Hint, W - Math.Max(HintX, valueX + 2) - 2), selected ? rowAttr : dim);
@@ -144,6 +231,7 @@ public sealed class SettingsOverlay : PaintView
     private string KeyHint() => _model.Current?.Kind switch
     {
         SettingKind.Server => "Enter connect now · u opens at start · e rename · d remove",
+        SettingKind.Text when _model.CanPickColor => "Enter type #RRGGBB (empty: the theme's colour) · p or click ✎ open the colour picker",
         SettingKind.Text => "Enter edit",
         SettingKind.Action => "Enter add a server",
         SettingKind.Info or null => "",
@@ -236,6 +324,10 @@ public sealed class SettingsOverlay : PaintView
         {
             _model.UseAtStart();
         }
+        else if (c is 'p' or 'P')
+        {
+            OpenColorPicker();
+        }
         else if (c is 'e' or 'E')
         {
             _model.BeginEdit();
@@ -294,22 +386,6 @@ public sealed class SettingsOverlay : PaintView
             return base.OnMouseEvent(mouse);
         }
 
-        if (p.Y == TabsY)
-        {
-            for (var i = 0; i < _tabSpans.Count; i++)
-            {
-                if (p.X >= _tabSpans[i].X0 && p.X < _tabSpans[i].X1)
-                {
-                    _model.SetPage(i);
-                    _offset = 0;
-                    SetNeedsDraw();
-                    return true;
-                }
-            }
-
-            return true;
-        }
-
         var index = _offset + p.Y - RowsY;
         if (p.Y >= RowsY && p.Y < RowsY + Room && index < _model.Items.Count)
         {
@@ -334,6 +410,9 @@ public sealed class SettingsOverlay : PaintView
                 break;
             case { Kind: SettingKind.Action }:
                 _model.Activate();
+                break;
+            case { Kind: SettingKind.Text, Swatch: not null } when x >= ValueX + PickIconDx && x <= ValueX + PickIconDx + 1:
+                OpenColorPicker();
                 break;
             case { Kind: SettingKind.Server or SettingKind.Text } when doubleClick:
                 _model.Activate();

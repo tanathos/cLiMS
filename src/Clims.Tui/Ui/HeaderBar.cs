@@ -14,7 +14,7 @@ public sealed class HeaderBar : View
     private const int Pad = 2;
     private const int SearchWidth = 44;
     private const int ServerButtonWidth = 8; // exactly the width of "⇄ Server"
-    private const int GearWidth = 3; // " ⚙ "
+    private const int GearWidth = 2; // the icon is one cell; the second is blank but still hovers and clicks
 
     private readonly StatusText _status;
 
@@ -96,7 +96,7 @@ public sealed class HeaderBar : View
 
         protected override bool TracksHover => true;
 
-        protected override void Paint() => Put(0, 0, "⇄ Server", Pointer is null ? new Attribute(Theme.Fg, Theme.BgAlt) : Theme.Hover);
+        protected override void Paint() => Put(0, 0, "⇄ Server", !Over(0, W, 0) ? new Attribute(Theme.Fg, Theme.BgAlt) : Theme.Hover);
 
         protected override bool OnMouseEvent(Mouse mouse)
         {
@@ -118,7 +118,7 @@ public sealed class HeaderBar : View
 
         protected override bool TracksHover => true;
 
-        protected override void Paint() => Put(0, 0, " ⚙ ", Pointer is null ? new Attribute(Theme.Fg, Theme.BgAlt) : Theme.Hover);
+        protected override void Paint() => Put(0, 0, "☰", new Attribute(!Over(0, W, 0) ? Theme.Fg : Theme.Accent, Base.Background));
 
         protected override bool OnMouseEvent(Mouse mouse)
         {

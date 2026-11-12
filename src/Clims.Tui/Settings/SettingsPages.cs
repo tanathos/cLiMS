@@ -17,6 +17,7 @@ public static class SettingsPages
     [
         new("Servers", ServerRows(settings, connectedUrl)),
         new("UI", UiRows()),
+        new("Theme", ThemeRows(settings)),
         new("Lyrics", LyricsRows(settings)),
         new("Cache", CacheRows()),
         new("Startup", StartupRows()),
@@ -60,6 +61,82 @@ public static class SettingsPages
         SettingItems.Choice("Waveform style", s => s.Ui.Waveform.Style, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Style = v } } }, Waveforms, "clicking the waveform changes it too"),
         SettingItems.Toggle("Waveform", s => s.Ui.Waveform.Enabled, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Enabled = v } } }, "off: none shown, none downloaded", restart: true),
     ];
+
+    private static List<SettingItem> ThemeRows(UserSettings settings)
+    {
+        var options = Themes.Names.Concat(settings.Ui.Theme.Saved.Keys.Order(StringComparer.OrdinalIgnoreCase)).ToList();
+        var rows = new List<SettingItem>
+        {
+            SettingItems.Pick("Theme", s => s.Ui.Theme.DisplayName, (s, v) => WithTheme(s, t => t with { Name = v }), options, "predefined themes first, then the ones you saved; colour changes below stay on top"),
+            new SettingItem
+            {
+                Label = "Save theme as…",
+                Kind = SettingKind.Text,
+                Value = s => s.Ui.Theme.FindSaved(s.Ui.Theme.Name) is null ? "Enter: name it" : $"Enter: rename or update “{s.Ui.Theme.DisplayName}”",
+                EditText = s => s.Ui.Theme.FindSaved(s.Ui.Theme.Name) is null ? "" : s.Ui.Theme.DisplayName,
+                Validate = text => Themes.IsPredefined(text.Trim()) ? "That is the name of a predefined theme." : null,
+                Edit = (s, name) => WithTheme(s, t => t.SaveAs(name)),
+                Hint = "keeps the theme and the colour changes under a name",
+            },
+            new SettingItem
+            {
+                Label = "Delete saved theme",
+                Kind = SettingKind.Action,
+                Value = s => s.Ui.Theme.FindSaved(s.Ui.Theme.Name) is null ? "pick a saved theme first" : $"Enter: delete “{s.Ui.Theme.DisplayName}”",
+                Run = s => WithTheme(s, t => t.DeleteSaved()),
+            },
+            new SettingItem
+            {
+                Label = "Reset colour changes",
+                Kind = SettingKind.Action,
+                Value = s => s.Ui.Theme.Colors.Count == 0 ? "nothing changed" : $"{s.Ui.Theme.Colors.Count} colour(s) changed",
+                Run = s => WithTheme(s, t => t with { Colors = new Dictionary<string, string>() }),
+            },
+        };
+
+        foreach (var slot in Enum.GetValues<ThemeSlot>())
+        {
+            rows.Add(new SettingItem
+            {
+                Label = slot.ToString(),
+                Kind = SettingKind.Text,
+                AllowEmpty = true,
+                Validate = text => string.IsNullOrWhiteSpace(text) || HexColor.TryParse(text, out _) ? null : "Write a colour as #RRGGBB (empty: the theme's colour).",
+                Swatch = s => Themes.Resolve(s.Ui.Theme)[slot],
+                Value = s => HexColor.Format(Themes.Resolve(s.Ui.Theme)[slot]) + (s.Ui.Theme.Override(slot) is null ? "" : "  · changed"),
+                EditText = s => HexColor.Format(Themes.Resolve(s.Ui.Theme)[slot]),
+                Edit = (s, text) => WithTheme(s, t => t.WithColor(slot, HexColor.TryParse(text, out var c) ? HexColor.Format(c) : null)),
+                Hint = Describe(slot),
+            });
+        }
+
+        return rows;
+    }
+
+    private static string Describe(ThemeSlot slot) => slot switch
+    {
+        ThemeSlot.Bg => "background of the pages",
+        ThemeSlot.BgHeader => "header bar",
+        ThemeSlot.BgAlt => "alternate rows, buttons, inputs",
+        ThemeSlot.BgSelected => "selected row",
+        ThemeSlot.BgSelectedDim => "selected row without the focus",
+        ThemeSlot.Fg => "text",
+        ThemeSlot.FgDim => "secondary text",
+        ThemeSlot.Accent => "headings, links, played part",
+        ThemeSlot.Good => "success",
+        ThemeSlot.Bad => "errors",
+        ThemeSlot.Warn => "warnings, changeable values",
+        ThemeSlot.HoverBg => "under the pointer",
+        ThemeSlot.HoverFg => "link under the pointer",
+        ThemeSlot.Border => "frames, scrollbar tracks",
+        ThemeSlot.Faint => "placeholders, unplayed markers",
+        ThemeSlot.Marker => "album view section markers",
+        ThemeSlot.Thumb => "scrollbar thumbs",
+        _ => "",
+    };
+
+    private static UserSettings WithTheme(UserSettings s, Func<ThemeSettings, ThemeSettings> change) =>
+        s with { Ui = s.Ui with { Theme = change(s.Ui.Theme) } };
 
     private static List<SettingItem> LyricsRows(UserSettings settings)
     {

@@ -1,3 +1,5 @@
+using Clims.Tui.Ui;
+
 namespace Clims.Tui.Settings;
 
 /// <summary>
@@ -114,6 +116,9 @@ public sealed class SettingsModel
             case { Kind: SettingKind.Server, ServerKey: { } key }:
                 SwitchRequested?.Invoke(key);
                 break;
+            case { Kind: SettingKind.Action, Run: { } run }:
+                Apply(run, restart: false);
+                break;
             case { Kind: SettingKind.Action }:
                 AddRequested?.Invoke();
                 break;
@@ -156,20 +161,43 @@ public sealed class SettingsModel
     /// <summary>Keeps the typed text. An empty text is not accepted (a name is needed).</summary>
     public void CommitEdit()
     {
-        if (!Editing || Current is not { Edit: { } edit })
+        if (!Editing || Current is not { Edit: { } edit } current)
         {
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(Buffer))
+        if (string.IsNullOrWhiteSpace(Buffer) && !current.AllowEmpty)
         {
             Message = "A name cannot be empty.";
+            return;
+        }
+
+        if (current.Validate?.Invoke(Buffer) is { } problem)
+        {
+            Message = problem;
             return;
         }
 
         var text = Buffer;
         CancelEdit();
         Apply(s => edit(s, text), restart: false);
+    }
+
+    /// <summary>True on a colour row: the colour picker can be opened for it.</summary>
+    public bool CanPickColor => Current is { Swatch: not null, Edit: not null };
+
+    /// <summary>The colour of the selected colour row as it is now, or null on other rows.</summary>
+    public Terminal.Gui.Drawing.Color? CurrentColor => Current?.Swatch?.Invoke(_store.Current);
+
+    /// <summary>Sets the selected colour row to a colour chosen in the picker.</summary>
+    public void SetColor(Terminal.Gui.Drawing.Color color)
+    {
+        ClearTransient();
+        if (Current is { Swatch: not null, Edit: { } edit })
+        {
+            var hex = HexColor.Format(color);
+            Apply(s => edit(s, hex), restart: false);
+        }
     }
 
     /// <summary>"u" on a server: it is the one to open at the next start.</summary>

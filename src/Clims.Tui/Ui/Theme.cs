@@ -1,33 +1,54 @@
+using Clims.Tui.Settings;
 using Terminal.Gui.Drawing;
 
 namespace Clims.Tui.Ui;
 
-/// <summary>Dark true-colour palette, loosely based on the MusicBee reference screenshot.</summary>
+/// <summary>
+/// The colours in use. The values come from the active <see cref="ThemePalette"/> (the chosen theme plus the user's overrides),
+/// set with <see cref="Apply(ThemeSettings)"/>; the views read them every time they paint, so a change shows at once.
+/// </summary>
 public static class Theme
 {
+    private static ThemePalette _palette = Themes.Default.Palette;
+
     public static Color Rgb(int r, int g, int b) => new(r, g, b, 255);
 
     /// <summary>The colour <paramref name="amount"/> (0..1) of the way from <paramref name="a"/> to <paramref name="b"/>.</summary>
     public static Color Mix(Color a, Color b, double amount) =>
         Rgb((int)(a.R + (b.R - a.R) * amount), (int)(a.G + (b.G - a.G) * amount), (int)(a.B + (b.B - a.B) * amount));
 
-    public static readonly Color Bg = Rgb(24, 26, 31);
-    public static readonly Color BgHeader = Rgb(16, 18, 23);
-    public static readonly Color BgAlt = Rgb(40, 44, 54);
-    public static readonly Color BgSelected = Rgb(52, 84, 130);
-    public static readonly Color BgSelectedDim = Rgb(42, 48, 60);
-    public static readonly Color Fg = Rgb(214, 218, 226);
-    public static readonly Color FgDim = Rgb(128, 134, 148);
-    public static readonly Color Accent = Rgb(110, 190, 255);
-    public static readonly Color Good = Rgb(112, 200, 130);
-    public static readonly Color Bad = Rgb(228, 104, 104);
-    public static readonly Color Warn = Rgb(240, 190, 90);
+    /// <summary>Makes the theme of the settings (with its overrides) the one in use.</summary>
+    public static void Apply(ThemeSettings settings) => _palette = Themes.Resolve(settings);
 
-    /// <summary>Light gray shown under the pointer on clickable things (dark text on it, or light text for links).</summary>
-    public static readonly Color HoverBg = Rgb(160, 166, 180);
+    public static Color Bg => _palette[ThemeSlot.Bg];
+    public static Color BgHeader => _palette[ThemeSlot.BgHeader];
+    public static Color BgAlt => _palette[ThemeSlot.BgAlt];
+    public static Color BgSelected => _palette[ThemeSlot.BgSelected];
+    public static Color BgSelectedDim => _palette[ThemeSlot.BgSelectedDim];
+    public static Color Fg => _palette[ThemeSlot.Fg];
+    public static Color FgDim => _palette[ThemeSlot.FgDim];
+    public static Color Accent => _palette[ThemeSlot.Accent];
+    public static Color Good => _palette[ThemeSlot.Good];
+    public static Color Bad => _palette[ThemeSlot.Bad];
+    public static Color Warn => _palette[ThemeSlot.Warn];
+
+    /// <summary>Shown under the pointer on clickable things (the background colour on it, or light text for links).</summary>
+    public static Color HoverBg => _palette[ThemeSlot.HoverBg];
 
     /// <summary>Text colour of a link under the pointer.</summary>
-    public static readonly Color HoverFg = Rgb(250, 251, 253);
+    public static Color HoverFg => _palette[ThemeSlot.HoverFg];
+
+    /// <summary>Frames and scrollbar tracks.</summary>
+    public static Color Border => _palette[ThemeSlot.Border];
+
+    /// <summary>Placeholders and unplayed markers.</summary>
+    public static Color Faint => _palette[ThemeSlot.Faint];
+
+    /// <summary>Section markers of the album view.</summary>
+    public static Color Marker => _palette[ThemeSlot.Marker];
+
+    /// <summary>The thumb of scrollbars.</summary>
+    public static Color Thumb => _palette[ThemeSlot.Thumb];
 
     /// <summary>A button or tab under the pointer.</summary>
     public static Attribute Hover => new(Bg, HoverBg);

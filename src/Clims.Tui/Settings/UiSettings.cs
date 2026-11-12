@@ -6,4 +6,6 @@ public sealed record UiSettings
     public CoverStylesSettings Covers { get; init; } = new();
 
     public WaveformSettings Waveform { get; init; } = new();
+
+    public ThemeSettings Theme { get; init; } = new();
 }

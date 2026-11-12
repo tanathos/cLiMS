@@ -38,9 +38,9 @@ public sealed class SettingsModelTests : IDisposable
     }
 
     [Fact]
-    public void The_pages_are_servers_ui_lyrics_cache_and_startup()
+    public void The_pages_are_servers_ui_theme_lyrics_cache_and_startup()
     {
-        Assert.Equal(["Servers", "UI", "Lyrics", "Cache", "Startup"], Model().Pages.Select(p => p.Title));
+        Assert.Equal(["Servers", "UI", "Theme", "Lyrics", "Cache", "Startup"], Model().Pages.Select(p => p.Title));
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public sealed class SettingsModelTests : IDisposable
     public void The_lyrics_page_has_nothing_to_change_until_there_is_a_server()
     {
         var model = Model();
-        model.SetPage(2);
+        model.SetPage(model.Pages.Select(p => p.Title).ToList().IndexOf("Lyrics"));
 
         Assert.All(model.Items, i => Assert.Equal(SettingKind.Info, i.Kind));
     }

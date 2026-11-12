@@ -121,6 +121,7 @@ public sealed class MainWindow : Window
                 RequestServerChange();
             };
             _settings.CloseRequested += ToggleSettings;
+            _settings.PickColor = (name, colour) => ColorDialog.Show(_app, name, colour);
         }
 
         // The album view covers the whole screen.
@@ -672,6 +673,12 @@ public sealed class MainWindow : Window
 
     private void OnGlobalKey(object? sender, Key key)
     {
+        // The colour picker dialog is modal and takes its own keys.
+        if (_settings?.PickerOpen == true)
+        {
+            return;
+        }
+
         if (key == Key.Q.WithCtrl)
         {
             _app.RequestStop();
@@ -1163,10 +1170,14 @@ public sealed class MainWindow : Window
     private void OnSettingsChanged(UserSettings settings)
     {
         CoverArt.Apply(settings.Ui.Covers);
+        Theme.Apply(settings.Ui.Theme);
+        SetScheme(Theme.Dark);
+        SetNeedsDraw();
         _footer.WaveformStyle = settings.Ui.Waveform.Style;
         _library.Albums.Relayout();
         _recent.Albums.Relayout();
-        _footer.ResetCovers();
+        // The cover (and a sixel waveform) are the same images in new cells: take them off the screen so they are sent again.
+        SixelCovers.Release(_footer);
         _footer.SetNeedsDraw();
     }
 

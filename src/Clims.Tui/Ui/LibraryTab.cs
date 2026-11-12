@@ -411,7 +411,7 @@ public sealed class LibraryTab : View
 
         protected override void Paint()
         {
-            var attr = new Attribute(_dragging ? Theme.Accent : Theme.Rgb(52, 57, 70), Theme.Bg);
+            var attr = new Attribute(_dragging ? Theme.Accent : Theme.Border, Theme.Bg);
             for (var y = 0; y < H; y++)
             {
                 Put(0, y, "│", attr);

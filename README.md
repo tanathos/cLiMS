@@ -104,7 +104,7 @@ Files, all in `%LOCALAPPDATA%\cLiMS` (or the folder named by the `CLIMS_DATA` en
 
 ## Settings
 
-Press **`F10`** (or **`Alt+S`**, or click the **⚙** at the top right) for the settings page. It has a tab for each group: **Servers** (the servers you have connected to: `Enter` connects to one now, `u` makes it the one that opens at start, `e` renames it, `d` removes it after asking, `+ Add a server…` opens the connect screen; the server in use cannot be removed), **UI** (cover style for the library lists, the footer and the full-screen cover; the library cover size; the style used where Sixel is not possible; the waveform style and whether it is shown), **Lyrics** (of the server that opens at start), **Cache** and **Startup** (the first tab, and whether to connect at once). `Tab` goes to the next tab, `↑` `↓` select, `←` `→` or `Enter` change, `Esc` closes. Every change is saved as soon as it is made; styles and sizes apply at once, and the rows marked **↻** take effect at the next start.
+Press **`F10`** (or **`Alt+S`**, or click the **☰** at the top right) for the settings page. It has a tab for each group: **Servers** (the servers you have connected to: `Enter` connects to one now, `u` makes it the one that opens at start, `e` renames it, `d` removes it after asking, `+ Add a server…` opens the connect screen; the server in use cannot be removed), **UI** (cover style for the library lists, the footer and the full-screen cover; the library cover size; the style used where Sixel is not possible; the waveform style and whether it is shown), **Lyrics** (of the server that opens at start), **Cache** and **Startup** (the first tab, and whether to connect at once). `Tab` goes to the next tab, `↑` `↓` select, `←` `→` or `Enter` change, `Esc` closes. Every change is saved as soon as it is made; styles and sizes apply at once, and the rows marked **↻** take effect at the next start.
 
 The page edits `settings.json` (in the data folder, indented, safe to edit by hand while cLiMS is not running). Every value is optional; this is the layout with the defaults:
 
@@ -131,12 +131,14 @@ The page edits `settings.json` (in the data folder, indented, safe to edit by ha
       "FullScreen": { "Style": "Sixel" },
       "SixelFallback": "Quadrant"
     },
-    "Waveform": { "Enabled": true, "Style": "Blocks" }
+    "Waveform": { "Enabled": true, "Style": "Blocks" },
+    "Theme": { "Name": "Default", "Colors": {}, "Saved": {} }
   }
 }
 ```
 
 - `Servers` is the list behind the switcher; `Startup.Server` is the UUID (or address) of the one that opens at start, `Startup.View` the first tab (`Library`, `Recent`, `Queue`, `Genres`, `Search`) and `AutoConnect: false` shows the connect screen at every start (an address given with `--lms` or `CLIMS_LMS_URL` still connects at once). The lyrics settings belong to each server.
+- **Theme.** `UI.Theme.Name` is `Default`, `Obsidian`, `Midnight`, `Nord`, `High contrast`, `Light`, `Paper` or `Sunny`; `UI.Theme.Colors` overrides single colours of it, by slot name, as `#RRGGBB`, e.g. `"Colors": { "Accent": "#FF8800", "Bg": "#000000" }`. The slots are `Bg`, `BgHeader`, `BgAlt`, `BgSelected`, `BgSelectedDim`, `Fg`, `FgDim`, `Accent`, `Good`, `Bad`, `Warn`, `HoverBg`, `HoverFg`, `Border`, `Faint`, `Marker` and `Thumb`. Unknown names and bad colours are ignored. The Theme tab of the settings page picks the theme and edits every colour (Enter on a colour, empty text restores the theme's; `p` or a click on the ✎ icon opens a colour picker dialog to fine tune it); changes show at once. *Save theme as…* keeps the theme and your colour changes under a name (`UI.Theme.Saved`: the name → `{ "Base": "Nord", "Colors": { "Accent": "#FF8800" } }`); saved themes are listed after the predefined ones in the picker, so you can try other themes and come back, and *Delete saved theme* removes the one in use.
 - Cover `Style` is `Sixel`, `HalfBlock`, `Quadrant` or `Braille`; `Size` (library and recently added lists only) is `Small` (16x8 cells), `Medium` (24x12) or `Large` (32x16). `SixelFallback` is the style used on terminals without Sixel, or for a cover that is partly out of view. `F3` and `F4` change them for the session only. Waveform `Style` is `Blocks`, `Braille` or `Sixel`; `Enabled: false` hides the waveform and downloads no waveform files.
 - **Older files.** A `settings.json` from before version 0.9.2 (flat keys such as `LmsUrl`, `Waveform` and `CoverCache`) is converted at the first launch: the old file is kept as `settings.v1.json` (`settings.v1.1.json` and so on if that name is taken) and the converted settings are saved as `settings.json`. The backup is never touched again.
 - A wrong value, such as a misspelt style name, makes the whole file unreadable: it is then kept as `settings.v1.json` and the defaults are used, so check the names after editing by hand.
@@ -201,7 +203,7 @@ Press `?` in the app for the same list.
 | `Alt+n` `Alt+p` | Next / previous track (work everywhere, also while typing) |
 | `+` `-` | Volume |
 | `F2` | Connect screen: another server, or a login |
-| `F10` or `Alt+S` | Settings page (or click the ⚙ at the top right); `Esc` closes it |
+| `F10` or `Alt+S` | Settings page (or click the ☰ at the top right); `Esc` closes it |
 | `F5` | Resync the library, or cancel a running sync |
 | `F3` | Cycle the cover style of the lists (of the full-screen cover while it is open): Sixel (default, real pixels), half-block, quadrant, braille. For this session; the defaults are in `UI.Covers` of `settings.json` |
 | `F4` | Cycle the list cover size: 24x12 cells (`Medium`, default), 32x16 (`Large`), 16x8 (`Small`) |
@@ -260,7 +262,7 @@ Done so far (details in [`docs/sprint.md`](docs/sprint.md)):
 | 0.8.0 | Full-screen album view, album context menu, sort label, queue position in the player | Done |
 | 0.9.0 | Genres explorer (tab `5`) with random queues, cover cache on disk, compressed and framework-dependent builds, mouse and resize fixes | Done |
 
-Deferred: player selector, live visualiser, themes and key binding configuration, remembering several servers at once.
+Deferred: player selector, live visualiser, key binding configuration, remembering several servers at once.
 
 ## Releases
 Versions follow [Semantic Versioning](https://semver.org/) (`0.y.z` until 1.0: minor versions may change behaviour). Each release is a git tag `vX.Y.Z` with a GitHub Release holding single-file builds for `win-x64`, `linux-x64` and `osx-arm64` (zip or tar.gz, plus `SHA256SUMS`), each as a self-contained build and a smaller `-framework-dependent` one that needs the .NET 10 runtime. Changes are listed in [`CHANGELOG.md`](CHANGELOG.md). Download from the [Releases page](https://github.com/tanathos/cLiMS/releases); `Clims.Tui --version` prints the version. The builds are not code-signed, so Windows SmartScreen warns on first run, and only Windows Terminal has been tested.

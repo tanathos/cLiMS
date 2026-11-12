@@ -122,6 +122,7 @@ public abstract class PaintView : View
         _blankedNow.Clear();
         _drawnCovers.Clear();
         _wantedCovers.Clear();
+        _probes.Clear();
         try
         {
             Paint();
@@ -191,8 +192,8 @@ public abstract class PaintView : View
         }
 
         var (thumbStart, thumbLength) = Thumb(total, offset, visible, H);
-        var track = new Attribute(Theme.Rgb(52, 57, 70), Theme.Bg);
-        var thumb = new Attribute(Theme.Rgb(150, 158, 176), Theme.Bg);
+        var track = new Attribute(Theme.Border, Theme.Bg);
+        var thumb = new Attribute(Theme.Thumb, Theme.Bg);
         for (var y = 0; y < H; y++)
         {
             var onThumb = y >= thumbStart && y < thumbStart + thumbLength;
@@ -214,7 +215,36 @@ public abstract class PaintView : View
     protected System.Drawing.Point? Pointer { get; private set; }
 
     /// <summary>True when the pointer is on row <paramref name="y"/>, in columns <paramref name="x0"/> (inclusive) to <paramref name="x1"/> (exclusive).</summary>
-    protected bool Over(int x0, int x1, int y) => Pointer is { } p && p.Y == y && p.X >= x0 && p.X < x1;
+    protected bool Over(int x0, int x1, int y)
+    {
+        var over = IsOver(Pointer, x0, x1, y);
+        _probes.Add((x0, x1, y, over));
+        return over;
+    }
+
+    private static bool IsOver(System.Drawing.Point? pointer, int x0, int x1, int y) => pointer is { } p && p.Y == y && p.X >= x0 && p.X < x1;
+
+    /// <summary>The areas asked about with <see cref="Over"/> while painting, and the answers given: a pointer move that changes none of them needs no repaint.</summary>
+    private readonly List<(int X0, int X1, int Y, bool Over)> _probes = new();
+
+    /// <summary>True when moving the pointer to <paramref name="pointer"/> would paint something different (a view that never asks with <see cref="Over"/> is always repainted).</summary>
+    private bool HoverChanged(System.Drawing.Point? pointer)
+    {
+        if (_probes.Count == 0)
+        {
+            return true;
+        }
+
+        foreach (var (x0, x1, y, was) in _probes)
+        {
+            if (IsOver(pointer, x0, x1, y) != was)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static readonly List<WeakReference<PaintView>> s_hoverViews = new();
 
@@ -244,8 +274,12 @@ public abstract class PaintView : View
 
             if (local != view.Pointer)
             {
+                var changed = view.HoverChanged(local);
                 view.Pointer = local;
-                view.OnPointerMoved();
+                if (changed)
+                {
+                    view.OnPointerMoved();
+                }
             }
         }
     }
@@ -452,7 +486,7 @@ public abstract class PaintView : View
     private void DrawPlaceholder(int x, int y, int cols, int rows, bool loading)
     {
         _drawnCovers.Add(new Rect(x, y, cols, rows));
-        var attr = new Attribute(loading ? Theme.FgDim : Theme.Rgb(70, 76, 90), Theme.BgAlt);
+        var attr = new Attribute(loading ? Theme.FgDim : Theme.Faint, Theme.BgAlt);
         for (var r = 0; r < rows; r++)
         {
             FillRow(y + r, x, x + cols, attr);
