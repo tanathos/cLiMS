@@ -25,7 +25,7 @@ public class TagTests
     {
         var letters = TrackTags.All.ToTagArgument()["tags:".Length..];
         Assert.Equal(letters.Length, letters.Distinct().Count());
-        Assert.Equal(19, letters.Length);
+        Assert.Equal(21, letters.Length);
     }
 
     [Fact]

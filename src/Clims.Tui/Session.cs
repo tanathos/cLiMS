@@ -91,10 +91,14 @@ public sealed class Session : IDisposable
         _lmsPlayer = new LmsPlayerController(lms, () => service.Current, new LmsPlayerOptions { PlayerId = playerId ?? server?.PlayerId });
         _lmsPlayer.Notice += CrashLog.Info;
         Player = _lmsPlayer;
+        Online = new OnlineSource(new OnlineApi(lms.Rpc), () => _lmsPlayer.PlayerId);
     }
 
     /// <summary>The catalogue service.</summary>
     public ICatalogService Catalog { get; }
+
+    /// <summary>The server's radios and apps (Spotty, TIDAL…), or null in demo mode.</summary>
+    public OnlineSource? Online { get; }
 
     /// <summary>The player (a fake one in demo mode).</summary>
     public IPlayerController Player { get; }

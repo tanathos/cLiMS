@@ -35,6 +35,12 @@ public interface IPlayerController
     /// <summary>Raised with a message for the user when a command failed.</summary>
     event Action<string>? Notice;
 
+    /// <summary>True while the player picks the next track at random (the server's shuffle mode).</summary>
+    bool Shuffle { get; }
+
+    /// <summary>Switches shuffle on or off.</summary>
+    void ToggleShuffle();
+
     void TogglePlay();
 
     void Next();

@@ -31,6 +31,7 @@ public sealed class MainWindow : Window
     private readonly QueueTab _queue;
     private readonly RecentTab _recent;
     private readonly GenresTab _genres;
+    private readonly OnlineTab _online;
     private readonly WaveformService? _waves;
     private readonly bool _waveformEnabled;
     private readonly LyricsFeed? _lyrics;
@@ -71,7 +72,8 @@ public sealed class MainWindow : Window
         bool waveformEnabled = true,
         StartupView startupView = StartupView.Library,
         SettingsStore? settings = null,
-        string? connectedUrl = null)
+        string? connectedUrl = null,
+        OnlineSource? online = null)
     {
         _waveformEnabled = waveformEnabled;
         _waves = waveformEnabled ? waves : null;
@@ -87,14 +89,15 @@ public sealed class MainWindow : Window
         SetScheme(Theme.Dark);
 
         _header = new HeaderBar(player, () => catalog.Status) { X = 0, Y = 0 };
-        _tabs = new TabStrip("Search", "Library", "Queue", "Recently added", "Genres") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
+        _tabs = new TabStrip("Search", "Library", "Queue", "Recently added", "Genres", "Online") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
 
         _search = new SearchTab();
         _library = new LibraryTab();
         _queue = new QueueTab(player, queues);
         _recent = new RecentTab(recentAlbums ?? ((_, _) => Task.FromResult<IReadOnlyList<int>>(Array.Empty<int>())));
         _genres = new GenresTab();
-        _pages = new View[] { _search, _library, _queue, _recent, _genres };
+        _online = new OnlineTab(online, action => _app.Invoke(action));
+        _pages = new View[] { _search, _library, _queue, _recent, _genres, _online };
         foreach (var page in _pages)
         {
             page.X = 0;
@@ -103,7 +106,7 @@ public sealed class MainWindow : Window
             page.Height = Dim.Fill(FooterView.Rows);
         }
 
-        _footer = new FooterView(player, _waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows, WaveformStyle = waveformStyle };
+        _footer = new FooterView(player, _waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows, WaveformStyle = waveformStyle, ShowVersion = settings?.Current.Ui.ShowVersion ?? true };
         _help.X = 0;
         _help.Y = HeaderBar.Rows + 1;
         _help.Width = Dim.Fill();
@@ -152,7 +155,15 @@ public sealed class MainWindow : Window
         _search.List.ContextRequested += (item, at) => OpenMenu(
             [new MenuEntry("Play", _search.List.ActivateSelected), new MenuEntry("Enqueue", () => _search.List.RequestQueue(QueueAction.Add))],
             at);
+        _footer.SourceName = _info.SourceName = SourceOf;
+        _info.Player = player;
         _footer.CoverClicked += OpenInfo;
+        _footer.StationClicked += () =>
+        {
+            _tabs.Selected = 5;
+            _online.ShowPlayed();
+            FocusPage();
+        };
         _info.CloseRequested += CloseInfo;
 
         _tabs.SelectedChanged += ShowTab;
@@ -241,6 +252,7 @@ public sealed class MainWindow : Window
 
         player.Notice += text => _app.Invoke(() => Notice(text));
         _queue.Notice += Notice;
+        _online.Notice += Notice;
         _genres.Notice += Notice;
         _genres.RandomRequested += OnRandomRequested;
         _genres.ArtistChosen += albumId =>
@@ -287,6 +299,13 @@ public sealed class MainWindow : Window
 
         base.Dispose(disposing);
     }
+
+    /// <summary>True while a radio stream plays: it has no tracks to skip and no position to seek to.</summary>
+    /// <summary>Where a streamed track comes from. Spotty and SpotOn both use Spotify addresses: the app it was played from tells which.</summary>
+    private string? SourceOf(NowPlaying now) =>
+        now.Source == "Spotify" && _online.PlayedApp is { Command: "spotty" or "spoton" } app ? app.Name : now.Source;
+
+    private bool OnRadio => _player.Current?.Station is not null;
 
     private void RequestServerChange()
     {
@@ -345,6 +364,11 @@ public sealed class MainWindow : Window
         if (index == 2)
         {
             _queue.Refresh();
+        }
+
+        if (index == 5)
+        {
+            _online.Show();
         }
 
         if (index == 3)
@@ -451,14 +475,14 @@ public sealed class MainWindow : Window
         var current = _player.Current?.Track.Id;
         var queue = _player.Queue;
         var next = _player.QueueIndex >= 0 && _player.QueueIndex + 1 < queue.Count ? queue[_player.QueueIndex + 1].Track.Id : (int?)null;
-        var signature = $"{current}:{next}";
+        var signature = $"{current}:{next}";   // streams have negative ids: nothing to analyse
         if (signature == _waveSignature)
         {
             return;
         }
 
         _waveSignature = signature;
-        _waves.Want(new[] { current, next }.Where(i => i is not null).Select(i => i!.Value).ToArray());
+        _waves.Want(new[] { current, next }.Where(i => i is > 0).Select(i => i!.Value).ToArray());
     }
 
     private void Notice(string text)
@@ -691,11 +715,11 @@ public sealed class MainWindow : Window
         {
             if (key == Key.N.WithAlt)
             {
-                _player.Next();
+                if (!OnRadio) { _player.Next(); }
             }
             else
             {
-                _player.Previous();
+                if (!OnRadio) { _player.Previous(); }
             }
 
             key.Handled = true;
@@ -761,7 +785,7 @@ public sealed class MainWindow : Window
             }
             else if (key == Key.CursorRight || key == Key.CursorLeft)
             {
-                _player.Seek(TimeSpan.FromSeconds(key == Key.CursorRight ? 10 : -10));
+                if (!OnRadio) { _player.Seek(TimeSpan.FromSeconds(key == Key.CursorRight ? 10 : -10)); }
             }
             else if (c is 'r' or 'R')
             {
@@ -808,6 +832,23 @@ public sealed class MainWindow : Window
             else if (key == Key.Enter)
             {
                 _queue.ConfirmName();
+                key.Handled = true;
+            }
+
+            return;
+        }
+
+        // Typing the text of a search in an app: same, the text field gets every key except Esc and Enter.
+        if (_online.Searching)
+        {
+            if (key == Key.Esc)
+            {
+                _online.CancelSearch();
+                key.Handled = true;
+            }
+            else if (key == Key.Enter)
+            {
+                _online.ConfirmSearch();
                 key.Handled = true;
             }
 
@@ -886,6 +927,12 @@ public sealed class MainWindow : Window
             return;
         }
 
+        if (_tabs.Selected == 5 && _online.List.HasFocus && _online.HandleKey(key))
+        {
+            key.Handled = true;
+            return;
+        }
+
         // Letters are type-ahead in the left list, and a/n mean add / play next in the album pane.
         // Digits switch tabs, except in the middle of typing a name to jump to (a name can start with a digit).
         var typeAhead = (_library.Artists.HasFocus && _library.Artists.Typing) || (_tabs.Selected == 4 && _genres.TypingAhead);
@@ -900,7 +947,7 @@ public sealed class MainWindow : Window
                     return false;
                 });
                 break;
-            case '1' or '2' or '3' or '4' or '5' when !typeAhead:
+            case '1' or '2' or '3' or '4' or '5' or '6' when !typeAhead:
                 if (ch == '4' && _tabs.Selected == 3)
                 {
                     _recent.Refresh(); // pressing 4 on the tab itself asks the server again
@@ -922,11 +969,11 @@ public sealed class MainWindow : Window
                 }
                 else if (key == Key.CursorRight)
                 {
-                    _player.Seek(TimeSpan.FromSeconds(10));
+                    if (!OnRadio) { _player.Seek(TimeSpan.FromSeconds(10)); }
                 }
                 else if (key == Key.CursorLeft)
                 {
-                    _player.Seek(TimeSpan.FromSeconds(-10));
+                    if (!OnRadio) { _player.Seek(TimeSpan.FromSeconds(-10)); }
                 }
                 else if (key == Key.F3)
                 {
@@ -1174,6 +1221,7 @@ public sealed class MainWindow : Window
         SetScheme(Theme.Dark);
         SetNeedsDraw();
         _footer.WaveformStyle = settings.Ui.Waveform.Style;
+        _footer.ShowVersion = settings.Ui.ShowVersion;
         _library.Albums.Relayout();
         _recent.Albums.Relayout();
         // The cover (and a sixel waveform) are the same images in new cells: take them off the screen so they are sent again.
@@ -1208,6 +1256,9 @@ public sealed class MainWindow : Window
                 break;
             case 4:
                 _genres.FocusFirst();
+                break;
+            case 5:
+                _online.List.SetFocus();
                 break;
         }
     }

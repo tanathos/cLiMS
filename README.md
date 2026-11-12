@@ -11,6 +11,7 @@ Browse a large library, search it as you type, see real cover art in the termina
 ## Features
 - **Library** by Album Artist, Genre or Year, with albums, genres in italic, track lists and covers. The left column is resizable, sortable and filterable.
 - **Recently added:** a fourth tab with the albums the server added last, in the Library's layout (covers, track lists), newest first.
+- **Online:** a sixth tab with the radios and apps the server has installed (Spotty, SpotOn, TIDAL, radio directories, anything under the server's Radio and Apps menus). Browse them level by level, search them, and play or queue what you find on your player. The server does the work, so logins and accounts are set up in the server's own plugin settings.
 - **Genres explorer:** a fifth tab. Pick a genre and the next column lists the genres that share at least one track with it; pick again to narrow further (Rock, then Heavy Metal, then Thrash Metal). The artists of the tracks tagged with the whole chain are listed underneath, and a random queue of 25, 50 or 100 of those tracks can replace or join the queue. Needs a resync once: a track can carry several genres, which the sync now reads from the server genre by genre.
 - **Instant search** on every keystroke over a local index (about 2 ms on 20 000 tracks). The server's own search fills in while the index is incomplete.
 - **Real covers** as Sixel images (with half-block, quadrant and braille fallbacks for other terminals).
@@ -144,6 +145,7 @@ The page edits `settings.json` (in the data folder, indented, safe to edit by ha
       "SixelFallback": "Quadrant"
     },
     "Waveform": { "Enabled": true, "Style": "Blocks" },
+    "ShowVersion": true,
     "Theme": { "Name": "Default", "Colors": {}, "Saved": {} }
   }
 }
@@ -151,7 +153,7 @@ The page edits `settings.json` (in the data folder, indented, safe to edit by ha
 
 - `Servers` is the list behind the switcher; `Startup.Server` is the UUID (or address) of the one that opens at start, `Startup.View` the first tab (`Library`, `Recent`, `Queue`, `Genres`, `Search`) and `AutoConnect: false` shows the connect screen at every start (an address given with `--lms` or `CLIMS_LMS_URL` still connects at once). The lyrics settings belong to each server.
 - **Theme.** `UI.Theme.Name` is `Default`, `Obsidian`, `Midnight`, `Nord`, `High contrast`, `Light`, `Paper` or `Sunny`; `UI.Theme.Colors` overrides single colours of it, by slot name, as `#RRGGBB`, e.g. `"Colors": { "Accent": "#FF8800", "Bg": "#000000" }`. The slots are `Bg`, `BgHeader`, `BgAlt`, `BgSelected`, `BgSelectedDim`, `Fg`, `FgDim`, `Accent`, `Good`, `Bad`, `Warn`, `HoverBg`, `HoverFg`, `Border`, `Faint`, `Marker` and `Thumb`. Unknown names and bad colours are ignored. The Theme tab of the settings page picks the theme and edits every colour (Enter on a colour, empty text restores the theme's; `p` or a click on the ✎ icon opens a colour picker dialog to fine tune it); changes show at once. *Save theme as…* keeps the theme and your colour changes under a name (`UI.Theme.Saved`: the name → `{ "Base": "Nord", "Colors": { "Accent": "#FF8800" } }`); saved themes are listed after the predefined ones in the picker, so you can try other themes and come back, and *Delete saved theme* removes the one in use.
-- Cover `Style` is `Sixel`, `HalfBlock`, `Quadrant` or `Braille`; `Size` (library and recently added lists only) is `Small` (16x8 cells), `Medium` (24x12) or `Large` (32x16). `SixelFallback` is the style used on terminals without Sixel, or for a cover that is partly out of view. `F3` and `F4` change them for the session only. Waveform `Style` is `Blocks`, `Braille` or `Sixel`; `Enabled: false` hides the waveform and downloads no waveform files.
+- Cover `Style` is `Sixel`, `HalfBlock`, `Quadrant` or `Braille`; `Size` (library and recently added lists only) is `Small` (16x8 cells), `Medium` (24x12) or `Large` (32x16). `SixelFallback` is the style used on terminals without Sixel, or for a cover that is partly out of view. `F3` and `F4` change them for the session only. Waveform `Style` is `Blocks`, `Braille` or `Sixel`; `Enabled: false` hides the waveform and downloads no waveform files. `UI.ShowVersion: false` hides the faint version number under the volume bar (also a switch on the UI page of the settings).
 - **Older files.** A `settings.json` from before version 0.9.2 (flat keys such as `LmsUrl`, `Waveform` and `CoverCache`) is converted at the first launch: the old file is kept as `settings.v1.json` (`settings.v1.1.json` and so on if that name is taken) and the converted settings are saved as `settings.json`. The backup is never touched again.
 - A wrong value, such as a misspelt style name, makes the whole file unreadable: it is then kept as `settings.v1.json` and the defaults are used, so check the names after editing by hand.
 
@@ -200,7 +202,7 @@ Press `?` in the app for the same list.
 | Key | Action |
 |---|---|
 | `/` | Focus the search box (typing switches to the Search tab and searches at once; `Esc` clears and returns to the previous tab, `Enter`/`Down` jumps to results) |
-| `1` `2` `3` `4` `5` | Search / Library / Queue / Recently added / Genres tab (click the tab strip too; `4` on the tab again asks the server for the newest albums) |
+| `1` `2` `3` `4` `5` `6` | Search / Library / Queue / Recently added / Genres / Online tab (click the tab strip too; `4` on the tab again asks the server for the newest albums) |
 | `Tab` | Move focus between panes |
 | letters | Type-ahead in the left list (artist, genre or year) |
 | `F6` | Switch the left list: Album Artist / Genre / Year (or click the ≡ icon in its header); click the ▾/▴ arrow to sort ascending/descending; drag the divider to resize the column (22 characters to half the screen); the ⌕ next to "All ..." (or `Ctrl+F`) turns that row into a filter field, `x` or `Esc` closes it |
@@ -209,6 +211,7 @@ Press `?` in the app for the same list.
 | `a` / `n` | Add the highlighted track to the end of the queue / play it next (gapless); `A` / `N` do the same for the whole album |
 | Recently added tab | The Library's album list (same keys: `Enter` plays, `a` / `n` and `A` / `N` queue) with only the newest 50 albums, newest first |
 | Genres tab | `Up` `Down` pick a genre, `Enter` or `Right` go to the next column of genres that share a track with it, `Left` or `Backspace` back, `Ctrl+F` filter the active column, `Esc` clear; `Alt+R` random queue that replaces the queue (asks first), `Alt+Q` random queue appended, `[` `]` queue size 25 / 50 / 100 |
+| Online tab | `Enter` open a radio, app, folder or search box, or play what is playable (replaces the queue); `o` open something that is also playable, `a` add it, `n` play it next; in a list of tracks (a playlist, Liked Songs…) `A` adds all of them to the queue, `Alt+A` replaces the queue with them and starts playing (click *shuffle* in the footer first for a random order); `Esc` or `Backspace` up one level, `r` ask the server again |
 | Queue tab | `Enter` play that entry, `x` or `Delete` remove, `X` remove everything after the selected entry, `Shift+Up/Down` move, `c` clear (asks), `s` save under a name, `o` saved queues (`Enter` replace after asking, `a` append, `x` delete, `Esc` back) |
 | `Space` | Play / pause |
 | `Left` `Right` | Seek -10 s / +10 s |

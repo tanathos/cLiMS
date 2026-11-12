@@ -14,8 +14,8 @@ public sealed class QueueTab : View
 {
     private readonly IPlayerController _player;
     private readonly SavedQueueStore _store;
-    private readonly NameBar _nameBar;
-    private readonly Legend _legend;
+    private readonly PromptBar _nameBar;
+    private readonly KeyLegend _legend;
     private bool _showSaved;
     private string _signature = "";
 
@@ -28,8 +28,8 @@ public sealed class QueueTab : View
         Height = Dim.Fill();
 
         List = new RowList { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(1) };
-        _nameBar = new NameBar { X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1, Visible = false };
-        _legend = new Legend { X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1 };
+        _nameBar = new PromptBar { Prompt = "Save queue as:",  X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1, Visible = false };
+        _legend = new KeyLegend { X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1 };
         Add(List, _legend, _nameBar);
         List.RowActivated += OnActivated;
         Rebuild(force: true);
@@ -321,55 +321,4 @@ public sealed class QueueTab : View
 
     private static string Format(TimeSpan t) =>
         t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes:00}:{t.Seconds:00}";
-
-    /// <summary>The keys of the tab on its last row: "key label" pairs separated by a centred dot.</summary>
-    private sealed class Legend : PaintView
-    {
-        private IReadOnlyList<(string Key, string Label)> _items = [];
-
-        public IReadOnlyList<(string Key, string Label)> Items
-        {
-            get => _items;
-            set
-            {
-                _items = value;
-                SetNeedsDraw();
-            }
-        }
-
-        protected override void Paint()
-        {
-            var x = 1;
-            var key = new Attribute(Theme.Accent, Theme.Bg);
-            var label = new Attribute(Theme.FgDim, Theme.Bg);
-            for (var i = 0; i < _items.Count; i++)
-            {
-                if (i > 0)
-                {
-                    x = Put(x, 0, " · ", label);
-                }
-
-                x = Put(x, 0, _items[i].Key + " ", key);
-                x = Put(x, 0, _items[i].Label, label);
-            }
-        }
-    }
-
-    /// <summary>"Save queue as:" and a text field, on the last row of the tab.</summary>
-    private sealed class NameBar : View
-    {
-        public NameBar()
-        {
-            CanFocus = true;
-            Field = new TextField { X = 18, Y = 0, Width = 40, Height = 1 };
-            Add(new Caption { X = 1, Y = 0, Width = 17, Height = 1 }, Field);
-        }
-
-        public TextField Field { get; }
-
-        private sealed class Caption : PaintView
-        {
-            protected override void Paint() => Put(0, 0, "Save queue as:", Theme.Heading);
-        }
-    }
 }

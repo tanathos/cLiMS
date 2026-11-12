@@ -3,6 +3,17 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- An Online tab (`6`) for the radios and apps the server has installed: Spotty, SpotOn, TIDAL, radio directories and any other plugin of the server's Radio and Apps menus. Browse each one level by level, search where the plugin has a search box, and play (`Enter`), add (`a`) or play next (`n`) what you find. Streams in the footer: a radio shows "Station · Artist · Title" (the station is a link back to where it was chosen in the Online tab) with the station's cover when it has one, and any stream shows "Waveform not available" instead of trying to analyse it.
+- Online tab, in a list of tracks: `A` adds all of them to the queue, `Alt+A` replaces the queue with them and starts playing. Every page of the list is read first, not only the lines shown. The list is first tried as a whole folder in one command (when the server queues it all, it is instant) and otherwise queued track by track.
+- A *shuffle* switch after the last transport button of the footer (the server's shuffle mode: the next track is picked at random; lit in the accent colour while on).
+- Full-screen album view: only Esc closes it now (a click no longer does); the progress bars reach the right edge with the total time right-aligned, and a click on it switches to the minus time remaining; the playback controls, shuffle included, sit centred under the progress bars.
+- The queue view reads up to 5 000 tracks instead of 500.
+- Online tab: "Load more…" no longer scrolls the list back to the top; the selection moves to the first new line.
+- The version number shows very faint under the volume bar, right-aligned. The "Version number" switch on the UI page of the settings (`UI.ShowVersion`) hides it.
+- A track streamed from Spotty, SpotOn, TIDAL or another service shows "[From SpotOn]" in front of the artist, in the footer and in the full-screen album view.
+
 ## [0.9.2] - 2026-11-12
 
 ### Added

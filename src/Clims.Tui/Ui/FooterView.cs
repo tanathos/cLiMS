@@ -47,18 +47,47 @@ public sealed class FooterView : PaintView
 
     public bool ShowWaveform { get; set; } = true;
 
+    /// <summary>True: the version number, very faint, right-aligned under the volume bar.</summary>
+    public bool ShowVersion { get; set; } = true;
+
+    private static readonly string VersionText = ReadVersion();
+
+    private static string ReadVersion()
+    {
+        var v = typeof(FooterView).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "";
+        var plus = v.IndexOf('+');
+        v = plus >= 0 ? v[..plus] : v;
+        return v.Length == 0 ? "" : "v" + v;
+    }
+
+    /// <summary>Draws the version on the hint row, ending where the volume percentage ends; returns the column the hint must stop before.</summary>
+    private int PaintVersion(int minX)
+    {
+        var text = VersionText;
+        var x = W - 2 - text.Length;   // the last character sits under the "%" of the volume reading
+        if (!ShowVersion || text.Length == 0 || x < minX + 20)
+        {
+            return W - 1;
+        }
+
+        Put(x, 5, text, new Attribute(Theme.Faint, Theme.Bg));
+        return x - 2;
+    }
+
     protected override void Paint()
     {
         _buttons.Clear();
         _wave = (0, 0);
         _still = null;
-        const string hint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-5 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
+        const string hint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-6 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
         if (_player.Current is not { } now)
         {
             _seek = _totalBox = (0, 0);
             Put(1, 0, Clip(_player.Problem ?? "Nothing playing", W - 2), _player.Problem is null ? Theme.Dim : new Attribute(Theme.Warn, Theme.Bg));
             PaintControls(1);
-            Put(1, 5, Clip(hint, W - 2), Theme.Dim);
+            Put(1, 5, Clip(hint, PaintVersion(1) - 1), Theme.Dim);
             return;
         }
 
@@ -73,9 +102,22 @@ public sealed class FooterView : PaintView
             x0 = CoverCols + 2;
         }
 
-        PaintTitle(now, x0, W - x0 - 2);
+        if (now.Station is not null)
+        {
+            PaintStationTitle(now, x0, W - x0 - 2);
+        }
+        else
+        {
+            _stationBox = (0, 0);
+            PaintTitle(now, x0, W - x0 - 2);
+        }
 
-        if (ShowWaveform)
+        if (ShowWaveform && now.IsRemote)
+        {
+            // A stream is not a file the server can analyse: say so instead of waiting for an analysis that never comes.
+            Put(x0, 2, Clip("Waveform not available", W - x0 - 2), Theme.Dim);
+        }
+        else if (ShowWaveform)
         {
             if (ShowSpectrum)
             {
@@ -88,7 +130,7 @@ public sealed class FooterView : PaintView
         }
 
         PaintControls(x0);
-        Put(x0, 5, Clip(hint, W - x0 - 1), Theme.Dim);
+        Put(x0, 5, Clip(hint, PaintVersion(x0) - x0), Theme.Dim);
     }
 
     /// <summary>The user clicked the cover: show the playing album full screen.</summary>
@@ -103,6 +145,44 @@ public sealed class FooterView : PaintView
     private (int X0, int X1) _artistBox;
     private (int X0, int X1) _albumBox;
 
+    /// <summary>The user clicked the station name of a radio stream: show where it was chosen in the Online tab.</summary>
+    public event Action? StationClicked;
+
+    private (int X0, int X1) _stationBox;
+
+    /// <summary>The name to show for where a streamed track comes from (the window knows which app it was played from); null: no tag.</summary>
+    public Func<NowPlaying, string?>? SourceName { get; set; }
+
+    /// <summary>"station · artist · title" for a radio stream; only the station is a link.</summary>
+    private void PaintStationTitle(NowPlaying now, int x, int width)
+    {
+        const string sep = "  ·  ";
+        var link = new Attribute(Theme.Fg, Theme.Bg, TextStyle.Underline);
+        var linkHover = new Attribute(Theme.HoverFg, Theme.Bg, TextStyle.Underline);
+        var end = x + width;
+        _artistBox = _albumBox = (0, 0);
+        var s = Clip(now.Station!, Math.Max(0, end - x));
+        var cx = Put(x, 1, s, Over(x, x + s.Length, 1) ? linkHover : link);
+        _stationBox = (x, cx);
+        if (cx >= end)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(now.Track.Artist))
+        {
+            cx = Put(cx, 1, Clip(sep, end - cx), Theme.Dim);
+            cx = Put(cx, 1, Clip(now.Track.Artist, Math.Max(0, end - cx)), Theme.Normal);
+            if (cx >= end)
+            {
+                return;
+            }
+        }
+
+        cx = Put(cx, 1, Clip(sep, end - cx), Theme.Dim);
+        Put(cx, 1, Clip(now.Track.Title, Math.Max(0, end - cx)), new Attribute(Theme.Fg, Theme.Bg, TextStyle.Bold));
+    }
+
     /// <summary>"artist · album · track"; artist and album are links (underlined, clickable).</summary>
     private void PaintTitle(NowPlaying now, int x, int width)
     {
@@ -114,6 +194,11 @@ public sealed class FooterView : PaintView
 
         _artistBox = _albumBox = (0, 0);
         var cx = x;
+        if (SourceName?.Invoke(now) is { Length: > 0 } source)
+        {
+            cx = Put(cx, 1, Clip($"[From {source}] ", Math.Max(0, end - cx)), Theme.Dim);
+        }
+
         var s = Clip(artist, Math.Max(0, end - cx));
         var next = Put(cx, 1, s, Over(cx, cx + s.Length, 1) ? linkHover : link);
         _artistBox = (cx, next);
@@ -375,14 +460,20 @@ public sealed class FooterView : PaintView
     private void PaintControls(int x0)
     {
         var x = x0;
-        x = Button(x, 4, "|◀ prev", _player.Previous);
-        x = Button(x + 2, 4, "◀◀ -10s", () => _player.Seek(TimeSpan.FromSeconds(-10)));
+        var live = _player.Current?.Station is null;   // a radio stream cannot skip or seek
+        x = Button(x, 4, "|◀ prev", _player.Previous, live);
+        x = Button(x + 2, 4, "◀◀ -10s", () => _player.Seek(TimeSpan.FromSeconds(-10)), live);
         x = Button(x + 2, 4, _player.IsPlaying ? "❚❚ pause" : "▶ play", _player.TogglePlay);
-        x = Button(x + 2, 4, "+10s ▶▶", () => _player.Seek(TimeSpan.FromSeconds(10)));
-        Button(x + 2, 4, "next ▶|", _player.Next);
+        x = Button(x + 2, 4, "+10s ▶▶", () => _player.Seek(TimeSpan.FromSeconds(10)), live);
+        x = Button(x + 2, 4, "next ▶|", _player.Next, live);
 
         const int barWidth = 20;
         var vx = W - barWidth - 10;
+        if (x + 2 + "[ ⇄ shuffle ]".Length < vx - 1)
+        {
+            x = Button(x + 2, 4, "⇄ shuffle", _player.ToggleShuffle, active: _player.Shuffle);
+        }
+
         if (vx > x + 4)
         {
             Put(vx, 4, "🔊", Theme.Dim);
@@ -399,10 +490,16 @@ public sealed class FooterView : PaintView
         }
     }
 
-    private int Button(int x, int y, string label, Action run)
+    /// <param name="active">A switch that is on: drawn in the accent colour.</param>
+    private int Button(int x, int y, string label, Action run, bool enabled = true, bool active = false)
     {
         var text = $"[ {label} ]";
-        var end = Put(x, y, text, Over(x, x + text.Length, y) ? Theme.Hover : new Attribute(Theme.Fg, Theme.BgAlt));
+        if (!enabled)
+        {
+            return Put(x, y, text, new Attribute(Theme.Faint, Theme.BgAlt));
+        }
+
+        var end = Put(x, y, text, Over(x, x + text.Length, y) ? Theme.Hover : new Attribute(active ? Theme.Accent : Theme.Fg, Theme.BgAlt));
         _buttons.Add((x, end, run));
         return end;
     }
@@ -418,6 +515,12 @@ public sealed class FooterView : PaintView
         if (ShowCover && p.X < CoverCols && mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && _player.Current is not null)
         {
             CoverClicked?.Invoke();
+            return true;
+        }
+
+        if (p.Y == 1 && mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && p.X >= _stationBox.X0 && p.X < _stationBox.X1 && _player.Current?.Station is not null)
+        {
+            StationClicked?.Invoke();
             return true;
         }
 

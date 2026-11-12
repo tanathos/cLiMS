@@ -60,6 +60,7 @@ public static class SettingsPages
         SettingItems.Choice("Where Sixel is not possible", s => s.Ui.Covers.SixelFallback, (s, v) => Covers(s, c => c with { SixelFallback = v }), Fallbacks, "terminals without Sixel, covers partly out of view"),
         SettingItems.Choice("Waveform style", s => s.Ui.Waveform.Style, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Style = v } } }, Waveforms, "clicking the waveform changes it too"),
         SettingItems.Toggle("Waveform", s => s.Ui.Waveform.Enabled, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Enabled = v } } }, "off: none shown, none downloaded", restart: true),
+        SettingItems.Toggle("Version number", s => s.Ui.ShowVersion, (s, v) => s with { Ui = s.Ui with { ShowVersion = v } }, "faint, under the volume bar"),
     ];
 
     private static List<SettingItem> ThemeRows(UserSettings settings)

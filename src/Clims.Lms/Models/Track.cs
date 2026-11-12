@@ -24,6 +24,8 @@ namespace Clims.Lms;
 /// <param name="SampleSize">Bits per sample.</param>
 /// <param name="IsLossless">True for lossless formats such as FLAC.</param>
 /// <param name="IsCompilation">True when the track belongs to a compilation.</param>
+/// <param name="IsRemote">True for a stream that is not a file of the library (radio, Spotify, TIDAL…).</param>
+/// <param name="RemoteTitle">For a radio stream, the name of the station.</param>
 public sealed record Track(
     int Id,
     string Title,
@@ -44,7 +46,9 @@ public sealed record Track(
     int? SampleRate,
     int? SampleSize,
     bool? IsLossless,
-    bool? IsCompilation)
+    bool? IsCompilation,
+    bool IsRemote = false,
+    string? RemoteTitle = null)
 {
     internal static Track From(JsonElement e) =>
         new(
@@ -61,13 +65,24 @@ public sealed record Track(
             e.GetStringOrNull("url"),
             e.GetStringOrNull("genre"),
             e.GetIntOrNull("genre_id"),
-            e.GetStringOrNull("artwork_track_id"),
+            e.GetStringOrNull("artwork_track_id") ?? (LooksRemote(e) ? RemoteArtwork(e.GetStringOrNull("artwork_url")) : null),
             e.GetStringOrNull("coverid"),
             e.GetStringOrNull("bitrate"),
             e.GetIntOrNull("samplerate"),
             e.GetIntOrNull("samplesize"),
             e.TryGet("lossless", out _) ? e.GetBool("lossless") : null,
-            e.TryGet("compilation", out _) ? e.GetBool("compilation") : null);
+            e.TryGet("compilation", out _) ? e.GetBool("compilation") : null,
+            LooksRemote(e),
+            e.GetStringOrNull("remote_title"));
+
+    /// <summary>Streams are flagged <c>remote</c> (when asked for) and have negative ids.</summary>
+    private static bool LooksRemote(JsonElement e) => e.GetBool("remote") || e.GetInt("id") < 0;
+
+    /// <summary>A stream's artwork as a path on the server itself (the server fetches and passes on the image): absolute addresses go through its image proxy.</summary>
+    private static string? RemoteArtwork(string? address) =>
+        string.IsNullOrWhiteSpace(address) ? null
+        : address.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? "/imageproxy/" + Uri.EscapeDataString(address) + "/image.png"
+        : address.StartsWith('/') ? address : "/" + address;
 
     /// <summary>
     /// Builds a track from <c>songinfo</c>, which returns one single-property object per field in

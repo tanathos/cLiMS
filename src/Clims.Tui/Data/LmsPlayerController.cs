@@ -15,7 +15,7 @@ public sealed class LmsPlayerController : IPlayerController, IDisposable
 {
     private static readonly TrackTags QueueTags =
         TrackTags.Artist | TrackTags.ArtistId | TrackTags.Album | TrackTags.AlbumId | TrackTags.TrackNumber | TrackTags.Disc
-        | TrackTags.Duration | TrackTags.Url | TrackTags.ArtworkTrackId | TrackTags.Year;
+        | TrackTags.Duration | TrackTags.Url | TrackTags.ArtworkTrackId | TrackTags.ArtworkUrl | TrackTags.Remote | TrackTags.Year;
 
     private readonly ILmsClient _client;
     private readonly Func<Clims.Catalog.Catalog?> _catalog;
@@ -87,6 +87,26 @@ public sealed class LmsPlayerController : IPlayerController, IDisposable
                 return _status?.Mode == PlayMode.Play;
             }
         }
+    }
+
+    /// <inheritdoc />
+    public bool Shuffle
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _status is { Shuffle: not ShuffleMode.Off };
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public void ToggleShuffle()
+    {
+        var mode = Shuffle ? ShuffleMode.Off : ShuffleMode.Tracks;
+        Edit(s => s with { Shuffle = mode });
+        Do("Shuffle", (id, ct) => _client.Player.SetShuffleAsync(id, mode, ct));
     }
 
     /// <inheritdoc />
@@ -601,7 +621,7 @@ public sealed class LmsPlayerController : IPlayerController, IDisposable
                 _status = status;
                 _name = string.IsNullOrEmpty(status.Name) ? _name : status.Name;
                 _queue = queue;
-                _current = status.CurrentTrack is { } t ? new NowPlaying(AlbumOf(t), ToTrack(t)) : null;
+                _current = status.CurrentTrack is { } t ? new NowPlaying(AlbumOf(t), ToTrack(t), t.IsRemote, StationOf(t), t.IsRemote ? StreamSource.NameOf(t.Url) : null) : null;
                 _connected = status.IsConnected;
                 _problem = status.IsConnected ? null : $"{_name} is not connected to the server.";
             }
@@ -648,6 +668,9 @@ public sealed class LmsPlayerController : IPlayerController, IDisposable
 
         return true;
     }
+
+    /// <summary>The station of a radio stream (a remote track with no album), else null.</summary>
+    private static string? StationOf(Track t) => t.IsRemote && string.IsNullOrEmpty(t.Album) ? (string.IsNullOrWhiteSpace(t.RemoteTitle) ? "Radio" : t.RemoteTitle.Trim()) : null;
 
     private QueueEntry ToEntry(int index, Track t) => new(index, ToTrack(t), AlbumOf(t));
 

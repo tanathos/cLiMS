@@ -36,6 +36,14 @@ public sealed class FakePlayer : IPlayerController
 
     public event Action<string>? Notice;
 
+    public bool Shuffle { get; private set; }
+
+    public void ToggleShuffle()
+    {
+        Shuffle = !Shuffle;
+        Changed?.Invoke();
+    }
+
     public void TogglePlay()
     {
         if (Current is null)

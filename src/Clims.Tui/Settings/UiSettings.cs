@@ -8,4 +8,7 @@ public sealed record UiSettings
     public WaveformSettings Waveform { get; init; } = new();
 
     public ThemeSettings Theme { get; init; } = new();
+
+    /// <summary>False: no version number under the volume bar.</summary>
+    public bool ShowVersion { get; init; } = true;
 }

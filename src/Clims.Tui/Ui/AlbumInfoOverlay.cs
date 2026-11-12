@@ -9,7 +9,7 @@ namespace Clims.Tui.Ui;
 
 /// <summary>
 /// Full-screen view of the playing album, opened by a click on the player's cover: the cover on the left, and on the
-/// right the artist, album title, genres, runtime and file format. Any key or click closes it.
+/// right the artist, album title, genres, runtime and file format, the lyrics, the progress bars and the playback controls. Esc closes it.
 /// </summary>
 public sealed class AlbumInfoOverlay : PaintView
 {
@@ -29,6 +29,19 @@ public sealed class AlbumInfoOverlay : PaintView
     private IReadOnlyList<TimeSpan> _queue = [];
     private int _queueIndex;
     private int _shownSecond = -1;
+    private bool _countdown;
+    private (int X0, int X1, int Y) _trackBar;
+    private (bool? Playing, bool? Shuffle, bool Live) _controlState;
+    private readonly List<(int X0, int X1, int Y, Action Run)> _buttons = [];
+    private readonly List<(int X0, int X1, int Y)> _totals = [];
+
+    /// <summary>The player the controls under the progress bar drive; without one they are not shown.</summary>
+    public Data.IPlayerController? Player { get; set; }
+
+    protected override bool TracksHover => true;
+
+    /// <summary>The name to show for where a streamed track comes from; null: no tag.</summary>
+    public Func<NowPlaying, string?>? SourceName { get; set; }
 
     public AlbumInfoOverlay()
     {
@@ -128,7 +141,7 @@ public sealed class AlbumInfoOverlay : PaintView
 
         var x = left + cols + 5;
         var width = W - x - 3;
-        var hint = "Esc or click to close";
+        var hint = "Esc close";
         if (_lyrics is { Instrumental: false })
         {
             hint += "  ·  ↑↓ scroll" + (_lyrics.IsSynced ? "  ·  [ ] timing" : "") + "  ·  R search again";
@@ -154,7 +167,9 @@ public sealed class AlbumInfoOverlay : PaintView
         var artist = album.ArtistName.Length > 0 ? album.ArtistName : now.Track.Artist ?? "";
         // Anchored to the top of the cover: the lyrics take the rest of the column below.
         var y0 = top;
-        Put(x, y0, Clip(artist, width), new Attribute(Theme.Accent, Theme.Bg));
+        var from = SourceName?.Invoke(now) is { Length: > 0 } source ? $"[From {source}] " : "";
+        var artistX = Put(x, y0, Clip(from, width), dim);
+        Put(artistX, y0, Clip(artist, Math.Max(0, width - from.Length)), new Attribute(Theme.Accent, Theme.Bg));
         var yearText = album.Year > 0 ? "  " + album.Year.ToString(CultureInfo.InvariantCulture) : "";
         var titleEnd = Put(x, y0 + 1, Clip(album.Title, width - yearText.Length), new Attribute(Theme.Fg, Theme.Bg, TextStyle.Bold));
         Put(titleEnd, y0 + 1, yearText, dim);
@@ -186,23 +201,82 @@ public sealed class AlbumInfoOverlay : PaintView
             Put(cx, line, lossless ? "  lossless" : "  lossy", dim);
         }
 
-        // Progress bars sit just above the hint, one empty row between: the playlist's (when there is one) under the track's.
+        // From the bottom: the hint, an empty row, the playback controls, then the progress bars (the playlist's, when there is one, above the track's).
+        _buttons.Clear();
+        _totals.Clear();
         var multi = _queue.Count > 1;
-        var barsTop = H - (multi ? 5 : 4);
+        var barsTop = H - (multi ? 6 : 5);
         if (multi)
         {
-            PaintQueueBar(x, barsTop, width);
+            PaintQueueBar(x, barsTop, width, now.Track.Duration);
         }
 
         PaintTrackBar(x, barsTop + (multi ? 1 : 0), width, now.Track.Duration);
+        PaintControls(x, barsTop + (multi ? 2 : 1), width);
         PaintLyrics(x, y0 + 9, y0 + 10, barsTop - 2, width);
     }
 
-    private const int TimeW = 8;
+    /// <summary>Widths of the fields left (played time) and right (total or remaining time) of the bars, the same for both bars so they line up.</summary>
+    private (int Left, int Right) Fields(TimeSpan trackLength)
+    {
+        var longest = FormatTime(trackLength).Length;
+        if (_queue.Count > 1)
+        {
+            longest = Math.Max(longest, FormatTime(TimeSpan.FromTicks(_queue.Sum(d => d.Ticks))).Length);
+        }
+
+        return (longest + 1, longest + 2);   // room for a space, and on the right for the "-" of the countdown
+    }
+
+    /// <summary>The time at the right end of a bar: the total, or with the countdown on the minus time that is left. Right-aligned; a click on it switches.</summary>
+    private void PaintRightTime(int x, int y, int width, TimeSpan total, TimeSpan done)
+    {
+        var text = _countdown ? "-" + FormatTime(total - done > TimeSpan.Zero ? total - done : TimeSpan.Zero) : FormatTime(total);
+        var start = x + width - text.Length;
+        Put(start, y, text, Over(start, start + text.Length, y) ? Theme.Hover : new Attribute(Theme.FgDim, Theme.Bg));
+        _totals.Add((start, start + text.Length, y));
+    }
+
+    private void PaintControls(int x, int y, int width)
+    {
+        if (Player is not { } player)
+        {
+            return;
+        }
+
+        var live = player.Current?.Station is null;   // a radio stream cannot skip or seek
+        var items = new (string Label, Action Run, bool Enabled, bool Active)[]
+        {
+            ("|◀", player.Previous, live, false),
+            ("◀◀", () => player.Seek(TimeSpan.FromSeconds(-10)), live, false),
+            (player.IsPlaying ? "❚❚" : "▶", player.TogglePlay, true, false),
+            ("▶▶", () => player.Seek(TimeSpan.FromSeconds(10)), live, false),
+            ("▶|", player.Next, live, false),
+            ("⇄", player.ToggleShuffle, true, player.Shuffle),
+        };
+        var total = items.Sum(i => i.Label.Length + 4) + 2 * (items.Length - 1);
+        var cx = x + Math.Max(0, (width - total) / 2);
+        foreach (var (label, run, enabled, active) in items)
+        {
+            var text = $"[ {label} ]";
+            if (!enabled)
+            {
+                Put(cx, y, text, new Attribute(Theme.Faint, Theme.BgAlt));
+            }
+            else
+            {
+                Put(cx, y, text, Over(cx, cx + text.Length, y) ? Theme.Hover : new Attribute(active ? Theme.Accent : Theme.Fg, Theme.BgAlt));
+                _buttons.Add((cx, cx + text.Length, y, run));
+            }
+
+            cx += text.Length + 2;
+        }
+    }
 
     private void PaintTrackBar(int x, int y, int width, TimeSpan length)
     {
-        var barW = width - 2 * TimeW;
+        var (leftW, rightW) = Fields(length);
+        var barW = width - leftW - rightW;
         if (barW < 4)
         {
             return;
@@ -211,14 +285,34 @@ public sealed class AlbumInfoOverlay : PaintView
         var shown = length > TimeSpan.Zero && _elapsed > length ? length : _elapsed;
         var sections = Sections([length], barW);
         var filled = sections.Count > 0 && length > TimeSpan.Zero ? sections[0].End * shown.TotalSeconds / length.TotalSeconds : 0;
-        Put(x, y, FormatTime(shown).PadRight(TimeW), new Attribute(Theme.Fg, Theme.Bg));
-        DrawBar(x + TimeW, y, barW, filled, sections);
-        Put(x + TimeW + barW + 1, y, FormatTime(length), new Attribute(Theme.FgDim, Theme.Bg));
+        Put(x, y, FormatTime(shown).PadRight(leftW), new Attribute(Theme.Fg, Theme.Bg));
+        DrawBar(x + leftW, y, barW, filled, sections);
+
+        // Pointing past the playhead: the stretch a click would skip is drawn in a faint accent, as in the footer.
+        var barX = x + leftW;
+        var hover = -1;
+        for (var c = (int)Math.Ceiling(filled / 2); c < barW; c++)
+        {
+            if (Over(barX + c, barX + c + 1, y))
+            {
+                hover = c;
+            }
+        }
+
+        if (hover >= 0)
+        {
+            var from = (int)Math.Ceiling(filled / 2);
+            Put(barX + from, y, new string('━', hover - from + 1), new Attribute(Theme.Mix(Theme.Accent, Theme.Bg, 0.5), Theme.Bg));
+        }
+
+        _trackBar = length > TimeSpan.Zero ? (barX, barX + barW, y) : (0, 0, 0);
+        PaintRightTime(x, y, width, length, shown);
     }
 
-    private void PaintQueueBar(int x, int y, int width)
+    private void PaintQueueBar(int x, int y, int width, TimeSpan trackLength)
     {
-        var barW = width - 2 * TimeW;
+        var (leftW, rightW) = Fields(trackLength);
+        var barW = width - leftW - rightW;
         var total = TimeSpan.FromTicks(_queue.Sum(d => d.Ticks));
         if (barW < 4 || total <= TimeSpan.Zero)
         {
@@ -237,9 +331,9 @@ public sealed class AlbumInfoOverlay : PaintView
             filled = start + (length > 0 ? Math.Min(1.0, _elapsed.TotalSeconds / length) : 0) * (end - start);
         }
 
-        Put(x, y, FormatTime(done).PadRight(TimeW), new Attribute(Theme.Fg, Theme.Bg));
-        DrawBar(x + TimeW, y, barW, filled, sections);
-        Put(x + TimeW + barW + 1, y, FormatTime(total), new Attribute(Theme.FgDim, Theme.Bg));
+        Put(x, y, FormatTime(done).PadRight(leftW), new Attribute(Theme.Fg, Theme.Bg));
+        DrawBar(x + leftW, y, barW, filled, sections);
+        PaintRightTime(x, y, width, total, done);
     }
 
     /// <summary>Draws the sections as heavy lines with blank gaps between them; <paramref name="filled"/> is the playhead in half cells.</summary>
@@ -429,10 +523,12 @@ public sealed class AlbumInfoOverlay : PaintView
     {
         _elapsed = elapsed;
         var second = (int)elapsed.TotalSeconds;
-        if (second != _shownSecond)
+        var controls = (Player?.IsPlaying, Player?.Shuffle, Player?.Current?.Station is null);
+        if (second != _shownSecond || controls != _controlState)
         {
             _shownSecond = second;
-            SetNeedsDraw(); // the progress bars
+            _controlState = controls;
+            SetNeedsDraw(); // the progress bars and the controls
         }
 
         if (_lyrics is not { IsSynced: true } lyrics)
@@ -496,7 +592,7 @@ public sealed class AlbumInfoOverlay : PaintView
     protected override bool OnKeyDown(Key key)
     {
         // Volume, seek and the like stay with the main window; this view only closes.
-        if (key == Key.Esc || key == Key.Enter || key.AsRune.Value is 'q' or 'Q')
+        if (key == Key.Esc)
         {
             CloseRequested?.Invoke();
             return true;
@@ -513,9 +609,23 @@ public sealed class AlbumInfoOverlay : PaintView
             return true;
         }
 
-        if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked))
+        if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && mouse.Position is { } p)
         {
-            CloseRequested?.Invoke();
+            // A click no longer closes the view (Esc does): it presses a control or switches the time to a countdown.
+            if (_buttons.FirstOrDefault(b => b.Y == p.Y && p.X >= b.X0 && p.X < b.X1) is { Run: { } run })
+            {
+                run();
+            }
+            else if (Player is { Current.Station: null } seekable && _trackBar.X1 > _trackBar.X0 && p.Y == _trackBar.Y && p.X >= _trackBar.X0 && p.X < _trackBar.X1)
+            {
+                seekable.SeekTo((p.X - _trackBar.X0 + 0.5) / (_trackBar.X1 - _trackBar.X0));
+            }
+            else if (_totals.Any(t => t.Y == p.Y && p.X >= t.X0 && p.X < t.X1))
+            {
+                _countdown = !_countdown;
+                SetNeedsDraw();
+            }
+
             return true;
         }
 

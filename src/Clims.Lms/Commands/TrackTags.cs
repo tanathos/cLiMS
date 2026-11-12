@@ -64,9 +64,15 @@ public enum TrackTags
     /// <summary>Compilation flag (<c>C</c>).</summary>
     Compilation = 1 << 18,
 
+    /// <summary>Artwork address of a track that is not in the library, such as a radio stream (<c>K</c>).</summary>
+    ArtworkUrl = 1 << 19,
+
+    /// <summary>The remote flag and the station name of a stream (<c>x</c>).</summary>
+    Remote = 1 << 20,
+
     /// <summary>What a track list needs: artist, album, duration, number, ids, artwork and file URL.</summary>
-    List = Artist | Album | Duration | TrackNumber | Year | Url | ArtworkTrackId | AlbumId | ArtistId | Disc,
+    List = Artist | Album | Duration | TrackNumber | Year | Url | ArtworkTrackId | ArtworkUrl | Remote | AlbumId | ArtistId | Disc,
 
     /// <summary>Everything the models understand.</summary>
-    All = (1 << 19) - 1,
+    All = (1 << 21) - 1,
 }
