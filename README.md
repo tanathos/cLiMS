@@ -16,7 +16,7 @@ Browse a large library, search it as you type, see real cover art in the termina
 - **Real covers** as Sixel images (with half-block, quadrant and braille fallbacks for other terminals).
 - **Playback** on your LMS player: play/pause, seek, volume, next/previous, status kept in step through server events.
 - **Queue** you can reorder, trim and clear, plus **named saved queues** kept on your PC.
-- **Waveform** of the current track, decoded from the real file (FLAC, MP3, Ogg, WAV). Click it to change its look: block characters, braille, or a Sixel image. The style at start-up is the `Waveform` value in `settings.json` (`Blocks`, `Braille`, `Sixel`).
+- **Waveform** of the current track, decoded from the real file (FLAC, MP3, Ogg, WAV). Click it to change its look: block characters, braille, or a Sixel image. The style at start-up is `UI.Waveform.Style` in `settings.json` (`Blocks`, `Braille`, `Sixel`).
 - **Lyrics** in the full-screen album view: synced lines follow the music (highlighted and kept in the middle), plain ones scroll. Found once, stored for good in `lyrics.db`, so a song is never searched twice. Online lookup (LRCLIB, optionally DarkLyrics and lyrics.ovh) is off until you turn it on. See [Lyrics](#lyrics).
 - **First-run connect screen:** finds servers on your network, or takes an address by hand, with optional username and password. Password-protected servers are supported everywhere. See [Connecting to a server](#connecting-to-a-server).
 - **Offline friendly:** every server gets its own saved index (`catalog-<server uuid>.db`), so browsing works while the server is away, and switching servers never mixes libraries.
@@ -50,6 +50,18 @@ The live queue (reorder, remove, clear, save under a name):
 The first-run Connect screen: servers found on the network, plus a form for a specific address with optional login:
 
 ![Connect screen](screenshots/connect.png)
+
+Themes (settings page, Theme tab): nine predefined themes, a swatch and hex value per colour, and a colour picker dialog (✎ or `p`) to fine tune one. Here the light Paper theme on the Library:
+
+![Paper theme](screenshots/theme-paper.png)
+
+The Theme tab with the light Sunny theme: every colour of the theme is listed and can be changed, and your changes can be saved under a name:
+
+![Theme settings](screenshots/theme-settings.png)
+
+The colour picker, here on the dark Obsidian theme:
+
+![Colour picker](screenshots/theme-picker.png)
 
 The built-in key reference (`?`):
 
@@ -96,21 +108,64 @@ Notes:
 |---|---|
 | `--lms <url>` | Server to use (also `CLIMS_LMS_URL`, or the address remembered from the last run) |
 | `--user <name>`, `--password-file <file>` | Login for a password-protected server |
-| `--player <id>` | Player to control, usually its MAC address (default: the first connected hardware player; also `PlayerId` in `settings.json`) |
+| `--player <id>` | Player to control, usually its MAC address (default: the first connected hardware player; also `PlayerId` of the server in `settings.json`) |
 | `--demo` | Built-in fake library and player, no server |
 | `--driver windows\|dotnet\|ansi` | Force a Terminal.Gui driver |
 
-Files, all in `%LOCALAPPDATA%\cLiMS`: `settings.json`, `catalog-<server uuid>.db` (one index per server), `covers-<server uuid>.db` (cover cache), `lyrics.db` (lyrics, one file for all servers), `queues.json` (saved queues), `clims.log` (crashes and server problems, cut to its newest half past 1 MB; nothing is ever printed to the console while the UI runs). `CLIMS_PERF=<file>` writes per-view paint timings on exit.
+Files, all in `%LOCALAPPDATA%\cLiMS` (or the folder named by the `CLIMS_DATA` environment variable): `settings.json` (`settings.v1.json` is the backup of an old-style file, see Settings), `catalog-<server uuid>.db` (one index per server), `covers-<server uuid>.db` (cover cache), `lyrics.db` (lyrics, one file for all servers), `queues.json` (saved queues), `clims.log` (crashes and server problems, cut to its newest half past 1 MB; nothing is ever printed to the console while the UI runs). `CLIMS_PERF=<file>` writes per-view paint timings on exit.
+
+## Settings
+
+Press **`F10`** (or **`Alt+S`**, or click the **☰** at the top right) for the settings page. It has a tab for each group: **Servers** (the servers you have connected to: `Enter` connects to one now, `u` makes it the one that opens at start, `e` renames it, `d` removes it after asking, `+ Add a server…` opens the connect screen; the server in use cannot be removed), **UI** (cover style for the library lists, the footer and the full-screen cover; the library cover size; the style used where Sixel is not possible; the waveform style and whether it is shown), **Lyrics** (of the server that opens at start), **Cache** and **Startup** (the first tab, and whether to connect at once). `Tab` goes to the next tab, `↑` `↓` select, `←` `→` or `Enter` change, `Esc` closes. Every change is saved as soon as it is made; styles and sizes apply at once, and the rows marked **↻** take effect at the next start.
+
+The page edits `settings.json` (in the data folder, indented, safe to edit by hand while cLiMS is not running). Every value is optional; this is the layout with the defaults:
+
+```json
+{
+  "Version": 2,
+  "Servers": [
+    {
+      "Name": "Home NAS",
+      "Url": "http://192.168.1.20:9000/",
+      "Uuid": "7c1f32ca-…",
+      "Username": null,
+      "ProtectedPassword": null,
+      "PlayerId": null,
+      "Lyrics": { "Enabled": true, "OnlineLookup": false, "Providers": [ "lrclib" ], "MissRetryDays": 1, "Files": { "PathMap": {}, "ShareUser": null, "SharePassword": null } }
+    }
+  ],
+  "Startup": { "Server": "7c1f32ca-…", "View": "Library", "AutoConnect": true },
+  "Cache": { "Covers": { "Enabled": true, "Normal": { "TtlDays": 30, "MaxEntries": 0 }, "Big": { "TtlDays": 30, "MaxEntries": 50 } } },
+  "UI": {
+    "Covers": {
+      "Footer": { "Style": "Sixel" },
+      "Library": { "Style": "Sixel", "Size": "Medium" },
+      "FullScreen": { "Style": "Sixel" },
+      "SixelFallback": "Quadrant"
+    },
+    "Waveform": { "Enabled": true, "Style": "Blocks" },
+    "Theme": { "Name": "Default", "Colors": {}, "Saved": {} }
+  }
+}
+```
+
+- `Servers` is the list behind the switcher; `Startup.Server` is the UUID (or address) of the one that opens at start, `Startup.View` the first tab (`Library`, `Recent`, `Queue`, `Genres`, `Search`) and `AutoConnect: false` shows the connect screen at every start (an address given with `--lms` or `CLIMS_LMS_URL` still connects at once). The lyrics settings belong to each server.
+- **Theme.** `UI.Theme.Name` is `Default`, `Obsidian`, `Midnight`, `Nord`, `High contrast`, `Light`, `Paper` or `Sunny`; `UI.Theme.Colors` overrides single colours of it, by slot name, as `#RRGGBB`, e.g. `"Colors": { "Accent": "#FF8800", "Bg": "#000000" }`. The slots are `Bg`, `BgHeader`, `BgAlt`, `BgSelected`, `BgSelectedDim`, `Fg`, `FgDim`, `Accent`, `Good`, `Bad`, `Warn`, `HoverBg`, `HoverFg`, `Border`, `Faint`, `Marker` and `Thumb`. Unknown names and bad colours are ignored. The Theme tab of the settings page picks the theme and edits every colour (Enter on a colour, empty text restores the theme's; `p` or a click on the ✎ icon opens a colour picker dialog to fine tune it); changes show at once. *Save theme as…* keeps the theme and your colour changes under a name (`UI.Theme.Saved`: the name → `{ "Base": "Nord", "Colors": { "Accent": "#FF8800" } }`); saved themes are listed after the predefined ones in the picker, so you can try other themes and come back, and *Delete saved theme* removes the one in use.
+- Cover `Style` is `Sixel`, `HalfBlock`, `Quadrant` or `Braille`; `Size` (library and recently added lists only) is `Small` (16x8 cells), `Medium` (24x12) or `Large` (32x16). `SixelFallback` is the style used on terminals without Sixel, or for a cover that is partly out of view. `F3` and `F4` change them for the session only. Waveform `Style` is `Blocks`, `Braille` or `Sixel`; `Enabled: false` hides the waveform and downloads no waveform files.
+- **Older files.** A `settings.json` from before version 0.9.2 (flat keys such as `LmsUrl`, `Waveform` and `CoverCache`) is converted at the first launch: the old file is kept as `settings.v1.json` (`settings.v1.1.json` and so on if that name is taken) and the converted settings are saved as `settings.json`. The backup is never touched again.
+- A wrong value, such as a misspelt style name, makes the whole file unreadable: it is then kept as `settings.v1.json` and the defaults are used, so check the names after editing by hand.
 
 ### Cover cache
 
-Covers are also kept on disk, in `covers-<server uuid>.db` next to the index (a separate file, so a resync never touches it and you can delete it alone). It is filled lazily: a cover is stored the first time a view shows it, and later launches read it from disk instead of asking the server. Each resolution has its own rules in the `CoverCache` node of `settings.json`; every value is optional and the defaults are:
+Covers are also kept on disk, in `covers-<server uuid>.db` next to the index (a separate file, so a resync never touches it and you can delete it alone). It is filled lazily: a cover is stored the first time a view shows it, and later launches read it from disk instead of asking the server. Each resolution has its own rules in `Cache.Covers` of `settings.json` (or the Cache tab of the settings page); every value is optional and the defaults are:
 
 ```json
-"CoverCache": {
-  "Enabled": true,
-  "Normal": { "TtlDays": 30, "MaxEntries": 0 },
-  "Big":    { "TtlDays": 30, "MaxEntries": 50 }
+"Cache": {
+  "Covers": {
+    "Enabled": true,
+    "Normal": { "TtlDays": 30, "MaxEntries": 0 },
+    "Big":    { "TtlDays": 30, "MaxEntries": 50 }
+  }
 }
 ```
 
@@ -118,7 +173,7 @@ Covers are also kept on disk, in `covers-<server uuid>.db` next to the index (a 
 
 ### Lyrics
 
-In the full-screen album view (click the cover in the player) the lyrics of the playing track appear under the album details. Lyrics are kept for good in `lyrics.db` next to the other files (one file for every server; it is not a cache, so it is never expired or trimmed), and a stored lyric is shown at once, offline too. Missing ones are searched on the internet only when you allow it: press `L` in the album view once, or set `OnlineLookup` in the `Lyrics` node of `settings.json`. The artist, album, title and length of the track are then sent to the providers, and nothing else. Every value is optional and the defaults are:
+In the full-screen album view (click the cover in the player) the lyrics of the playing track appear under the album details. Lyrics are kept for good in `lyrics.db` next to the other files (one file for every server; it is not a cache, so it is never expired or trimmed), and a stored lyric is shown at once, offline too. Missing ones are searched on the internet only when you allow it: press `L` in the album view once, or turn on *Search online* in the Lyrics tab of the settings page (`OnlineLookup` in the `Lyrics` node of the server in `settings.json`). The artist, album, title and length of the track are then sent to the providers, and nothing else. The `Lyrics` node of a server (every value optional; the defaults are):
 
 ```json
 "Lyrics": {
@@ -126,15 +181,13 @@ In the full-screen album view (click the cover in the player) the lyrics of the 
   "OnlineLookup": false,
   "Providers": [ "lrclib" ],
   "MissRetryDays": 1,
-  "MusicPathMap": {},
-  "MusicShareUser": null,
-  "MusicSharePassword": null
+  "Files": { "PathMap": {}, "ShareUser": null, "SharePassword": null }
 }
 ```
 
 `Providers` are asked in order and the first that has the song wins: `lrclib` ([LRCLIB](https://lrclib.net), free, no key, usually with timestamps, the most accurate), `darklyrics` ([DarkLyrics](http://www.darklyrics.com), a metal archive, plain text; one request fills the store for the whole album, and requests are spaced one second apart), `lyricsovh` ([lyrics.ovh](https://lyrics.ovh), plain text). A search that finds nothing is remembered for `MissRetryDays` days (0: search every time) so a missing song is not asked for again at every play; enabling another provider searches again at once, and a provider that cannot be reached leaves nothing behind. `Enabled: false` turns lyrics off.
 
-Two local sources are tried before any provider, and they work with `OnlineLookup` off because nothing leaves your PC. **Embedded lyrics** (the lyrics in the file's own tags: ID3 USLT, Vorbis LYRICS, MP4) are asked from the server, one small question per track; text with timestamps comes out synced, and junk such as `XXX|` is ignored. **Files next to the track** (`song.lrc` with timestamps, or `song.txt`, named like the audio file; failing that, an `.lrc` in the album folder whose name contains the title) need `MusicPathMap`, which says where the server's music folder is as this PC sees it, for example `{ "/mnt/Music": "\\\\192.168.1.100\\Music" }` (backslashes doubled, as JSON needs) (the longest matching folder is used; the address of a share that cannot be reached is not remembered as "no lyrics"). A `.txt` that is not named like the track (`info.txt`, `Tracklist.txt`) is never taken for lyrics. If the share asks for a login and this PC has none for it, set `MusicShareUser` (`user` or `NAS\\user`) and `MusicSharePassword` in the same node: at the next launch cLiMS encrypts the password (Windows only, readable only by your Windows user on this PC) into `MusicShareProtectedPassword` and removes the plain text from the file. On Linux and macOS mount the share with the system and point `MusicPathMap` at the mount.
+Two local sources are tried before any provider, and they work with `OnlineLookup` off because nothing leaves your PC. **Embedded lyrics** (the lyrics in the file's own tags: ID3 USLT, Vorbis LYRICS, MP4) are asked from the server, one small question per track; text with timestamps comes out synced, and junk such as `XXX|` is ignored. **Files next to the track** (`song.lrc` with timestamps, or `song.txt`, named like the audio file; failing that, an `.lrc` in the album folder whose name contains the title) need `Files.PathMap`, which says where the server's music folder is as this PC sees it, for example `{ "/mnt/Music": "\\\\192.168.1.100\\Music" }` (backslashes doubled, as JSON needs) (the longest matching folder is used; the address of a share that cannot be reached is not remembered as "no lyrics"). A `.txt` that is not named like the track (`info.txt`, `Tracklist.txt`) is never taken for lyrics. If the share asks for a login and this PC has none for it, set `Files.ShareUser` (`user` or `NAS\\user`) and `Files.SharePassword` in the same node: at the next launch cLiMS encrypts the password (Windows only, readable only by your Windows user on this PC) into `Files.ProtectedSharePassword` and removes the plain text from the file. The folder map and the share login are edited in `settings.json`, not in the settings page. On Linux and macOS mount the share with the system and point `Files.PathMap` at the mount.
 
 Keys in the album view: `Up` `Down` `PgUp` `PgDn` and the wheel scroll (synced lyrics follow the music again after 8 seconds), `[` `]` shift the timing of synced lyrics by half a second, `R` searches again for a better version, `L` turns online lookup on.
 
@@ -162,14 +215,15 @@ Press `?` in the app for the same list.
 | `Alt+n` `Alt+p` | Next / previous track (work everywhere, also while typing) |
 | `+` `-` | Volume |
 | `F2` | Connect screen: another server, or a login |
+| `F10` or `Alt+S` | Settings page (or click the ☰ at the top right); `Esc` closes it |
 | `F5` | Resync the library, or cancel a running sync |
-| `F3` | Cycle cover rendering: Sixel (default, real pixels), half-block, quadrant, braille |
-| `F4` | Toggle list cover size: 24x12 cells (default) / 16x8 |
+| `F3` | Cycle the cover style of the lists (of the full-screen cover while it is open): Sixel (default, real pixels), half-block, quadrant, braille. For this session; the defaults are in `UI.Covers` of `settings.json` |
+| `F4` | Cycle the list cover size: 24x12 cells (`Medium`, default), 32x16 (`Large`), 16x8 (`Small`) |
 | `Y` / `L` / `N` / `Enter` / `Esc` | Answer a question shown in the tab strip (`Enter` = first answer, `Esc` = last) |
 | `?` | Key reference |
 | `Ctrl+Q` | Quit (`Esc` never quits; it only closes or goes back) |
 
-The mouse wheel scrolls the pane under the pointer. Lists show a scrollbar on their right edge; click it to jump. In the footer, click the progress bar to seek, the buttons to control playback, the volume bar to set it; click the artist or album of the playing track to jump to it in the Library.
+The mouse wheel scrolls the pane under the pointer. Lists show a scrollbar on their right edge; click it to jump. In the footer, click the progress bar to seek (pointing ahead of the playhead previews the jump), the track length to switch to the time left, the buttons to control playback, the volume bar to set it; click the artist or album of the playing track to jump to it in the Library.
 
 ## Build, test, publish
 ```
@@ -220,7 +274,7 @@ Done so far (details in [`docs/sprint.md`](docs/sprint.md)):
 | 0.8.0 | Full-screen album view, album context menu, sort label, queue position in the player | Done |
 | 0.9.0 | Genres explorer (tab `5`) with random queues, cover cache on disk, compressed and framework-dependent builds, mouse and resize fixes | Done |
 
-Deferred: player selector, live visualiser, themes and key binding configuration, remembering several servers at once.
+Deferred: player selector, live visualiser, key binding configuration, remembering several servers at once.
 
 ## Releases
 Versions follow [Semantic Versioning](https://semver.org/) (`0.y.z` until 1.0: minor versions may change behaviour). Each release is a git tag `vX.Y.Z` with a GitHub Release holding single-file builds for `win-x64`, `linux-x64` and `osx-arm64` (zip or tar.gz, plus `SHA256SUMS`), each as a self-contained build and a smaller `-framework-dependent` one that needs the .NET 10 runtime. Changes are listed in [`CHANGELOG.md`](CHANGELOG.md). Download from the [Releases page](https://github.com/tanathos/cLiMS/releases); `Clims.Tui --version` prints the version. The builds are not code-signed, so Windows SmartScreen warns on first run, and only Windows Terminal has been tested.

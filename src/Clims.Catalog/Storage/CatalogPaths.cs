@@ -6,11 +6,16 @@ namespace Clims.Catalog;
 /// <summary>Where the per-server cache files live: the per-user app data folder, safe to delete at any time.</summary>
 public static class CatalogPaths
 {
-    /// <summary>The folder for cLiMS data (created on demand).</summary>
+    /// <summary>The folder for cLiMS data (created on demand). The <c>CLIMS_DATA</c> environment variable names another one (for tests and portable use).</summary>
     public static string DataFolder
     {
         get
         {
+            if (Environment.GetEnvironmentVariable("CLIMS_DATA") is { Length: > 0 } custom)
+            {
+                return custom;
+            }
+
             var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrEmpty(root))
             {

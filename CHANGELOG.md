@@ -3,6 +3,30 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-12
+
+### Added
+
+- Themes: `UI.Theme` in `settings.json` picks a predefined theme (`Default`, the colours cLiMS always had, dark `Obsidian`, `Midnight`, `Nord` and `High contrast`, light `Light`, `Paper` and `Sunny`) and overrides single colours by name (`Accent`, `Bg`, …, as `#RRGGBB`). The Theme tab of the settings page does both, with a swatch per colour, and applies at once. The ✎ icon next to a colour (or `p`) opens a dialog with Terminal.Gui's colour picker to fine tune it. Colours that were hard-coded in views (frames, scrollbars, album view markers) are now theme colours. Your colour changes can be saved under a name (*Save theme as…*) and picked again later; *Delete saved theme* removes one.
+- A settings page (`F10`, `Alt+S` or the ☰ at the top right) with a tab for Servers, UI, Theme, Lyrics, Cache and Startup. Every change is saved at once; cover and waveform styles apply immediately, the rows marked ↻ at the next start. The Servers tab is the server switcher: connect to a saved server (with its saved login) without the connect screen, choose the one that opens at start, rename, remove (the server in use cannot be removed) or add one.
+- `CLIMS_DATA` names another data folder (settings, caches, lyrics, log), for tests and portable use.
+- Cover styles per place: `UI.Covers` in `settings.json` sets the style (`Sixel`, `HalfBlock`, `Quadrant`, `Braille`) separately for the footer, the lists (library, recently added, search, genres) and the full-screen cover, and `SixelFallback` the style used where Sixel is not possible. The lists also have a size, `Small` (16x8 cells), `Medium` (24x12, the default) or `Large` (32x16).
+
+- `Startup` in `settings.json`: `View` (`Library`, `Recent`, `Queue`, `Genres` or `Search`) is the tab shown first, and `AutoConnect: false` opens the connect screen at every start (`Esc` keeps the saved server; an address given with `--lms` or `CLIMS_LMS_URL` still connects at once).
+- `UI.Waveform.Enabled: false` hides the waveform and stops downloading waveform files.
+
+### Fixed
+
+- The cover cache node of `settings.json` no longer writes its computed `Active` and `Ttl` values.
+
+### Changed
+
+- Footer: the elapsed time lines up with the artist name and the track length with the queue position, which makes the progress bar two characters shorter. Click the track length to count down instead (`-03:12`, the time left); click again to go back. Pointing at the progress bar ahead of the playhead draws the stretch up to the pointer in a faint accent.
+
+- `F3` now changes the cover style of the lists, or of the full-screen cover while it is open (the footer keeps its own style), and `F4` cycles the three list cover sizes instead of two. Both last for the session; the defaults come from the settings.
+
+- `settings.json` has a new layout (version 2): a `Servers` list (address, login, player and lyrics settings of each server), `Startup`, `Cache.Covers` (was `CoverCache`) and `UI.Waveform.Style` (was `Waveform`), written indented. At the first launch an old file is renamed to `settings.v1.json` (a numbered name if that exists) and the converted settings are saved as `settings.json`; the backup is never touched again. The lyrics options of a server moved into its `Servers` entry, with the share keys grouped under `Lyrics.Files`.
+
 ## [0.9.1] - 2026-11-10
 
 ### Added

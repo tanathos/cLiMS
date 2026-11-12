@@ -104,7 +104,7 @@ public sealed class AlbumInfoOverlay : PaintView
         }
 
         var album = now.Album;
-        var frame = new Attribute(Theme.Rgb(52, 57, 70), Theme.Bg);
+        var frame = new Attribute(Theme.Border, Theme.Bg);
         var dim = Theme.Dim;
         // As tall as the panel; the width follows from the shape of a cell, so the cover stays square.
         var cell = SixelCovers.CellPixels;
@@ -124,7 +124,7 @@ public sealed class AlbumInfoOverlay : PaintView
         var small = new CoverKey(album.ArtworkId, album.Id);
         // The large picture takes a moment to arrive: show the list-size one meanwhile.
         WantCover(big);
-        DrawCover(left, top, cols, rows, CoverArt.Source.TryGet(big) is null ? small : big);
+        DrawCover(left, top, cols, rows, CoverArt.Source.TryGet(big) is null ? small : big, CoverPlace.FullScreen);
 
         var x = left + cols + 5;
         var width = W - x - 3;
@@ -246,7 +246,7 @@ public sealed class AlbumInfoOverlay : PaintView
     private void DrawBar(int x, int y, int cells, double filled, IReadOnlyList<(int Start, int End)> sections)
     {
         var on = new Attribute(Theme.Accent, Theme.Bg);
-        var off = new Attribute(Theme.Rgb(70, 76, 92), Theme.Bg);
+        var off = new Attribute(Theme.Faint, Theme.Bg);
         int At(int unit) => sections.ToList().FindIndex(s => unit >= s.Start && unit < s.End);
         // No room for gaps: neighbouring tracks are told apart by alternating shades instead.
         var touching = sections.Count > 1 && sections[1].Start == sections[0].End;
@@ -254,7 +254,7 @@ public sealed class AlbumInfoOverlay : PaintView
         double[] steps = [1.0, 0.6, 0.82, 0.45];
         Color Shade(int section, bool played) => played
             ? Theme.Mix(Theme.Bg, Theme.Accent, steps[section % 4])
-            : Theme.Mix(Theme.Bg, Theme.Rgb(95, 102, 122), steps[section % 4]);
+            : Theme.Mix(Theme.Bg, Theme.Marker, steps[section % 4]);
         for (var c = 0; c < cells; c++)
         {
             int l = At(2 * c), r = At(2 * c + 1);

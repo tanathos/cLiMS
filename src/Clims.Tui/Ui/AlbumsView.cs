@@ -51,9 +51,9 @@ public sealed class AlbumsView : PaintView
 
     protected override bool StableSixels => true;
 
-    private static int CoverCols => CoverArt.Large ? 24 : 16;
+    private static int CoverCols => CoverArt.LibraryCells(CoverArt.LibrarySize).Cols;
 
-    private static int CoverRows => CoverArt.Large ? 12 : 8;
+    private static int CoverRows => CoverArt.LibraryCells(CoverArt.LibrarySize).Rows;
 
     private static int TextX => CoverCols + 3;
 
@@ -341,7 +341,7 @@ public sealed class AlbumsView : PaintView
         var catalog = _catalog!;
         var tracks = catalog.TracksOf(album.Id);
         var summary = catalog.Summary(album.Id);
-        DrawCover(1, top, CoverCols, CoverRows, new CoverKey(album.ArtworkId, album.Id));
+        DrawCover(1, top, CoverCols, CoverRows, new CoverKey(album.ArtworkId, album.Id), CoverPlace.Library);
 
         var duration = summary.TrackCount > 0 ? $"{(int)summary.Duration.TotalMinutes} min" : "";
         var textW = TextWidth;

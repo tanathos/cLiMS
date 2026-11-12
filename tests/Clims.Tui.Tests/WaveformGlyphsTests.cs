@@ -47,20 +47,4 @@ public class WaveformGlyphsTests
         Assert.Equal(back, half[0, 3]);
         Assert.Equal(todo, half[0, 4]);
     }
-
-    [Theory]
-    [InlineData("Braille", WaveformStyle.Braille)]
-    [InlineData("sixel", WaveformStyle.Sixel)]
-    [InlineData("Blocks", WaveformStyle.Blocks)]
-    [InlineData("nonsense", WaveformStyle.Blocks)]
-    [InlineData("99", WaveformStyle.Blocks)]
-    public void The_setting_names_the_style_and_anything_else_is_the_default(string value, WaveformStyle expected) =>
-        Assert.Equal(expected, new AppSettings { Waveform = value }.WaveformStyle);
-
-    [Fact]
-    public void A_missing_setting_keeps_the_current_style()
-    {
-        var loaded = System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{\"LmsUrl\":\"http://x/\"}")!;
-        Assert.Equal(WaveformStyle.Blocks, loaded.WaveformStyle);
-    }
 }

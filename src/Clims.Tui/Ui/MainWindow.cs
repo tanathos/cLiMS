@@ -1,3 +1,4 @@
+using Clims.Tui.Settings;
 using Clims.Catalog;
 using Clims.Tui.Data;
 using Clims.Waveform;
@@ -31,6 +32,7 @@ public sealed class MainWindow : Window
     private readonly RecentTab _recent;
     private readonly GenresTab _genres;
     private readonly WaveformService? _waves;
+    private readonly bool _waveformEnabled;
     private readonly LyricsFeed? _lyrics;
     private string _waveSignature = "";
     private bool _helpVisible;
@@ -40,6 +42,8 @@ public sealed class MainWindow : Window
     private readonly ClickShield _shield = new();
     private readonly AlbumInfoOverlay _info = new();
     private readonly HelpOverlay _help = new();
+    private readonly SettingsOverlay? _settings;
+    private bool _settingsVisible;
     private int _currentTab = -1;
     private int _tabBeforeSearch = 1;
     private DateTime _lastTick = DateTime.UtcNow;
@@ -51,6 +55,9 @@ public sealed class MainWindow : Window
     /// <summary>Set when the user pressed F2: the host closes the window and shows the connect screen.</summary>
     public bool ChangeServerRequested { get; private set; }
 
+    /// <summary>Set with <see cref="ChangeServerRequested"/> when the user chose a server in the settings: connect to it without the connect screen (its key: UUID or address).</summary>
+    public string? RequestedServer { get; private set; }
+
     public MainWindow(
         IApplication app,
         ICatalogService catalog,
@@ -60,9 +67,14 @@ public sealed class MainWindow : Window
         WaveformService? waves = null,
         RecentAlbumsSource? recentAlbums = null,
         LyricsFeed? lyrics = null,
-        WaveformStyle waveformStyle = WaveformStyle.Blocks)
+        WaveformStyle waveformStyle = WaveformStyle.Blocks,
+        bool waveformEnabled = true,
+        StartupView startupView = StartupView.Library,
+        SettingsStore? settings = null,
+        string? connectedUrl = null)
     {
-        _waves = waves;
+        _waveformEnabled = waveformEnabled;
+        _waves = waveformEnabled ? waves : null;
         _lyrics = lyrics;
         _app = app;
         _catalog = catalog;
@@ -91,12 +103,27 @@ public sealed class MainWindow : Window
             page.Height = Dim.Fill(FooterView.Rows);
         }
 
-        _footer = new FooterView(player, waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows, WaveformStyle = waveformStyle };
+        _footer = new FooterView(player, _waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows, WaveformStyle = waveformStyle };
         _help.X = 0;
         _help.Y = HeaderBar.Rows + 1;
         _help.Width = Dim.Fill();
         _help.Height = Dim.Fill(FooterView.Rows);
         _help.Visible = false;
+        if (settings is not null)
+        {
+            var model = new SettingsModel(settings, connectedUrl);
+            _settings = new SettingsOverlay(model) { X = 0, Y = HeaderBar.Rows + 1, Width = Dim.Fill(), Height = Dim.Fill(FooterView.Rows), Visible = false };
+            model.Changed += OnSettingsChanged;
+            model.AddRequested += RequestServerChange;
+            model.SwitchRequested += key =>
+            {
+                RequestedServer = key;
+                RequestServerChange();
+            };
+            _settings.CloseRequested += ToggleSettings;
+            _settings.PickColor = (name, colour) => ColorDialog.Show(_app, name, colour);
+        }
+
         // The album view covers the whole screen.
         _info.X = 0;
         _info.Y = 0;
@@ -107,6 +134,11 @@ public sealed class MainWindow : Window
         Add(_header, _header.Search, _tabs);
         Add(_pages);
         Add(_help);
+        if (_settings is not null)
+        {
+            Add(_settings);
+        }
+
         Add(_footer);
         Add(_info);
         _shield.Visible = false;
@@ -126,11 +158,12 @@ public sealed class MainWindow : Window
         _tabs.SelectedChanged += ShowTab;
         _tabs.TabClicked += _ => FocusPage();   // like the number keys: the page gets the keyboard, not the search box
         ShowTab(0);
-        _tabs.Selected = 1;
+        _tabs.Selected = startupView.TabIndex();
 
         _header.Search.TextChanged += (_, _) => OnSearchTextChanged();
         _header.SyncClicked += OfferResync;
         _header.ServerClicked += RequestServerChange;
+        _header.SettingsClicked += ToggleSettings;
         _search.PlayRequested += Play;
         _search.QueueRequested += OnQueueRequested;
         _search.Notice += Notice;
@@ -281,6 +314,13 @@ public sealed class MainWindow : Window
 
     private void ShowTab(int index)
     {
+        if (_settingsVisible)
+        {
+            // A tab was clicked while the settings page is open: the page gives way to it.
+            _settingsVisible = false;
+            _settings!.Visible = false;
+        }
+
         if (index == 0 && _currentTab > 0)
         {
             _tabBeforeSearch = _currentTab;
@@ -607,7 +647,7 @@ public sealed class MainWindow : Window
         _player.Tick(now - _lastTick);
         _lastTick = now;
         _footer.ShowCover = Viewport.Width >= MinWidth;
-        _footer.ShowWaveform = Viewport.Height >= MinHeight;
+        _footer.ShowWaveform = _waveformEnabled && Viewport.Height >= MinHeight;
         // While the album view is open the screen under it stays still: repainting it would wipe the cover image (a sixel is erased by any text written over it).
         // Once a second is enough (the clock shows whole seconds; changes of state redraw at once). Every redraw makes the driver
         // reposition the terminal's cursor, which restarts its blink: ten a second made a text field's cursor flicker.
@@ -633,6 +673,12 @@ public sealed class MainWindow : Window
 
     private void OnGlobalKey(object? sender, Key key)
     {
+        // The colour picker dialog is modal and takes its own keys.
+        if (_settings?.PickerOpen == true)
+        {
+            return;
+        }
+
         if (key == Key.Q.WithCtrl)
         {
             _app.RequestStop();
@@ -652,6 +698,21 @@ public sealed class MainWindow : Window
                 _player.Previous();
             }
 
+            key.Handled = true;
+            return;
+        }
+
+        if (_settings is not null && SettingsOverlay.IsToggleKey(key) && !_settingsVisible && !_infoVisible && !_menuVisible && !_helpVisible)
+        {
+            ToggleSettings();
+            key.Handled = true;
+            return;
+        }
+
+        // While the settings page is open it takes every key (F10 and Esc close it).
+        if (_settingsVisible)
+        {
+            _settings!.HandleKey(key);
             key.Handled = true;
             return;
         }
@@ -869,20 +930,18 @@ public sealed class MainWindow : Window
                 }
                 else if (key == Key.F3)
                 {
-                    do
-                    {
-                        CoverArt.Mode = (CoverMode)(((int)CoverArt.Mode + 1) % 4);
-                    }
-                    while (CoverArt.Mode == CoverMode.Sixel && !SixelCovers.Available);
-
+                    // The style of the place in front: the full-screen cover while it is open, else the lists. For this session only.
+                    var place = _infoVisible ? CoverPlace.FullScreen : CoverPlace.Library;
+                    CoverArt.SetStyle(place, CoverArt.NextStyle(place));
                     _library.Albums.ResetCovers();
                     _library.Albums.SetNeedsDraw();
                     _recent.Albums.ResetCovers();
                     _recent.Albums.SetNeedsDraw();
+                    _info.SetNeedsDraw();
                 }
                 else if (key == Key.F4)
                 {
-                    CoverArt.Large = !CoverArt.Large;
+                    CoverArt.LibrarySize = CoverArt.NextSize(CoverArt.LibrarySize);
                     _library.Albums.Relayout();
                     _recent.Albums.Relayout();
                 }
@@ -911,7 +970,7 @@ public sealed class MainWindow : Window
 
     private void OpenInfo()
     {
-        if (_infoVisible || _helpVisible || _player.Current is not { } now)
+        if (_infoVisible || _helpVisible || _settingsVisible || _player.Current is not { } now)
         {
             return;
         }
@@ -948,7 +1007,7 @@ public sealed class MainWindow : Window
 
     private void OpenMenu(IReadOnlyList<MenuEntry> entries, System.Drawing.Point at)
     {
-        if (_menuVisible || _infoVisible || _helpVisible)
+        if (_menuVisible || _infoVisible || _helpVisible || _settingsVisible)
         {
             return;
         }
@@ -1044,33 +1103,82 @@ public sealed class MainWindow : Window
         if (_helpVisible)
         {
             _help.ScrollToTop();
-            // Sixel images sit above any text, so the pages underneath must stop showing theirs while help is open.
-            foreach (var page in _pages)
-            {
-                page.Visible = false;
-            }
-
-            SixelCovers.Release(_library.Albums);
-            SixelCovers.Release(_search.List);
-            SixelCovers.Release(_recent.Albums);
-            CoverArt.Source.Want(_library.Albums, Array.Empty<CoverKey>());
-            CoverArt.Source.Want(_search.List, Array.Empty<CoverKey>());
-            CoverArt.Source.Want(_recent.Albums, Array.Empty<CoverKey>());
-            _refresher.SetVisible(Array.Empty<CatalogAlbum>());
+            HidePages();
             _help.SetFocus();
         }
         else
         {
-            ShowTab(_currentTab);
-            FocusPage();
-            _library.Albums.ResetCovers();
-            _library.Albums.SetNeedsDraw();
-            _recent.Albums.ResetCovers();
-            _recent.Albums.SetNeedsDraw();
-            _search.List.SetNeedsDraw();
+            RestorePages();
         }
 
         SetNeedsDraw();
+    }
+
+    /// <summary>Sixel images sit above any text, so the pages underneath must stop showing theirs while a page of text is open over them.</summary>
+    private void HidePages()
+    {
+        foreach (var page in _pages)
+        {
+            page.Visible = false;
+        }
+
+        SixelCovers.Release(_library.Albums);
+        SixelCovers.Release(_search.List);
+        SixelCovers.Release(_recent.Albums);
+        CoverArt.Source.Want(_library.Albums, Array.Empty<CoverKey>());
+        CoverArt.Source.Want(_search.List, Array.Empty<CoverKey>());
+        CoverArt.Source.Want(_recent.Albums, Array.Empty<CoverKey>());
+        _refresher.SetVisible(Array.Empty<CatalogAlbum>());
+    }
+
+    private void RestorePages()
+    {
+        ShowTab(_currentTab);
+        FocusPage();
+        _library.Albums.ResetCovers();
+        _library.Albums.SetNeedsDraw();
+        _recent.Albums.ResetCovers();
+        _recent.Albums.SetNeedsDraw();
+        _search.List.SetNeedsDraw();
+    }
+
+    /// <summary>Opens or closes the settings page (F10 or the gear in the header).</summary>
+    private void ToggleSettings()
+    {
+        if (_settings is null || _infoVisible || _menuVisible || _helpVisible)
+        {
+            return;
+        }
+
+        _settingsVisible = !_settingsVisible;
+        _settings.Visible = _settingsVisible;
+        if (_settingsVisible)
+        {
+            _settings.Reset();
+            HidePages();
+            _settings.SetFocus();
+        }
+        else
+        {
+            RestorePages();
+        }
+
+        SetNeedsDraw();
+    }
+
+    /// <summary>A setting was changed (and saved): what can be applied now is.</summary>
+    private void OnSettingsChanged(UserSettings settings)
+    {
+        CoverArt.Apply(settings.Ui.Covers);
+        Theme.Apply(settings.Ui.Theme);
+        SetScheme(Theme.Dark);
+        SetNeedsDraw();
+        _footer.WaveformStyle = settings.Ui.Waveform.Style;
+        _library.Albums.Relayout();
+        _recent.Albums.Relayout();
+        // The cover (and a sixel waveform) are the same images in new cells: take them off the screen so they are sent again.
+        SixelCovers.Release(_footer);
+        _footer.SetNeedsDraw();
     }
 
     private void LeaveSearch()

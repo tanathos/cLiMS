@@ -55,7 +55,7 @@ public sealed class FooterView : PaintView
         const string hint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-5 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
         if (_player.Current is not { } now)
         {
-            _seek = (0, 0);
+            _seek = _totalBox = (0, 0);
             Put(1, 0, Clip(_player.Problem ?? "Nothing playing", W - 2), _player.Problem is null ? Theme.Dim : new Attribute(Theme.Warn, Theme.Bg));
             PaintControls(1);
             Put(1, 5, Clip(hint, W - 2), Theme.Dim);
@@ -64,12 +64,12 @@ public sealed class FooterView : PaintView
 
         var track = now.Track;
         var album = now.Album;
-        PaintSeekBar(track, ShowCover ? CoverCols + 1 : 1);
+        PaintSeekBar(track, ShowCover ? CoverCols + 2 : 1);
 
         var x0 = 1;
         if (ShowCover)
         {
-            DrawCover(0, 0, CoverCols, CoverRows, new CoverKey(album.ArtworkId, album.Id));
+            DrawCover(0, 0, CoverCols, CoverRows, new CoverKey(album.ArtworkId, album.Id), CoverPlace.Footer);
             x0 = CoverCols + 2;
         }
 
@@ -144,20 +144,40 @@ public sealed class FooterView : PaintView
         }
     }
 
+    private bool _countdown;
+    private (int X0, int X1) _totalBox;
+
     private void PaintSeekBar(CatalogTrack track, int left)
     {
         var elapsed = Fmt(_player.Elapsed);
-        var total = Fmt(track.Duration);
+        var total = _countdown ? "-" + Fmt(track.Duration - _player.Elapsed < TimeSpan.Zero ? TimeSpan.Zero : track.Duration - _player.Elapsed) : Fmt(track.Duration);
         var x0 = left + elapsed.Length + 1;
-        var x1 = W - total.Length - 2;
+        // The total ends where the "(3/12)" queue position does, one column in from the edge.
+        var x1 = W - total.Length - 3;
         _seek = (x0, x1);
+        _totalBox = (x1 + 1, x1 + 1 + total.Length);
         Put(left, 0, elapsed, Theme.Normal);
-        Put(x1 + 1, 0, total, Theme.Dim);
+        Put(x1 + 1, 0, total, Over(x1 + 1, x1 + 1 + total.Length, 0) ? Theme.Hover : Theme.Dim);
 
         var width = Math.Max(1, x1 - x0);
         var filled = (int)(width * Fraction(track));
         Put(x0, 0, new string('━', filled), new Attribute(Theme.Accent, Theme.Bg));
         Put(x0 + filled, 0, new string('─', width - filled), Theme.Dim);
+
+        // Pointing past the playhead: the stretch a click would skip is drawn thick in a faint accent.
+        var hover = -1;
+        for (var c = x0 + filled; c < x0 + width; c++)
+        {
+            if (Over(c, c + 1, 0))
+            {
+                hover = c;
+            }
+        }
+
+        if (hover >= 0)
+        {
+            Put(x0 + filled, 0, new string('━', hover - (x0 + filled) + 1), new Attribute(Theme.Mix(Theme.Accent, Theme.Bg, 0.5), Theme.Bg));
+        }
     }
 
     /// <summary>F7: draw a spectrum analyzer in place of the waveform.</summary>
@@ -422,7 +442,14 @@ public sealed class FooterView : PaintView
             return true;
         }
 
-        if (p.Y == 0 && p.X >= _seek.X0 && p.X < _seek.X1)
+        if (p.Y == 0 && p.X >= _totalBox.X0 && p.X < _totalBox.X1 && mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked))
+        {
+            _countdown = !_countdown;
+            SetNeedsDraw();
+            return true;
+        }
+
+        if (p.Y == 0 && p.X >= _seek.X0&& p.X < _seek.X1)
         {
             _player.SeekTo((p.X - _seek.X0) / (double)Math.Max(1, _seek.X1 - _seek.X0));
             return true;

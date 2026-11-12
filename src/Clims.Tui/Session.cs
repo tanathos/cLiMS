@@ -5,6 +5,7 @@ using Clims.Catalog;
 using Clims.Lms;
 using Clims.Lyrics;
 using Clims.Tui.Data;
+using Clims.Tui.Settings;
 using Clims.Tui.Ui;
 using Clims.Waveform;
 using Terminal.Gui.App;
@@ -24,13 +25,13 @@ public sealed class Session : IDisposable
     private volatile CoverCacheStore? _coverCache;
     private readonly CliEventStream? _events;
     private readonly Connection? _connection;
-    private AppSettings _settings;
+    private readonly SettingsStore _settings;
     private HttpClient? _lyricsHttp;
     private ILmsRpcClient? _rpc;
     private LyricsStore? _lyricsStore;
 
     /// <summary>Builds the services. A null <paramref name="connection"/> means demo mode.</summary>
-    public Session(Connection? connection, AppSettings settings, string? playerId)
+    public Session(Connection? connection, SettingsStore settings, string? playerId)
     {
         _connection = connection;
         _settings = settings;
@@ -57,7 +58,8 @@ public sealed class Session : IDisposable
         }
 
         // The saved index is found again through the server's UUID, remembered per address.
-        var known = settings.LmsUrl == uri.ToString() ? settings.ServerUuid : null;
+        var server = settings.Current.Find(uri.ToString());
+        var known = server?.Uuid;
         var lms = new LmsClient(new LmsClientOptions { BaseUri = uri, Credentials = credentials }, _http);
         Library = lms.Library;
         Catalog = new CatalogService(lms, new CatalogServiceOptions
@@ -67,28 +69,26 @@ public sealed class Session : IDisposable
             {
                 // Called once the UUID is known: from the saved settings, or after the server was actually reached. Only
                 // then is the address worth remembering, so a mistyped --lms never overwrites a working one.
-                _settings = _settings with { LmsUrl = uri.ToString(), ServerUuid = uuid };
-                _settings.Save();
+                _settings.Update(s => s.WithServer(uri.ToString(), uuid));
                 _coverCache = new CoverCacheStore(CatalogPaths.CoversFor(uuid));
                 return new SqliteCatalogStore(CatalogPaths.For(uuid));
             },
         });
-        _covers = new LmsCoverSource(_http, uri, credentials, cache: () => _coverCache, cacheSettings: settings.CoverCache ?? new CoverCacheSettings());
+        _covers = new LmsCoverSource(_http, uri, credentials, cache: () => _coverCache, cacheSettings: settings.Current.Cache.Covers);
         CoverArt.Source = _covers;
         Waves = new WaveformService(_http, uri);
-        if (settings.Lyrics?.Enabled ?? true)
+        if (server?.Lyrics.Enabled ?? true)
         {
             // Not the client above: that one carries the server login, which no other site may see.
             _rpc = lms.Rpc;
             _lyricsHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
             _lyricsStore = new LyricsStore(CatalogPaths.LyricsFile());
-            _settings = ProtectSharePassword(_settings);
-            Lyrics = new LyricsFeed(BuildLyrics(_settings.Lyrics ?? new LyricsSettings()), EnableOnlineLyrics);
+            Lyrics = new LyricsFeed(BuildLyrics(server?.Lyrics ?? new ServerLyricsSettings()), EnableOnlineLyrics);
         }
 
         _events = new CliEventStream(EventOptions());
         var service = Catalog;
-        _lmsPlayer = new LmsPlayerController(lms, () => service.Current, new LmsPlayerOptions { PlayerId = playerId ?? settings.PlayerId });
+        _lmsPlayer = new LmsPlayerController(lms, () => service.Current, new LmsPlayerOptions { PlayerId = playerId ?? server?.PlayerId });
         _lmsPlayer.Notice += CrashLog.Info;
         Player = _lmsPlayer;
     }
@@ -120,28 +120,15 @@ public sealed class Session : IDisposable
     /// <summary>The lyrics of the playing track, or null in demo mode or when lyrics are switched off in settings.</summary>
     public LyricsFeed? Lyrics { get; }
 
-    /// <summary>A share password typed into settings.json is encrypted and removed from the file (where encryption is possible).</summary>
-    internal static AppSettings ProtectSharePassword(AppSettings settings)
-    {
-        if (settings.Lyrics is not { MusicSharePassword.Length: > 0 } lyrics || SecretStore.Protect(lyrics.MusicSharePassword) is not { } protectedValue)
-        {
-            return settings;
-        }
-
-        var updated = settings with { Lyrics = lyrics with { MusicSharePassword = null, MusicShareProtectedPassword = protectedValue } };
-        updated.Save();
-        return updated;
-    }
-
-    private LyricsService BuildLyrics(LyricsSettings lyrics)
+    private LyricsService BuildLyrics(ServerLyricsSettings lyrics)
     {
         var providers = new List<ILyricsProvider>();
 
         // Local sources first, whatever the online setting: a file next to the track (when a path map says where the music is as seen
         // from this PC), then the lyrics in the track's own tags (one small question to the server).
-        if (lyrics.MusicPathMap is { Count: > 0 })
+        if (lyrics.Files.PathMap is { Count: > 0 })
         {
-            providers.Add(new SidecarLyricsProvider(lyrics.MusicPathMap, lyrics.MusicShareUser, SecretStore.Unprotect(lyrics.MusicShareProtectedPassword)));
+            providers.Add(new SidecarLyricsProvider(lyrics.Files.PathMap, lyrics.Files.ShareUser, SecretStore.Unprotect(lyrics.Files.ProtectedSharePassword)));
         }
 
         if (_rpc is { } rpc)
@@ -191,11 +178,10 @@ public sealed class Session : IDisposable
 
     private void EnableOnlineLyrics()
     {
-        var current = _settings.Lyrics ?? new LyricsSettings();
-        var providers = current.Providers is { Count: > 0 } ? current.Providers : ["lrclib"];
-        _settings = _settings with { Lyrics = current with { OnlineLookup = true, Providers = providers } };
-        _settings.Save();
-        Lyrics?.Replace(BuildLyrics(_settings.Lyrics!));
+        var url = _connection!.Uri.ToString();
+        var updated = _settings.Update(s => s.WithServer(url, change: server =>
+            server with { Lyrics = server.Lyrics with { OnlineLookup = true, Providers = server.Lyrics.Providers is { Count: > 0 } ? server.Lyrics.Providers : ["lrclib"] } }));
+        Lyrics?.Replace(BuildLyrics(updated.Find(url)!.Lyrics));
     }
 
     /// <summary>True when there is no server.</summary>

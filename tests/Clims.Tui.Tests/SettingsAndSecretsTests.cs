@@ -1,6 +1,7 @@
 using System.Net;
 using Clims.Lms;
 using Clims.Tui;
+using Clims.Tui.Settings;
 using Clims.Tui.Ui;
 
 namespace Clims.Tui.Tests;
@@ -12,7 +13,7 @@ public class SettingsAndSecretsTests
     [InlineData("192.168.1.20:9100", "http://192.168.1.20:9100/")]
     [InlineData("http://lms.local", "http://lms.local/")]
     public void The_default_port_is_added_only_to_a_bare_host(string input, string expected) =>
-        Assert.Equal(expected, AppSettings.NormalizeUrl(input, 9000)!.ToString());
+        Assert.Equal(expected, ServerUrl.Normalize(input, 9000)!.ToString());
 
     [Fact]
     public void The_password_is_not_stored_in_plain_text_and_comes_back()
@@ -34,8 +35,9 @@ public class SettingsAndSecretsTests
     [Fact]
     public void Settings_json_never_contains_the_clear_password()
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(new AppSettings("http://h/", null, null, "me", SecretStore.Protect("hunter2")));
+        var server = new ServerSettings { Url = "http://h/", Username = "me", ProtectedPassword = SecretStore.Protect("hunter2") };
+        var json = System.Text.Json.JsonSerializer.Serialize(new UserSettings { Servers = [server] }, SettingsJson.Options);
         Assert.DoesNotContain("hunter2", json);
-        Assert.Contains("\"Username\":\"me\"", json);
+        Assert.Contains("\"Username\": \"me\"", json);
     }
 }

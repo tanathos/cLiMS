@@ -2,6 +2,7 @@
 using Clims.Catalog;
 using Clims.Tui;
 using Clims.Tui.Data;
+using Clims.Tui.Settings;
 using Clims.Tui.Ui;
 using Terminal.Gui.App;
 
@@ -44,25 +45,31 @@ string? PasswordFromArgs()
 }
 
 var driver = Arg("--driver");
-var settings = AppSettings.Load();
-var requested = Arg("--lms") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_URL") ?? settings.LmsUrl;
+var store = new SettingsStore();
+store.Load();
+CoverArt.Apply(store.Current.Ui.Covers);
+Theme.Apply(store.Current.Ui.Theme);
+var requested = Arg("--lms") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_URL") ?? store.Current.ActiveServer?.Url;
 var demoOnly = args.Contains("--demo");
-var uri = demoOnly ? null : AppSettings.NormalizeUrl(requested);
+var uri = demoOnly ? null : ServerUrl.Normalize(requested);
 
 Connection? connection = null;
 if (uri is not null)
 {
-    var user = Arg("--user") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_USER") ?? settings.Username;
-    var password = PasswordFromArgs() ?? SecretStore.Unprotect(settings.ProtectedPassword);
+    var saved = store.Current.Find(uri.ToString());
+    var user = Arg("--user") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_USER") ?? saved?.Username;
+    var password = PasswordFromArgs() ?? SecretStore.Unprotect(saved?.ProtectedPassword);
     connection = new Connection(uri, string.IsNullOrEmpty(user) ? null : new NetworkCredential(user, password ?? ""));
 }
 
 // Nothing to connect to and demo not asked for: the first thing the user sees is the connect screen.
-var askFirst = connection is null && !demoOnly;
+var explicitAddress = Arg("--lms") is not null || Environment.GetEnvironmentVariable("CLIMS_LMS_URL") is not null;
+var askFirst = !demoOnly && (connection is null || (!explicitAddress && !store.Current.Startup.AutoConnect));
 var exitCode = 0;
 while (true)
 {
     var changeServer = false;
+    string? nextServer = null;
     try
     {
         CrashLog.Info($"cLiMS starting ({(connection is null ? "demo" : connection.Uri.ToString())})");
@@ -93,14 +100,10 @@ while (true)
             if (answer.Choice == ConnectChoice.Connected)
             {
                 connection = new Connection(answer.Uri!, string.IsNullOrEmpty(answer.Username) ? null : new NetworkCredential(answer.Username, answer.Password ?? ""));
-                settings = settings with
-                {
-                    LmsUrl = answer.Uri!.ToString(),
-                    ServerUuid = answer.Uuid ?? (settings.LmsUrl == answer.Uri.ToString() ? settings.ServerUuid : null),
-                    Username = answer.Username,
-                    ProtectedPassword = SecretStore.Protect(answer.Password),
-                };
-                settings.Save();
+                store.Update(s => s.WithServer(
+                    answer.Uri!.ToString(),
+                    answer.Uuid,
+                    server => server with { Username = answer.Username, ProtectedPassword = SecretStore.Protect(answer.Password) }));
             }
             else if (answer.Choice == ConnectChoice.Demo)
             {
@@ -108,9 +111,9 @@ while (true)
             }
         }
 
-        using var session = new Session(connection, settings, Arg("--player"));
+        using var session = new Session(connection, store, Arg("--player"));
         using var search = new SearchService(() => session.Catalog.Current, session.Library);
-        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, settings.WaveformStyle);
+        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, store.Current.Ui.Waveform.Style, store.Current.Ui.Waveform.Enabled, store.Current.Startup.View, store, connection?.Uri.ToString());
 
         // Start talking to the server only once the UI loop is running, so its events have somewhere to go.
         app.AddTimeout(TimeSpan.FromMilliseconds(50), () =>
@@ -126,6 +129,7 @@ while (true)
             return false;
         });
         changeServer = main.ChangeServerRequested;
+        nextServer = main.RequestedServer;
         PerfStats.Dump();
     }
     catch (Exception ex)
@@ -141,6 +145,16 @@ while (true)
     if (!changeServer)
     {
         break;
+    }
+
+    // A server chosen in the settings: connect to it with the login saved for it, without the connect screen.
+    if (nextServer is not null && store.Current.Find(nextServer, nextServer) is { Url: { } nextUrl } chosen && ServerUrl.Normalize(nextUrl) is { } nextUri)
+    {
+        var chosenPassword = SecretStore.Unprotect(chosen.ProtectedPassword);
+        connection = new Connection(nextUri, string.IsNullOrEmpty(chosen.Username) ? null : new NetworkCredential(chosen.Username, chosenPassword ?? ""));
+        store.Update(s => s.WithServer(nextUrl, chosen.Uuid));
+        askFirst = false;
+        continue;
     }
 
     askFirst = true; // F2: back to the connect screen, with the current server filled in
