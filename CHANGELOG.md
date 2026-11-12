@@ -3,6 +3,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-12
+
 ### Added
 
 - Themes: `UI.Theme` in `settings.json` picks a predefined theme (`Default`, the colours cLiMS always had, dark `Obsidian`, `Midnight`, `Nord` and `High contrast`, light `Light`, `Paper` and `Sunny`) and overrides single colours by name (`Accent`, `Bg`, …, as `#RRGGBB`). The Theme tab of the settings page does both, with a swatch per colour, and applies at once. The ✎ icon next to a colour (or `p`) opens a dialog with Terminal.Gui's colour picker to fine tune it. Colours that were hard-coded in views (frames, scrollbars, album view markers) are now theme colours. Your colour changes can be saved under a name (*Save theme as…*) and picked again later; *Delete saved theme* removes one.
@@ -18,6 +20,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - The cover cache node of `settings.json` no longer writes its computed `Active` and `Ttl` values.
 
 ### Changed
+
+- Footer: the elapsed time lines up with the artist name and the track length with the queue position, which makes the progress bar two characters shorter. Click the track length to count down instead (`-03:12`, the time left); click again to go back. Pointing at the progress bar ahead of the playhead draws the stretch up to the pointer in a faint accent.
 
 - `F3` now changes the cover style of the lists, or of the full-screen cover while it is open (the footer keeps its own style), and `F4` cycles the three list cover sizes instead of two. Both last for the session; the defaults come from the settings.
 

@@ -1,7 +1,7 @@
 <Project>
   <!-- The one place the version lives. Bump it, update CHANGELOG.md, tag v<Version> (see "Releases" in README.md). -->
   <PropertyGroup>
-    <Version>0.9.1</Version>
+    <Version>0.9.2</Version>
     <Authors>Eros Fratini</Authors>
     <Copyright>Copyright (c) 2026 Eros Fratini</Copyright>
     <RepositoryUrl>https://github.com/tanathos/cLiMS</RepositoryUrl>

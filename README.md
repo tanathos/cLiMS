@@ -51,6 +51,18 @@ The first-run Connect screen: servers found on the network, plus a form for a sp
 
 ![Connect screen](screenshots/connect.png)
 
+Themes (settings page, Theme tab): nine predefined themes, a swatch and hex value per colour, and a colour picker dialog (✎ or `p`) to fine tune one. Here the light Paper theme on the Library:
+
+![Paper theme](screenshots/theme-paper.png)
+
+The Theme tab with the light Sunny theme: every colour of the theme is listed and can be changed, and your changes can be saved under a name:
+
+![Theme settings](screenshots/theme-settings.png)
+
+The colour picker, here on the dark Obsidian theme:
+
+![Colour picker](screenshots/theme-picker.png)
+
 The built-in key reference (`?`):
 
 ![Help](screenshots/help.png)
@@ -211,7 +223,7 @@ Press `?` in the app for the same list.
 | `?` | Key reference |
 | `Ctrl+Q` | Quit (`Esc` never quits; it only closes or goes back) |
 
-The mouse wheel scrolls the pane under the pointer. Lists show a scrollbar on their right edge; click it to jump. In the footer, click the progress bar to seek, the buttons to control playback, the volume bar to set it; click the artist or album of the playing track to jump to it in the Library.
+The mouse wheel scrolls the pane under the pointer. Lists show a scrollbar on their right edge; click it to jump. In the footer, click the progress bar to seek (pointing ahead of the playhead previews the jump), the track length to switch to the time left, the buttons to control playback, the volume bar to set it; click the artist or album of the playing track to jump to it in the Library.
 
 ## Build, test, publish
 ```
