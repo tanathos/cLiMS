@@ -135,7 +135,7 @@ public static class SixelCovers
         var bottom = Driver is not null && p.Screen.Y + p.Rows >= Driver.Screen.Height;
         if (!Encoded.TryGetValue((p.Image, w, h, bottom), out var data))
         {
-            data = new SixelEncoder { AvoidBottomScroll = bottom }.EncodeSixel(p.Image.Bitmap(w, h));
+            data = SixelPicture.Encode(p.Image.Bitmap(w, h), bottom);
             Encoded[(p.Image, w, h, bottom)] = data;
         }
 

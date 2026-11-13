@@ -9,6 +9,7 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - Online tab, in a list of tracks: `A` adds all of them to the queue, `Alt+A` replaces the queue with them and starts playing. Every page of the list is read first, not only the lines shown. The list is first tried as a whole folder in one command (when the server queues it all, it is instant) and otherwise queued track by track.
 - A *shuffle* switch after the last transport button of the footer (the server's shuffle mode: the next track is picked at random; lit in the accent colour while on).
 - Full-screen album view: only Esc closes it now (a click no longer does); the progress bars reach the right edge with the total time right-aligned, and a click on it switches to the minus time remaining; the playback controls, shuffle included, sit centred under the progress bars.
+- Sixel covers keep their colours: they are encoded with a 256-colour palette built by median cut and dithered, instead of Terminal.Gui's encoder, which merged similar colours into a handful of flat tones.
 - The queue view reads up to 5 000 tracks instead of 500.
 - Online tab: "Load more…" no longer scrolls the list back to the top; the selection moves to the first new line.
 - The version number shows very faint under the volume bar, right-aligned. The "Version number" switch on the UI page of the settings (`UI.ShowVersion`) hides it.
