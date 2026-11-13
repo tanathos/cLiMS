@@ -9,11 +9,21 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - Online tab, in a list of tracks: `A` adds all of them to the queue, `Alt+A` replaces the queue with them and starts playing. Every page of the list is read first, not only the lines shown. The list is first tried as a whole folder in one command (when the server queues it all, it is instant) and otherwise queued track by track.
 - A *shuffle* switch after the last transport button of the footer (the server's shuffle mode: the next track is picked at random; lit in the accent colour while on).
 - Full-screen album view: only Esc closes it now (a click no longer does); the progress bars reach the right edge with the total time right-aligned, and a click on it switches to the minus time remaining; the playback controls, shuffle included, sit centred under the progress bars.
+- In the full-screen album view `F3` and `F4` act on its cover: `F3` cycles its style, `F4` its size (full height, 75% or 50%, for the session). They did nothing there before.
+- The settings page warns when a cover style needs a Sixel terminal or a font with sextants or octants.
+- Six more cover styles, in the F3 cycle and the UI page of the settings: `Sextant` (2x3 samples per cell) and `Octant` (2x4, solid blocks, needs a recent font), `GameBoy` and `C64` (the four greens and the 16 colours of those machines, with Bayer dithering, 2x4 samples per cell: 48x48 for a medium cover, drawn with octant blocks; `GameBoyQuadrant` and `C64Quadrant` use 2x2 samples and quadrant blocks, which every font has), and the pixel-art Sixel styles `Chunky` (about 48x48 blocks) and `ChunkyScanlines` (64x64 with a darker line under each block row). Chunky styles use `SixelFallback` where Sixel is not possible.
 - Sixel covers keep their colours: they are encoded with a 256-colour palette built by median cut and dithered, instead of Terminal.Gui's encoder, which merged similar colours into a handful of flat tones.
+- Library tab: right-click an artist, genre or year in the left list for a Play / Enqueue menu acting on all their albums.
+- An alternate grid layout for the Library and Recently added tabs (`UI.AlbumLayout: Grid`, `F7` for the session, or the UI page of the settings): covers in rows with the title and artist under each. A click on a cover opens its tracklist in a panel under that row, another click closes it (one panel at a time). The panel's background is the cover enlarged and pixellated, or one tint of it (`UI.GridBackground`: `Pixellated` or `Tint`), mixed into the theme so the text stays readable.
 - The queue view reads up to 5 000 tracks instead of 500.
 - Online tab: "Load more…" no longer scrolls the list back to the top; the selection moves to the first new line.
 - The version number shows very faint under the volume bar, right-aligned. The "Version number" switch on the UI page of the settings (`UI.ShowVersion`) hides it.
 - A track streamed from Spotty, SpotOn, TIDAL or another service shows "[From SpotOn]" in front of the artist, in the footer and in the full-screen album view.
+
+### Changed
+
+- Online tab: the server's "Sounds & Effects" entry is no longer listed under Apps.
+- Full-screen album view: the key legend at the bottom is reduced to "Esc close" and "↑↓ scroll"; the other keys are in the help (`?`).
 
 ## [0.9.2] - 2026-11-12
 

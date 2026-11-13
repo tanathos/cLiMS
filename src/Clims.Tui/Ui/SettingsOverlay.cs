@@ -178,7 +178,12 @@ public sealed class SettingsOverlay : PaintView
             }
 
             var valueX = Put(textX, y, ValueText(item, selected), selected ? rowAttr : ValueAttr(item));
-            if (item.Hint.Length > 0 && W > HintX + 8)
+            if (item.Warning?.Invoke(_model.Snapshot) is { } warning && W > HintX + 8)
+            {
+                var warnX = Math.Max(HintX, valueX + 2);
+                Put(warnX, y, Clip("⚠ " + warning, W - warnX - 2), selected ? rowAttr : new Attribute(Theme.Warn, Theme.Bg));
+            }
+            else if (item.Hint.Length > 0 && W > HintX + 8)
             {
                 Put(Math.Max(HintX, valueX + 2), y, Clip(item.Hint, W - Math.Max(HintX, valueX + 2) - 2), selected ? rowAttr : dim);
             }

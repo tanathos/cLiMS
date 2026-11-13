@@ -48,6 +48,7 @@ var driver = Arg("--driver");
 var store = new SettingsStore();
 store.Load();
 CoverArt.Apply(store.Current.Ui.Covers);
+CoverArt.ApplyLayout(store.Current.Ui);
 Theme.Apply(store.Current.Ui.Theme);
 var requested = Arg("--lms") ?? Environment.GetEnvironmentVariable("CLIMS_LMS_URL") ?? store.Current.ActiveServer?.Url;
 var demoOnly = args.Contains("--demo");

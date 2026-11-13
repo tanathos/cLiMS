@@ -152,6 +152,7 @@ public sealed class MainWindow : Window
         _shield.Clicked += CloseMenu;
         _library.Albums.ContextRequested += OnAlbumContext;
         _recent.Albums.ContextRequested += OnAlbumContext;
+        _library.GroupContextRequested += OnGroupContext;
         _search.List.ContextRequested += (item, at) => OpenMenu(
             [new MenuEntry("Play", _search.List.ActivateSelected), new MenuEntry("Enqueue", () => _search.List.RequestQueue(QueueAction.Add))],
             at);
@@ -795,6 +796,18 @@ public sealed class MainWindow : Window
             {
                 _lyrics?.EnableOnline();
             }
+            else if (key == Key.F3)
+            {
+                CoverArt.SetStyle(CoverPlace.FullScreen, CoverArt.NextStyle(CoverPlace.FullScreen));
+                _info.ResetCovers();
+                _info.SetNeedsDraw();
+            }
+            else if (key == Key.F4)
+            {
+                CoverArt.FullScreenSize = CoverArt.NextSize(CoverArt.FullScreenSize);
+                _info.ResetCovers();
+                _info.SetNeedsDraw();
+            }
             else
             {
                 _info.HandleLyricsKey(key);
@@ -969,10 +982,20 @@ public sealed class MainWindow : Window
                 }
                 else if (key == Key.CursorRight)
                 {
+                    if (GridArrows)
+                    {
+                        return; // the grid of albums takes them
+                    }
+
                     if (!OnRadio) { _player.Seek(TimeSpan.FromSeconds(10)); }
                 }
                 else if (key == Key.CursorLeft)
                 {
+                    if (GridArrows)
+                    {
+                        return;
+                    }
+
                     if (!OnRadio) { _player.Seek(TimeSpan.FromSeconds(-10)); }
                 }
                 else if (key == Key.F3)
@@ -991,6 +1014,13 @@ public sealed class MainWindow : Window
                     CoverArt.LibrarySize = CoverArt.NextSize(CoverArt.LibrarySize);
                     _library.Albums.Relayout();
                     _recent.Albums.Relayout();
+                }
+                else if (key == Key.F7)
+                {
+                    // Album layout of the Library and Recently added tabs: list or grid. For this session only.
+                    CoverArt.Layout = CoverArt.Layout == AlbumLayout.List ? AlbumLayout.Grid : AlbumLayout.List;
+                    _library.Albums.LayoutChanged();
+                    _recent.Albums.LayoutChanged();
                 }
                 else if (key == Key.F2)
                 {
@@ -1049,6 +1079,26 @@ public sealed class MainWindow : Window
         IReadOnlyList<CatalogTrack> chosen = index >= 0 ? new[] { tracks[index] } : tracks;
         OpenMenu(
             [new MenuEntry("Play", () => Play(album, tracks, from)), new MenuEntry("Enqueue", () => OnQueueRequested(QueueAction.Add, album, chosen, from))],
+            at);
+    }
+
+    /// <summary>Right click on an artist, genre or year: play or enqueue every track of its albums.</summary>
+    private void OnGroupContext(IReadOnlyList<CatalogAlbum> albums, string name, System.Drawing.Point at)
+    {
+        if (_catalog.Current is not { } catalog)
+        {
+            return;
+        }
+
+        var tracks = albums.SelectMany(a => catalog.TracksOf(a.Id).Select(t => (Album: a, Track: t))).ToList();
+        if (tracks.Count == 0)
+        {
+            Notice("The tracks are still loading.");
+            return;
+        }
+
+        OpenMenu(
+            [new MenuEntry("Play", () => _player.PlayTracks(tracks, true)), new MenuEntry("Enqueue", () => _player.PlayTracks(tracks, false))],
             at);
     }
 
@@ -1217,17 +1267,21 @@ public sealed class MainWindow : Window
     private void OnSettingsChanged(UserSettings settings)
     {
         CoverArt.Apply(settings.Ui.Covers);
+        CoverArt.ApplyLayout(settings.Ui);
         Theme.Apply(settings.Ui.Theme);
         SetScheme(Theme.Dark);
         SetNeedsDraw();
         _footer.WaveformStyle = settings.Ui.Waveform.Style;
         _footer.ShowVersion = settings.Ui.ShowVersion;
-        _library.Albums.Relayout();
-        _recent.Albums.Relayout();
+        _library.Albums.LayoutChanged();
+        _recent.Albums.LayoutChanged();
         // The cover (and a sixel waveform) are the same images in new cells: take them off the screen so they are sent again.
         SixelCovers.Release(_footer);
         _footer.SetNeedsDraw();
     }
+
+    /// <summary>True when the arrow keys belong to the grid of albums (it has the focus) and not to the seek shortcut.</summary>
+    private bool GridArrows => CoverArt.Layout == AlbumLayout.Grid && (_library.Albums.HasFocus || _recent.Albums.HasFocus);
 
     private void LeaveSearch()
     {

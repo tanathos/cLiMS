@@ -11,7 +11,7 @@ namespace Clims.Tui.Ui;
 public static class SixelCovers
 {
     private static readonly Dictionary<object, Dictionary<string, Entry>> Owners = new();
-    private static readonly Dictionary<(CoverImage, int, int, bool), string> Encoded = new();
+    private static readonly Dictionary<(CoverImage, int, int, bool, CoverMode), string> Encoded = new();
 
     private const int SettleFrames = 4;
     private static int _nextId;
@@ -133,10 +133,11 @@ public static class SixelCovers
 
         // A sixel that ends on the last screen row makes the terminal scroll; the encoder can drop one band to avoid it.
         var bottom = Driver is not null && p.Screen.Y + p.Rows >= Driver.Screen.Height;
-        if (!Encoded.TryGetValue((p.Image, w, h, bottom), out var data))
+        if (!Encoded.TryGetValue((p.Image, w, h, bottom, p.Style), out var data))
         {
-            data = SixelPicture.Encode(p.Image.Bitmap(w, h), bottom);
-            Encoded[(p.Image, w, h, bottom)] = data;
+            var pixels = ChunkyPicture.IsChunky(p.Style) ? ChunkyPicture.Make(p.Image, w, h, p.Style) : p.Image.Bitmap(w, h);
+            data = SixelPicture.Encode(pixels, bottom);
+            Encoded[(p.Image, w, h, bottom, p.Style)] = data;
         }
 
         return data;

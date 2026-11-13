@@ -418,7 +418,7 @@ public abstract class PaintView : View
             return;
         }
 
-        if (CoverArt.UsesSixel(place) && DrawSixel(image, x, y, cols, rows))
+        if (CoverArt.UsesSixel(place) && DrawSixel(image, x, y, cols, rows, CoverArt.Style(place)))
         {
             return;
         }
@@ -453,7 +453,7 @@ public abstract class PaintView : View
     /// Shows <paramref name="image"/> as a sixel in the given cells. False (nothing drawn) when a sixel cannot be used: no
     /// terminal support, the image is not fully inside the view (a sixel cannot be clipped), or a modal view or popup is open.
     /// </summary>
-    protected bool DrawSixel(CoverImage image, int x, int y, int cols, int rows)
+    protected bool DrawSixel(CoverImage image, int x, int y, int cols, int rows, CoverMode style = CoverMode.Sixel)
     {
         var inside = x >= 0 && y >= ClipTop && x + cols <= W && y + rows <= H;
         if (!inside || !SixelCovers.Available || (Dimmed && Dimmable) || (Dimmable && InHole(ViewportToScreen(new System.Drawing.Point(x, y)), cols, rows)))
@@ -461,14 +461,14 @@ public abstract class PaintView : View
             return false;
         }
 
-        var blankKey = $"{x},{y},{cols},{rows}|{image.Label}";
+        var blankKey = $"{x},{y},{cols},{rows}|{image.Label}|{style}";
         _blankedNow[blankKey] = new Rect(x, y, cols, rows);
         if ((ResendSixelsOnPaint && !StableSixels) || !_blanked.ContainsKey(blankKey))
         {
             FillBlank(x, y, cols, rows);
         }
 
-        _sixels.Add(new SixelPlacement(image, cols, rows, ViewportToScreen(new System.Drawing.Point(x, y))));
+        _sixels.Add(new SixelPlacement(image, cols, rows, ViewportToScreen(new System.Drawing.Point(x, y)), style));
         return true;
     }
 
@@ -481,6 +481,12 @@ public abstract class PaintView : View
         _drawnCovers.Add(new Rect(x, y, cols, rows));
         FillBlank(x, y, cols, rows);
     }
+
+    /// <summary>
+    /// Marks cells as painted by this frame's own content (not a cover): the clean-up of covers that moved away must leave them alone.
+    /// The view must have written every one of those cells, or what was under the old cover stays visible.
+    /// </summary>
+    protected void Claim(int x, int y, int cols, int rows) => _drawnCovers.Add(new Rect(x, y, cols, rows));
 
     /// <summary>A dim block with a note in the middle: shown while a cover is being fetched, or when an album has none.</summary>
     private void DrawPlaceholder(int x, int y, int cols, int rows, bool loading)
@@ -498,12 +504,15 @@ public abstract class PaintView : View
     /// <summary>Covers that were there last frame and are gone or moved: blank their cells, except where a cover is now.</summary>
     private void BlankMovedCovers()
     {
-        foreach (var (key, old) in _blanked)
+        foreach (var (key, was) in _blanked)
         {
             if (_blankedNow.ContainsKey(key))
             {
                 continue;
             }
+
+            // The per-frame clear also skipped the guard cell on each side of the cover, so those need blanking too.
+            var old = Guarded(was);
 
             for (var r = 0; r < old.Rows; r++)
             {

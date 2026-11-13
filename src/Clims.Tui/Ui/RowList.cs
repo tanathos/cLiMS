@@ -35,6 +35,9 @@ public sealed class RowList : PaintView
     /// <summary>The glyph of a row was clicked (the row is not activated).</summary>
     public event Action<Row>? IconClicked;
 
+    /// <summary>Raised on a right click on a row (which is selected first) with the screen position.</summary>
+    public event Action<Row, System.Drawing.Point>? ContextRequested;
+
     private static int IconX(Row row) => 1 + row.Text.Length + 2;
 
     public IReadOnlyList<Row> Rows
@@ -198,6 +201,19 @@ public sealed class RowList : PaintView
                 SetNeedsDraw();
             }))
         {
+            return true;
+        }
+
+        if (mouse.Flags.HasFlag(MouseFlags.RightButtonClicked) && mouse.Position is { } rp)
+        {
+            SetFocus();
+            var at = _offset + rp.Y;
+            if (at >= 0 && at < _rows.Count && _rows[at].Kind != RowKind.Header)
+            {
+                Select(at, true);
+                ContextRequested?.Invoke(_rows[at], mouse.ScreenPosition);
+            }
+
             return true;
         }
 

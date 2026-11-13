@@ -40,6 +40,14 @@ public sealed class LibraryTab : View
         Header.TagClicked += CycleDimension;
         Header.SortClicked += ToggleSort;
         Artists.SelectionChanged += row => Show(row.Data as LibrarySelection);
+        Artists.ContextRequested += (row, at) =>
+        {
+            // Not for the "All ..." rows.
+            if (row.Data is LibrarySelection { Key: not null } s && _catalog is { } c)
+            {
+                GroupContextRequested?.Invoke(AlbumsOf(c, s), s.Heading, at);
+            }
+        };
         SetCatalog(null, _emptyMessage);
     }
 
@@ -49,6 +57,9 @@ public sealed class LibraryTab : View
     public RowList Artists { get; }
 
     public AlbumsView Albums { get; }
+
+    /// <summary>Right click on an artist, genre or year of the left list: its albums, its name and the screen position.</summary>
+    public event Action<IReadOnlyList<CatalogAlbum>, string, System.Drawing.Point>? GroupContextRequested;
 
     public LibraryDimension Dimension => _dimension;
     public const int MinLeftWidth = 22;
@@ -285,18 +296,20 @@ public sealed class LibraryTab : View
             return;
         }
 
-        IReadOnlyList<CatalogAlbum> albums = (selection.Dimension, selection.Key) switch
-        {
-            (LibraryDimension.AlbumArtist, int artistId) => c.AlbumsOfArtist(artistId),
-            (LibraryDimension.Genre, string genre) => c.AlbumsOfGenre(genre),
-            (LibraryDimension.Year, int year) => c.AlbumsOfYear(year),
-            _ => c.Albums,
-        };
+        var albums = AlbumsOf(c, selection);
 
         // Only a single artist's list can leave the artist out; every other list mixes artists.
         Albums.ShowArtist = !(selection.Dimension == LibraryDimension.AlbumArtist && selection.Key is not null);
         Albums.SetAlbums(selection.Heading, albums, c);
     }
+
+    private static IReadOnlyList<CatalogAlbum> AlbumsOf(MusicCatalog c, LibrarySelection selection) => (selection.Dimension, selection.Key) switch
+    {
+        (LibraryDimension.AlbumArtist, int artistId) => c.AlbumsOfArtist(artistId),
+        (LibraryDimension.Genre, string genre) => c.AlbumsOfGenre(genre),
+        (LibraryDimension.Year, int year) => c.AlbumsOfYear(year),
+        _ => c.Albums,
+    };
 
     private static string NameOf(LibraryDimension d) => d switch
     {

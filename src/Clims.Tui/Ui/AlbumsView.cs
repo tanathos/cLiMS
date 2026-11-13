@@ -1,4 +1,5 @@
 using Clims.Catalog;
+using Clims.Tui.Settings;
 using Terminal.Gui.Drawing;
 using Terminal.Gui.Drivers;
 using Terminal.Gui.Input;
@@ -11,7 +12,7 @@ namespace Clims.Tui.Ui;
 /// intersect the viewport are drawn. Track lists come from the catalogue and can change underneath (on-view refresh),
 /// which is detected through <see cref="MusicCatalog.Version"/>.
 /// </summary>
-public sealed class AlbumsView : PaintView
+public sealed partial class AlbumsView : PaintView
 {
     private const int HeadingRows = 2;
 
@@ -164,6 +165,12 @@ public sealed class AlbumsView : PaintView
     /// <summary>Recomputes block positions, for example after the cover size or a track list changed. Keeps the scroll offset.</summary>
     public void Relayout()
     {
+        if (Grid)
+        {
+            GridRelayout();
+            return;
+        }
+
         _tops = new int[_albums.Count];
         var y = HeadingRows;
         for (var i = 0; i < _albums.Count; i++)
@@ -260,16 +267,23 @@ public sealed class AlbumsView : PaintView
         _offset = Math.Clamp(_offset, 0, Math.Max(0, _totalRows - H));
 
         var visible = new List<int>();
-        for (var i = FirstVisible(); i < _albums.Count; i++)
+        if (Grid)
         {
-            var top = _tops[i] - _offset;
-            if (top >= H)
+            PaintGrid(visible);
+        }
+        else
+        {
+            for (var i = FirstVisible(); i < _albums.Count; i++)
             {
-                break;
-            }
+                var top = _tops[i] - _offset;
+                if (top >= H)
+                {
+                    break;
+                }
 
-            PaintAlbum(_albums[i], i, top);
-            visible.Add(_albums[i].Id);
+                PaintAlbum(_albums[i], i, top);
+                visible.Add(_albums[i].Id);
+            }
         }
 
         // The heading stays where it is: drawn last, over whatever scrolled up under it.
@@ -304,6 +318,12 @@ public sealed class AlbumsView : PaintView
         _version = catalog.Version;
         if (_albums.Count == 0)
         {
+            return;
+        }
+
+        if (Grid)
+        {
+            Relayout();
             return;
         }
 
@@ -438,6 +458,11 @@ public sealed class AlbumsView : PaintView
 
     protected override bool OnKeyDown(Key key)
     {
+        if (Grid && GridKey(key))
+        {
+            return true;
+        }
+
         switch (key.KeyCode)
         {
             case KeyCode.CursorDown:
@@ -566,6 +591,12 @@ public sealed class AlbumsView : PaintView
             return; // the pinned heading
         }
 
+        if (Grid)
+        {
+            GridContext(x, y, screen);
+            return;
+        }
+
         var row = y + _offset;
         for (var i = FirstVisible(); i < _albums.Count && _tops[i] <= row; i++)
         {
@@ -618,7 +649,7 @@ public sealed class AlbumsView : PaintView
     /// <summary>The album and the column (within the details line) of the link (artist, genre, year) at this cell, if any.</summary>
     private (int Album, int X)? LinkAt(int x, int y)
     {
-        if (_catalog is not { } catalog)
+        if (_catalog is not { } catalog || Grid)
         {
             return null;
         }
@@ -664,6 +695,12 @@ public sealed class AlbumsView : PaintView
                 ToggleSort();
             }
 
+            return;
+        }
+
+        if (Grid)
+        {
+            GridHit(x, y, play);
             return;
         }
 

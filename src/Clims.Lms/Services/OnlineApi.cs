@@ -30,7 +30,13 @@ public sealed class OnlineApi : IOnlineApi
                     continue;
                 }
 
-                apps.Add(new OnlineApp((e.GetStringOrNull("name") ?? command).Trim(), command, radio, type.EndsWith("_search", StringComparison.OrdinalIgnoreCase)));
+                var name = (e.GetStringOrNull("name") ?? command).Trim();
+                if (!radio && string.Equals(name, "Sounds & Effects", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue; // the server's sleep-sound plugin: nothing to play on a music player
+                }
+
+                apps.Add(new OnlineApp(name, command, radio,type.EndsWith("_search", StringComparison.OrdinalIgnoreCase)));
             }
         }
 

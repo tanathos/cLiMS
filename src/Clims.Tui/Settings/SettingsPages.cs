@@ -5,9 +5,11 @@ namespace Clims.Tui.Settings;
 /// <summary>The tabs of the settings page and their rows, built from the current settings (a server added or removed shows at once).</summary>
 public static class SettingsPages
 {
-    private static readonly CoverMode[] Styles = [CoverMode.Sixel, CoverMode.HalfBlock, CoverMode.Quadrant, CoverMode.Braille];
-    private static readonly CoverMode[] Fallbacks = [CoverMode.HalfBlock, CoverMode.Quadrant, CoverMode.Braille];
+    private static readonly CoverMode[] Styles = [.. CoverArt.Order];
+    private static readonly CoverMode[] Fallbacks = [.. CoverArt.Order.Where(s => !CoverArt.IsSixelStyle(s))];
     private static readonly CoverSize[] Sizes = [CoverSize.Small, CoverSize.Medium, CoverSize.Large];
+    private static readonly AlbumLayout[] Layouts = [AlbumLayout.List, AlbumLayout.Grid];
+    private static readonly GridBackdrop[] Backdrops = [GridBackdrop.Pixellated, GridBackdrop.Tint];
     private static readonly WaveformStyle[] Waveforms = [WaveformStyle.Blocks, WaveformStyle.Braille, WaveformStyle.Sixel];
     private static readonly StartupView[] Views = [StartupView.Library, StartupView.Recent, StartupView.Queue, StartupView.Genres, StartupView.Search];
 
@@ -53,11 +55,13 @@ public static class SettingsPages
 
     private static List<SettingItem> UiRows() =>
     [
-        SettingItems.Choice("Library covers", s => s.Ui.Covers.Library.Style, (s, v) => Covers(s, c => c with { Library = c.Library with { Style = v } }), Styles, "lists: library, recent, search, genres"),
+        SettingItems.Choice("Album layout", s => s.Ui.AlbumLayout, (s, v) => s with { Ui = s.Ui with { AlbumLayout = v } }, Layouts, "library and recently added: a list, or a grid of covers (F7 switches for the session)"),
+        SettingItems.Choice("Grid panel background", s => s.Ui.GridBackground, (s, v) => s with { Ui = s.Ui with { GridBackground = v } }, Backdrops, "the tracklist under a cover of the grid: the cover enlarged and blocky, or one tint of it"),
+        SettingItems.Choice("Library covers", s => s.Ui.Covers.Library.Style, (s, v) => Covers(s, c => c with { Library = c.Library with { Style = v } }), Styles, "lists: library, recent, search, genres", warning: CoverArt.Warning),
         SettingItems.Choice("Library cover size", s => s.Ui.Covers.Library.Size ?? CoverSize.Medium, (s, v) => Covers(s, c => c with { Library = c.Library with { Size = v } }), Sizes, "16x8, 24x12 or 32x16 cells"),
-        SettingItems.Choice("Footer cover", s => s.Ui.Covers.Footer.Style, (s, v) => Covers(s, c => c with { Footer = c.Footer with { Style = v } }), Styles),
-        SettingItems.Choice("Full-screen cover", s => s.Ui.Covers.FullScreen.Style, (s, v) => Covers(s, c => c with { FullScreen = c.FullScreen with { Style = v } }), Styles),
-        SettingItems.Choice("Where Sixel is not possible", s => s.Ui.Covers.SixelFallback, (s, v) => Covers(s, c => c with { SixelFallback = v }), Fallbacks, "terminals without Sixel, covers partly out of view"),
+        SettingItems.Choice("Footer cover", s => s.Ui.Covers.Footer.Style, (s, v) => Covers(s, c => c with { Footer = c.Footer with { Style = v } }), Styles, warning: CoverArt.Warning),
+        SettingItems.Choice("Full-screen cover", s => s.Ui.Covers.FullScreen.Style, (s, v) => Covers(s, c => c with { FullScreen = c.FullScreen with { Style = v } }), Styles, warning: CoverArt.Warning),
+        SettingItems.Choice("Where Sixel is not possible", s => s.Ui.Covers.SixelFallback, (s, v) => Covers(s, c => c with { SixelFallback = v }), Fallbacks, "terminals without Sixel, covers partly out of view", warning: CoverArt.Warning),
         SettingItems.Choice("Waveform style", s => s.Ui.Waveform.Style, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Style = v } } }, Waveforms, "clicking the waveform changes it too"),
         SettingItems.Toggle("Waveform", s => s.Ui.Waveform.Enabled, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Enabled = v } } }, "off: none shown, none downloaded", restart: true),
         SettingItems.Toggle("Version number", s => s.Ui.ShowVersion, (s, v) => s with { Ui = s.Ui with { ShowVersion = v } }, "faint, under the volume bar"),

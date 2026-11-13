@@ -14,13 +14,14 @@ public static class SettingItems
     };
 
     /// <summary>One of <paramref name="options"/>; a step goes to the next (or previous) one, round the end.</summary>
-    public static SettingItem Choice<T>(string label, Func<UserSettings, T> get, Func<UserSettings, T, UserSettings> set, IReadOnlyList<T> options, string hint = "", bool restart = false)
+    public static SettingItem Choice<T>(string label, Func<UserSettings, T> get, Func<UserSettings, T, UserSettings> set, IReadOnlyList<T> options, string hint = "", bool restart = false, Func<T, string?>? warning = null)
         where T : struct, Enum => new()
     {
         Label = label,
         Kind = SettingKind.Choice,
         Hint = hint,
         NeedsRestart = restart,
+        Warning = warning is null ? null : s => warning(get(s)),
         Value = s => get(s).ToString(),
         Change = (s, delta) =>
         {

@@ -13,6 +13,9 @@ public sealed class SettingItem
     /// <summary>A short explanation after the value.</summary>
     public string Hint { get; init; } = "";
 
+    /// <summary>A warning about the chosen value (it needs a special font or terminal), shown in place of the hint; null for none.</summary>
+    public Func<UserSettings, string?>? Warning { get; init; }
+
     /// <summary>True when a change only takes effect at the next start (or reconnect).</summary>
     public bool NeedsRestart { get; init; }
 

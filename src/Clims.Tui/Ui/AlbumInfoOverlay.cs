@@ -130,6 +130,12 @@ public sealed class AlbumInfoOverlay : PaintView
             rows = Math.Max(4, cols * cell.Width / Math.Max(1, cell.Height));
         }
 
+        var percent = CoverArt.FullScreenPercent(CoverArt.FullScreenSize);
+        if (percent < 100)
+        {
+            (cols, rows) = (Math.Max(2, cols * percent / 100), Math.Max(2, rows * percent / 100));
+        }
+
         // One column of margin on the left, one row above and below.
         const int left = 1;
         var top = 1 + (Math.Max(2, H - 2) - rows) / 2;
@@ -144,7 +150,7 @@ public sealed class AlbumInfoOverlay : PaintView
         var hint = "Esc close";
         if (_lyrics is { Instrumental: false })
         {
-            hint += "  ·  ↑↓ scroll" + (_lyrics.IsSynced ? "  ·  [ ] timing" : "") + "  ·  R search again";
+            hint += "  ·  ↑↓ scroll";
         }
 
         Put(x, H - 2, Clip(hint, W - x), dim); // one empty line below it, so it does not touch the border
