@@ -418,6 +418,12 @@ public abstract class PaintView : View
             return;
         }
 
+        DrawImage(image, x, y, cols, rows, place);
+    }
+
+    /// <summary>Draws a picture the view already has (not one asked from the cover source) in the style chosen for <paramref name="place"/>.</summary>
+    protected void DrawImage(CoverImage image, int x, int y, int cols, int rows, CoverPlace place)
+    {
         if (CoverArt.UsesSixel(place) && DrawSixel(image, x, y, cols, rows, CoverArt.Style(place)))
         {
             return;

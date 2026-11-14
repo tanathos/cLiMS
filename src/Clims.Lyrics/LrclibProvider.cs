@@ -13,12 +13,15 @@ public sealed partial class LrclibProvider : ILyricsProvider
     private const string Base = "https://lrclib.net/api/";
     private static readonly TimeSpan Tolerance = TimeSpan.FromSeconds(3);
     private readonly HttpClient _http;
+    private readonly Action<string>? _log;
 
     /// <summary>Creates the provider over a client (which must not carry credentials meant for another server).</summary>
     /// <param name="http">Client to use.</param>
-    public LrclibProvider(HttpClient http)
+    /// <param name="log">Receives a line about the candidates a search returned (null: no log).</param>
+    public LrclibProvider(HttpClient http, Action<string>? log = null)
     {
         _http = http;
+        _log = log;
     }
 
     /// <inheritdoc />
@@ -39,6 +42,7 @@ public sealed partial class LrclibProvider : ILyricsProvider
             using var doc = JsonDocument.Parse(body);
             if (Read(doc.RootElement) is { } exact)
             {
+                _log?.Invoke("lrclib: exact lookup matched (artist, title, album, length)");
                 return exact;
             }
         }
@@ -59,6 +63,8 @@ public sealed partial class LrclibProvider : ILyricsProvider
         var artist = LyricsKey.Fold(query.Artist);
         var title = LyricsKey.Fold(query.Title);
         LyricsResult? best = null;
+        var candidates = results.RootElement.GetArrayLength();
+        var matches = 0;
         foreach (var item in results.RootElement.EnumerateArray())
         {
             if (LyricsKey.Fold(Text(item, "artistName")) != artist || LyricsKey.Fold(Text(item, "trackName")) != title)
@@ -72,12 +78,14 @@ public sealed partial class LrclibProvider : ILyricsProvider
                 continue;
             }
 
+            matches++;
             if (Read(item) is { } candidate && (best is null || (candidate.IsSynced && !best.IsSynced)))
             {
                 best = candidate;
             }
         }
 
+        _log?.Invoke($"lrclib: exact lookup found nothing; search returned {candidates} candidates, {matches} with the same artist, title and length; {(best is null ? "none usable" : best.IsSynced ? "taking a synced one" : "taking a plain one")}");
         return best;
     }
 

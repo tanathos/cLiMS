@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using Clims.Catalog;
 using Clims.Tui;
 using Clims.Tui.Data;
@@ -114,7 +114,8 @@ while (true)
 
         using var session = new Session(connection, store, Arg("--player"));
         using var search = new SearchService(() => session.Catalog.Current, session.Library);
-        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, store.Current.Ui.Waveform.Style, store.Current.Ui.Waveform.Enabled, store.Current.Startup.View, store, connection?.Uri.ToString(), session.Online);
+        using var main = new MainWindow(app, session.Catalog, search, session.Player, new SavedQueueStore(SavedQueueStore.DefaultPath), session.Waves, session.RecentAlbums, session.Lyrics, store.Current.Ui.Waveform.Style, store.Current.Ui.Waveform.Enabled, store.Current.Startup.View, store, connection?.Uri.ToString(), session.Online, () => session.History, session.Info);
+        session.PlayLogged += main.OnPlayLogged;
 
         // Start talking to the server only once the UI loop is running, so its events have somewhere to go.
         app.AddTimeout(TimeSpan.FromMilliseconds(50), () =>

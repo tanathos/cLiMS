@@ -1,5 +1,6 @@
 using Clims.Tui.Settings;
 using Clims.Catalog;
+using Clims.Info;
 using Clims.Tui.Data;
 using Clims.Waveform;
 using Terminal.Gui.App;
@@ -24,6 +25,11 @@ public sealed class MainWindow : Window
     private readonly AlbumRefresher _refresher;
     private readonly HeaderBar _header;
     private readonly TabStrip _tabs;
+    private readonly PlayedView _played;
+    private readonly InfoDialog? _infoDialog;
+    private bool _infoDialogVisible;
+    private readonly Func<PlayHistoryStore?>? _history;
+    private readonly SettingsStore? _userSettings;
     private readonly View[] _pages;
     private readonly LibraryTab _library;
     private readonly SearchTab _search;
@@ -73,8 +79,12 @@ public sealed class MainWindow : Window
         StartupView startupView = StartupView.Library,
         SettingsStore? settings = null,
         string? connectedUrl = null,
-        OnlineSource? online = null)
+        OnlineSource? online = null,
+        Func<PlayHistoryStore?>? history = null,
+        InfoService? musicInfo = null)
     {
+        _history = history;
+        _userSettings = settings;
         _waveformEnabled = waveformEnabled;
         _waves = waveformEnabled ? waves : null;
         _lyrics = lyrics;
@@ -89,7 +99,7 @@ public sealed class MainWindow : Window
         SetScheme(Theme.Dark);
 
         _header = new HeaderBar(player, () => catalog.Status) { X = 0, Y = 0 };
-        _tabs = new TabStrip("Search", "Library", "Queue", "Recently added", "Genres", "Online") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
+        _tabs = new TabStrip("Search", "Library", "Queue", "Recently added", "Genres", "Online", "Played") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
 
         _search = new SearchTab();
         _library = new LibraryTab();
@@ -97,7 +107,11 @@ public sealed class MainWindow : Window
         _recent = new RecentTab(recentAlbums ?? ((_, _) => Task.FromResult<IReadOnlyList<int>>(Array.Empty<int>())));
         _genres = new GenresTab();
         _online = new OnlineTab(online, action => _app.Invoke(action));
-        _pages = new View[] { _search, _library, _queue, _recent, _genres, _online };
+        _played = new PlayedView();
+        _played.PlayRequested += Play;
+        _played.OpenRequested += album => ShowInLibrary(album, scrollToAlbum: true);
+        _played.ContextRequested += OnAlbumContext;
+        _pages = new View[] { _search, _library, _queue, _recent, _genres, _online, _played };
         foreach (var page in _pages)
         {
             page.X = 0;
@@ -148,8 +162,19 @@ public sealed class MainWindow : Window
         Add(_shield);
         _menu.Visible = false;
         Add(_menu);
+        if (musicInfo is not null)
+        {
+            _infoDialog = new InfoDialog(musicInfo) { X = Pos.Center(), Y = Pos.Center(), Width = Dim.Percent(75), Height = Dim.Percent(75), Visible = false };
+            _infoDialog.CloseRequested += CloseMusicInfo;
+            Add(_infoDialog);
+        }
+
         _menu.Chosen += RunMenuEntry;
-        _shield.Clicked += CloseMenu;
+        _shield.Clicked += () =>
+        {
+            CloseMenu();
+            CloseMusicInfo();
+        };
         _library.Albums.ContextRequested += OnAlbumContext;
         _recent.Albums.ContextRequested += OnAlbumContext;
         _library.GroupContextRequested += OnGroupContext;
@@ -249,6 +274,7 @@ public sealed class MainWindow : Window
         if (lyrics is not null)
         {
             lyrics.Changed += () => _app.Invoke(PushLyrics);
+            lyrics.Notice += text => _app.Invoke(() => Notice(text));
         }
 
         player.Notice += text => _app.Invoke(() => Notice(text));
@@ -372,6 +398,17 @@ public sealed class MainWindow : Window
             _online.Show();
         }
 
+        if (index == 6)
+        {
+            _played.ResetCovers();
+            RefreshPlayed();
+        }
+        else
+        {
+            SixelCovers.Release(_played);
+            CoverArt.Source.Want(_played, Array.Empty<CoverKey>());
+        }
+
         if (index == 3)
         {
             _recent.Albums.ResetCovers();
@@ -392,6 +429,28 @@ public sealed class MainWindow : Window
         }
 
         SetNeedsDraw();
+    }
+
+    /// <summary>A play was logged (any thread): the Played tab lists it when it is the one on show.</summary>
+    public void OnPlayLogged() => _app.Invoke(() =>
+    {
+        if (_currentTab == 6)
+        {
+            RefreshPlayed();
+        }
+    });
+
+    /// <summary>Reads the play log again and gives the Played tab its three lists.</summary>
+    private void RefreshPlayed()
+    {
+        if (_history?.Invoke() is not { } store)
+        {
+            _played.SetMessage(_history is null ? "The play log is not available in demo mode." : "The play log starts once the server is known. Play something.");
+            return;
+        }
+
+        var days = _userSettings?.Current.History.TrackDays ?? 3;
+        _played.SetData(store.All(), _catalog.Current, days, DateTimeOffset.Now, _userSettings?.Current.History.ListenPercent ?? 50);
     }
 
     private void Play(CatalogAlbum album, IReadOnlyList<CatalogTrack> tracks, int trackIndex)
@@ -531,6 +590,7 @@ public sealed class MainWindow : Window
         };
         _library.SetCatalog(catalog, message);
         _recent.SetCatalog(catalog, message);
+        RefreshPlayed();
         _genres.SetCatalog(catalog, message);
         _search.SetCatalog(catalog);
     }
@@ -631,6 +691,7 @@ public sealed class MainWindow : Window
         _info.SetNeedsDraw();
         _library.Albums.SetNeedsDraw();
         _recent.Albums.SetNeedsDraw();
+        _played.SetNeedsDraw();
         _search.List.SetNeedsDraw();
         _footer.SetNeedsDraw();
     }
@@ -644,6 +705,7 @@ public sealed class MainWindow : Window
             _sixelSeen = true;
             _library.Albums.SetNeedsDraw();
             _recent.Albums.SetNeedsDraw();
+            _played.SetNeedsDraw();
             _search.List.SetNeedsDraw();
         }
 
@@ -656,6 +718,7 @@ public sealed class MainWindow : Window
             {
             _library.Albums.SetNeedsDraw();
             _recent.Albums.SetNeedsDraw();
+            _played.SetNeedsDraw();
             _search.List.SetNeedsDraw();
             }
         }
@@ -742,6 +805,17 @@ public sealed class MainWindow : Window
             return;
         }
 
+        if (_infoDialogVisible)
+        {
+            if (key == Key.Esc || key.AsRune.Value is 'q' or 'Q')
+            {
+                CloseMusicInfo();
+                key.Handled = true;
+            }
+
+            return; // the other keys are the dialog's (it scrolls), and nothing else may act under it
+        }
+
         if (_menuVisible)
         {
             if (key == Key.CursorDown)
@@ -790,7 +864,7 @@ public sealed class MainWindow : Window
             }
             else if (c is 'r' or 'R')
             {
-                _lyrics?.Show(_player.Current, refresh: true);
+                _lyrics?.Show(_player.Current, refresh: true, otherProvider: true);
             }
             else if (c is 'l' or 'L')
             {
@@ -960,7 +1034,7 @@ public sealed class MainWindow : Window
                     return false;
                 });
                 break;
-            case '1' or '2' or '3' or '4' or '5' or '6' when !typeAhead:
+            case '1' or '2' or '3' or '4' or '5' or '6' or '7' when !typeAhead:
                 if (ch == '4' && _tabs.Selected == 3)
                 {
                     _recent.Refresh(); // pressing 4 on the tab itself asks the server again
@@ -982,16 +1056,16 @@ public sealed class MainWindow : Window
                 }
                 else if (key == Key.CursorRight)
                 {
-                    if (GridArrows)
+                    if (GridArrows || PlayedArrows)
                     {
-                        return; // the grid of albums takes them
+                        return; // the grid of albums, or the Played tab, takes them
                     }
 
                     if (!OnRadio) { _player.Seek(TimeSpan.FromSeconds(10)); }
                 }
                 else if (key == Key.CursorLeft)
                 {
-                    if (GridArrows)
+                    if (GridArrows || PlayedArrows)
                     {
                         return;
                     }
@@ -1007,6 +1081,8 @@ public sealed class MainWindow : Window
                     _library.Albums.SetNeedsDraw();
                     _recent.Albums.ResetCovers();
                     _recent.Albums.SetNeedsDraw();
+                    _played.ResetCovers();
+                    _played.SetNeedsDraw();
                     _info.SetNeedsDraw();
                 }
                 else if (key == Key.F4)
@@ -1014,6 +1090,8 @@ public sealed class MainWindow : Window
                     CoverArt.LibrarySize = CoverArt.NextSize(CoverArt.LibrarySize);
                     _library.Albums.Relayout();
                     _recent.Albums.Relayout();
+                    _played.ResetCovers();
+                    _played.SetNeedsDraw();
                 }
                 else if (key == Key.F7)
                 {
@@ -1047,7 +1125,7 @@ public sealed class MainWindow : Window
 
     private void OpenInfo()
     {
-        if (_infoVisible || _helpVisible || _settingsVisible || _player.Current is not { } now)
+        if (_infoVisible || _helpVisible || _settingsVisible || _infoDialogVisible || _player.Current is not { } now)
         {
             return;
         }
@@ -1078,8 +1156,55 @@ public sealed class MainWindow : Window
         var from = Math.Max(0, index);
         IReadOnlyList<CatalogTrack> chosen = index >= 0 ? new[] { tracks[index] } : tracks;
         OpenMenu(
-            [new MenuEntry("Play", () => Play(album, tracks, from)), new MenuEntry("Enqueue", () => OnQueueRequested(QueueAction.Add, album, chosen, from))],
+            WithInfo([new MenuEntry("Play", () => Play(album, tracks, from)), new MenuEntry("Enqueue", () => OnQueueRequested(QueueAction.Add, album, chosen, from))], album),
             at);
+    }
+
+    /// <summary>The entries of an album's menu, with Info after them when the lookups are available.</summary>
+    private IReadOnlyList<MenuEntry> WithInfo(IReadOnlyList<MenuEntry> entries, CatalogAlbum album) =>
+        _infoDialog is null ? entries : [.. entries, new MenuEntry("Info", () => OpenMusicInfo(album))];
+
+    /// <summary>Opens the Info dialog of an album: its lookups start now.</summary>
+    private void OpenMusicInfo(CatalogAlbum album)
+    {
+        if (_infoDialog is null || _infoDialogVisible || _infoVisible || _helpVisible || _settingsVisible)
+        {
+            return;
+        }
+
+        _infoDialogVisible = true;
+        // Sixel images sit above any text: everything under the dialog draws its covers in cells, dimmed, while it is open.
+        PaintView.Dimmed = true;
+        ReleaseSixels();
+        _shield.Visible = true;
+        _infoDialog.Visible = true;
+        _infoDialog.Show(album);
+        _infoDialog.SetFocus();
+        SetNeedsDraw();
+    }
+
+    private void CloseMusicInfo()
+    {
+        if (!_infoDialogVisible)
+        {
+            return;
+        }
+
+        _infoDialogVisible = false;
+        _infoDialog!.Cancel();
+        _infoDialog.Visible = false;
+        PaintView.Dimmed = false;
+        _shield.Visible = false;
+        SixelCovers.Release(_infoDialog);
+        CoverArt.Source.Want(_infoDialog, Array.Empty<CoverKey>());
+        ReleaseSixels();
+        _footer.SetNeedsDraw();
+        _library.Albums.SetNeedsDraw();
+        _recent.Albums.SetNeedsDraw();
+        _played.SetNeedsDraw();
+        _search.List.SetNeedsDraw();
+        FocusPage();
+        SetNeedsDraw();
     }
 
     /// <summary>Right click on an artist, genre or year: play or enqueue every track of its albums.</summary>
@@ -1104,7 +1229,7 @@ public sealed class MainWindow : Window
 
     private void OpenMenu(IReadOnlyList<MenuEntry> entries, System.Drawing.Point at)
     {
-        if (_menuVisible || _infoVisible || _helpVisible || _settingsVisible)
+        if (_menuVisible || _infoVisible || _helpVisible || _settingsVisible || _infoDialogVisible)
         {
             return;
         }
@@ -1135,6 +1260,7 @@ public sealed class MainWindow : Window
         _footer.SetNeedsDraw();
         _library.Albums.SetNeedsDraw();
         _recent.Albums.SetNeedsDraw();
+        _played.SetNeedsDraw();
         _search.List.SetNeedsDraw();
         SetNeedsDraw();
     }
@@ -1156,9 +1282,11 @@ public sealed class MainWindow : Window
         SixelCovers.Release(_library.Albums);
         SixelCovers.Release(_search.List);
         SixelCovers.Release(_recent.Albums);
+        SixelCovers.Release(_played);
         SixelCovers.Release(_footer);
         _library.Albums.ResetCovers();
         _recent.Albums.ResetCovers();
+        _played.ResetCovers();
         _search.List.ResetCovers();
         _footer.ResetCovers();
     }
@@ -1189,6 +1317,7 @@ public sealed class MainWindow : Window
         _footer.SetNeedsDraw();
         _library.Albums.SetNeedsDraw();
         _recent.Albums.SetNeedsDraw();
+        _played.SetNeedsDraw();
         _search.List.SetNeedsDraw();
         SetNeedsDraw();
     }
@@ -1222,6 +1351,8 @@ public sealed class MainWindow : Window
         SixelCovers.Release(_library.Albums);
         SixelCovers.Release(_search.List);
         SixelCovers.Release(_recent.Albums);
+        SixelCovers.Release(_played);
+        CoverArt.Source.Want(_played, Array.Empty<CoverKey>());
         CoverArt.Source.Want(_library.Albums, Array.Empty<CoverKey>());
         CoverArt.Source.Want(_search.List, Array.Empty<CoverKey>());
         CoverArt.Source.Want(_recent.Albums, Array.Empty<CoverKey>());
@@ -1242,7 +1373,7 @@ public sealed class MainWindow : Window
     /// <summary>Opens or closes the settings page (F10 or the gear in the header).</summary>
     private void ToggleSettings()
     {
-        if (_settings is null || _infoVisible || _menuVisible || _helpVisible)
+        if (_settings is null || _infoVisible || _menuVisible || _helpVisible || _infoDialogVisible)
         {
             return;
         }
@@ -1275,6 +1406,7 @@ public sealed class MainWindow : Window
         _footer.ShowVersion = settings.Ui.ShowVersion;
         _library.Albums.LayoutChanged();
         _recent.Albums.LayoutChanged();
+        RefreshPlayed();
         // The cover (and a sixel waveform) are the same images in new cells: take them off the screen so they are sent again.
         SixelCovers.Release(_footer);
         _footer.SetNeedsDraw();
@@ -1282,6 +1414,9 @@ public sealed class MainWindow : Window
 
     /// <summary>True when the arrow keys belong to the grid of albums (it has the focus) and not to the seek shortcut.</summary>
     private bool GridArrows => CoverArt.Layout == AlbumLayout.Grid && (_library.Albums.HasFocus || _recent.Albums.HasFocus);
+
+    /// <summary>True when the arrow keys belong to the Played tab's grid of albums (in its list of tracks they still seek).</summary>
+    private bool PlayedArrows => _played.HasFocus && _played.Current != PlayedView.Section.Tracks;
 
     private void LeaveSearch()
     {
@@ -1313,6 +1448,9 @@ public sealed class MainWindow : Window
                 break;
             case 5:
                 _online.List.SetFocus();
+                break;
+            case 6:
+                _played.SetFocus();
                 break;
         }
     }

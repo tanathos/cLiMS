@@ -22,6 +22,7 @@ public static class SettingsPages
         new("Theme", ThemeRows(settings)),
         new("Lyrics", LyricsRows(settings)),
         new("Cache", CacheRows()),
+        new("History", HistoryRows()),
         new("Startup", StartupRows()),
     ];
 
@@ -171,6 +172,13 @@ public static class SettingsPages
         SettingItems.Number("Covers: most kept", s => s.Cache.Covers.Normal.MaxEntries, (s, v) => Cache(s, c => c with { Normal = c.Normal with { MaxEntries = v } }), 0, 100000, 250, zeroText: "no limit", restart: true),
         SettingItems.Number("Big covers: days kept", s => s.Cache.Covers.Big.TtlDays, (s, v) => Cache(s, c => c with { Big = c.Big with { TtlDays = v } }), 0, 3650, 5, zeroText: "not cached", hint: "the full-screen cover (900 px)", restart: true),
         SettingItems.Number("Big covers: most kept", s => s.Cache.Covers.Big.MaxEntries, (s, v) => Cache(s, c => c with { Big = c.Big with { MaxEntries = v } }), 0, 100000, 10, zeroText: "no limit", restart: true),
+    ];
+
+    private static List<SettingItem> HistoryRows() =>
+    [
+        SettingItems.Number("Tracks: days shown", s => s.History.TrackDays, (s, v) => s with { History = s.History with { TrackDays = v } }, 1, 365, 1, hint: "the Played tab lists the tracks played this far back (albums: 7 and 30 days)"),
+        SettingItems.Number("Album listened to at", s => s.History.ListenPercent, (s, v) => s with { History = s.History with { ListenPercent = v } }, 50, 100, 25, hint: "percent of an album's tracks to play for it to count as listened to: 50, 75 or 100"),
+        SettingItems.Info("Play log", "kept forever", "a track counts as played at half its length"),
     ];
 
     private static List<SettingItem> StartupRows() =>

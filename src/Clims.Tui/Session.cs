@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using Clims.Catalog;
+using Clims.Info;
 using Clims.Lms;
 using Clims.Lyrics;
 using Clims.Tui.Data;
@@ -23,10 +24,13 @@ public sealed class Session : IDisposable
     private readonly LmsPlayerController? _lmsPlayer;
     private readonly LmsCoverSource? _covers;
     private volatile CoverCacheStore? _coverCache;
+    private volatile PlayHistoryStore? _history;
+    private PlayLogger? _logger;
     private readonly CliEventStream? _events;
     private readonly Connection? _connection;
     private readonly SettingsStore _settings;
     private HttpClient? _lyricsHttp;
+    private HttpClient? _infoHttp;
     private ILmsRpcClient? _rpc;
     private LyricsStore? _lyricsStore;
 
@@ -71,6 +75,7 @@ public sealed class Session : IDisposable
                 // then is the address worth remembering, so a mistyped --lms never overwrites a working one.
                 _settings.Update(s => s.WithServer(uri.ToString(), uuid));
                 _coverCache = new CoverCacheStore(CatalogPaths.CoversFor(uuid));
+                _history = new PlayHistoryStore(CatalogPaths.HistoryFor(uuid));
                 return new SqliteCatalogStore(CatalogPaths.For(uuid));
             },
         });
@@ -86,19 +91,61 @@ public sealed class Session : IDisposable
             Lyrics = new LyricsFeed(BuildLyrics(server?.Lyrics ?? new ServerLyricsSettings()), EnableOnlineLyrics);
         }
 
+        // Not the client above either: artist and album lookups go to MusicBrainz and Wikimedia, which must never see the server login.
+        _infoHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+        Info = new InfoService([new MusicBrainzProvider(_infoHttp, log: CrashLog.Info), new WikipediaProvider(_infoHttp, CrashLog.Info)], new InfoStore(CatalogPaths.InfoFile()), _infoHttp, log: CrashLog.Info);
+
         _events = new CliEventStream(EventOptions());
         var service = Catalog;
         _lmsPlayer = new LmsPlayerController(lms, () => service.Current, new LmsPlayerOptions { PlayerId = playerId ?? server?.PlayerId });
         _lmsPlayer.Notice += CrashLog.Info;
         Player = _lmsPlayer;
+        _lmsPlayer.Changed += LogTrackStart;
+        _logger = new PlayLogger(_lmsPlayer, () => _history, () => service.Current);
         Online = new OnlineSource(new OnlineApi(lms.Rpc), () => _lmsPlayer.PlayerId);
     }
 
+
+    private string? _startedKey;
+
+    /// <summary>Writes a log line when a different track starts (the player raises its change event for every state change, so the same track is told once).</summary>
+    private void LogTrackStart()
+    {
+        if (Player.Current is not { } now)
+        {
+            _startedKey = null;
+            return;
+        }
+
+        var key = $"{now.Track.Id}|{now.Track.Title}|{now.Station}";
+        if (key == _startedKey)
+        {
+            return;
+        }
+
+        _startedKey = key;
+        var length = now.Track.Duration > TimeSpan.Zero ? $", {(int)now.Track.Duration.TotalMinutes}:{now.Track.Duration.Seconds:00}" : "";
+        var from = now.IsRemote ? $"stream{(now.Station is null ? "" : " " + now.Station)}" : $"track id {now.Track.Id}";
+        CrashLog.Info($"Playing \"{now.Track.Artist ?? now.Album.ArtistName} – {now.Track.Title}\" ({now.Album.Title}) [{from}{length}]");
+    }
     /// <summary>The catalogue service.</summary>
     public ICatalogService Catalog { get; }
 
+    /// <summary>Artist and album information from the web (the Info entry of the album menu), or null in demo mode.</summary>
+    public InfoService? Info { get; }
+
     /// <summary>The server's radios and apps (Spotty, TIDAL…), or null in demo mode.</summary>
     public OnlineSource? Online { get; }
+
+    /// <summary>The play log, or null in demo mode and until the server's UUID is known.</summary>
+    public PlayHistoryStore? History => _history;
+
+    /// <summary>Raised when a play was logged (any thread), or never in demo mode.</summary>
+    public event Action? PlayLogged
+    {
+        add { if (_logger is not null) { _logger.Logged += value; } }
+        remove { if (_logger is not null) { _logger.Logged -= value; } }
+    }
 
     /// <summary>The player (a fake one in demo mode).</summary>
     public IPlayerController Player { get; }
@@ -147,7 +194,7 @@ public sealed class Session : IDisposable
                 switch (name)
                 {
                     case "lrclib":
-                        providers.Add(new LrclibProvider(http));
+                        providers.Add(new LrclibProvider(http, CrashLog.Info));
                         break;
                     case "darklyrics":
                         providers.Add(new DarkLyricsProvider(http));
@@ -159,7 +206,7 @@ public sealed class Session : IDisposable
             }
         }
 
-        return new LyricsService(_lyricsStore!, providers, TimeSpan.FromDays(Math.Max(0, lyrics.MissRetryDays)));
+        return new LyricsService(_lyricsStore!, providers, TimeSpan.FromDays(Math.Max(0, lyrics.MissRetryDays)), log: CrashLog.Info);
     }
 
     /// <summary>The lyrics tag (<c>w</c>) of one track, straight from the server; null when it has none.</summary>
@@ -195,6 +242,7 @@ public sealed class Session : IDisposable
     public void Start()
     {
         _lmsPlayer?.Start();
+        _logger?.Start();
         _ = Task.Run(async () =>
         {
             try
@@ -241,12 +289,14 @@ public sealed class Session : IDisposable
     public void Dispose()
     {
         _cancel.Cancel();
+        _logger?.Dispose();
         _lmsPlayer?.Dispose();
         Waves?.Dispose();
         Catalog.Dispose();
         _covers?.Dispose();
         Lyrics?.Dispose();
         _lyricsHttp?.Dispose();
+        _infoHttp?.Dispose();
         _http?.Dispose();
         _cancel.Dispose();
     }

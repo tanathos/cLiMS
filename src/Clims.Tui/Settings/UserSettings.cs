@@ -16,6 +16,8 @@ public sealed record UserSettings
 
     public CacheSettings Cache { get; init; } = new();
 
+    public HistorySettings History { get; init; } = new();
+
     [JsonPropertyName("UI")]
     public UiSettings Ui { get; init; } = new();
 

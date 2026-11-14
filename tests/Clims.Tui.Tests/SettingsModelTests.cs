@@ -38,9 +38,9 @@ public sealed class SettingsModelTests : IDisposable
     }
 
     [Fact]
-    public void The_pages_are_servers_ui_theme_lyrics_cache_and_startup()
+    public void The_pages_are_servers_ui_theme_lyrics_cache_history_and_startup()
     {
-        Assert.Equal(["Servers", "UI", "Theme", "Lyrics", "Cache", "Startup"], Model().Pages.Select(p => p.Title));
+        Assert.Equal(["Servers", "UI", "Theme", "Lyrics", "Cache", "History", "Startup"], Model().Pages.Select(p => p.Title));
     }
 
     [Fact]

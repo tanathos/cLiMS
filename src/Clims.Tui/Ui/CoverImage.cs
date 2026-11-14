@@ -17,6 +17,12 @@ public sealed class CoverImage : IDisposable
 
     public string Label { get; }
 
+    /// <summary>Width of the decoded picture in pixels.</summary>
+    public int PixelWidth => _source.Width;
+
+    /// <summary>Height of the decoded picture in pixels.</summary>
+    public int PixelHeight => _source.Height;
+
     /// <summary>Wraps raw pixels (generated demo covers).</summary>
     public static CoverImage FromPixels(Color[,] pixels, string label)
     {
