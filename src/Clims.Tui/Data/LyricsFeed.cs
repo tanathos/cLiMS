@@ -33,6 +33,9 @@ public sealed class LyricsFeed : IDisposable
     /// <summary>True when the user can still turn online lookup on.</summary>
     public bool CanEnableOnline => !_service.CanSearchOnline && _enableOnline is not null;
 
+    /// <summary>Raised with a sentence for the user when a search for another provider's lyrics ended (any thread).</summary>
+    public event Action<string>? Notice;
+
     /// <summary>Raised when <see cref="State"/> or <see cref="Result"/> changed (any thread).</summary>
     public event Action? Changed;
 
@@ -44,7 +47,10 @@ public sealed class LyricsFeed : IDisposable
     }
 
     /// <summary>Shows the lyrics of a track. The same track again does nothing, unless <paramref name="refresh"/> asks for a new search.</summary>
-    public void Show(NowPlaying? now, bool refresh = false)
+    /// <param name="now">The track.</param>
+    /// <param name="refresh">Search again even though lyrics are stored.</param>
+    /// <param name="otherProvider">With <paramref name="refresh"/>: leave out the provider the current lyrics came from, and ask the next one.</param>
+    public void Show(NowPlaying? now, bool refresh = false, bool otherProvider = false)
     {
         _now = now;
         if (now is null)
@@ -56,6 +62,7 @@ public sealed class LyricsFeed : IDisposable
         }
 
         var query = QueryOf(now);
+        var skip = refresh && otherProvider ? Result?.Source : null;
         if (!refresh && query.Key == _key)
         {
             return;
@@ -83,11 +90,18 @@ public sealed class LyricsFeed : IDisposable
         {
             try
             {
-                var found = await service.FindAsync(query, refresh, cts.Token).ConfigureAwait(false);
+                var found = await service.FindAsync(query, refresh, cts.Token, skip).ConfigureAwait(false);
                 if (!cts.IsCancellationRequested)
                 {
                     // With only local sources "not found" is not the end: online lookup may still be turned on.
                     Set(found is not null ? LyricsState.Found : service.CanSearchOnline ? LyricsState.NotFound : LyricsState.Off, found);
+
+                    if (skip is not null)
+                    {
+                        Notice?.Invoke(found is null || found.Source == skip
+                            ? (skip == "manual" ? "These lyrics were edited by hand and are kept" : "No other enabled provider has lyrics for this track")
+                            : $"Lyrics from {found.Source} (the one before was {skip})");
+                    }
                 }
             }
             catch (OperationCanceledException)

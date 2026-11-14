@@ -5,9 +5,11 @@ namespace Clims.Tui.Settings;
 /// <summary>The tabs of the settings page and their rows, built from the current settings (a server added or removed shows at once).</summary>
 public static class SettingsPages
 {
-    private static readonly CoverMode[] Styles = [CoverMode.Sixel, CoverMode.HalfBlock, CoverMode.Quadrant, CoverMode.Braille];
-    private static readonly CoverMode[] Fallbacks = [CoverMode.HalfBlock, CoverMode.Quadrant, CoverMode.Braille];
+    private static readonly CoverMode[] Styles = [.. CoverArt.Order];
+    private static readonly CoverMode[] Fallbacks = [.. CoverArt.Order.Where(s => !CoverArt.IsSixelStyle(s))];
     private static readonly CoverSize[] Sizes = [CoverSize.Small, CoverSize.Medium, CoverSize.Large];
+    private static readonly AlbumLayout[] Layouts = [AlbumLayout.List, AlbumLayout.Grid];
+    private static readonly GridBackdrop[] Backdrops = [GridBackdrop.Pixellated, GridBackdrop.Tint];
     private static readonly WaveformStyle[] Waveforms = [WaveformStyle.Blocks, WaveformStyle.Braille, WaveformStyle.Sixel];
     private static readonly StartupView[] Views = [StartupView.Library, StartupView.Recent, StartupView.Queue, StartupView.Genres, StartupView.Search];
 
@@ -20,6 +22,7 @@ public static class SettingsPages
         new("Theme", ThemeRows(settings)),
         new("Lyrics", LyricsRows(settings)),
         new("Cache", CacheRows()),
+        new("History", HistoryRows()),
         new("Startup", StartupRows()),
     ];
 
@@ -53,13 +56,16 @@ public static class SettingsPages
 
     private static List<SettingItem> UiRows() =>
     [
-        SettingItems.Choice("Library covers", s => s.Ui.Covers.Library.Style, (s, v) => Covers(s, c => c with { Library = c.Library with { Style = v } }), Styles, "lists: library, recent, search, genres"),
+        SettingItems.Choice("Album layout", s => s.Ui.AlbumLayout, (s, v) => s with { Ui = s.Ui with { AlbumLayout = v } }, Layouts, "library and recently added: a list, or a grid of covers (F7 switches for the session)"),
+        SettingItems.Choice("Grid panel background", s => s.Ui.GridBackground, (s, v) => s with { Ui = s.Ui with { GridBackground = v } }, Backdrops, "the tracklist under a cover of the grid: the cover enlarged and blocky, or one tint of it"),
+        SettingItems.Choice("Library covers", s => s.Ui.Covers.Library.Style, (s, v) => Covers(s, c => c with { Library = c.Library with { Style = v } }), Styles, "lists: library, recent, search, genres", warning: CoverArt.Warning),
         SettingItems.Choice("Library cover size", s => s.Ui.Covers.Library.Size ?? CoverSize.Medium, (s, v) => Covers(s, c => c with { Library = c.Library with { Size = v } }), Sizes, "16x8, 24x12 or 32x16 cells"),
-        SettingItems.Choice("Footer cover", s => s.Ui.Covers.Footer.Style, (s, v) => Covers(s, c => c with { Footer = c.Footer with { Style = v } }), Styles),
-        SettingItems.Choice("Full-screen cover", s => s.Ui.Covers.FullScreen.Style, (s, v) => Covers(s, c => c with { FullScreen = c.FullScreen with { Style = v } }), Styles),
-        SettingItems.Choice("Where Sixel is not possible", s => s.Ui.Covers.SixelFallback, (s, v) => Covers(s, c => c with { SixelFallback = v }), Fallbacks, "terminals without Sixel, covers partly out of view"),
+        SettingItems.Choice("Footer cover", s => s.Ui.Covers.Footer.Style, (s, v) => Covers(s, c => c with { Footer = c.Footer with { Style = v } }), Styles, warning: CoverArt.Warning),
+        SettingItems.Choice("Full-screen cover", s => s.Ui.Covers.FullScreen.Style, (s, v) => Covers(s, c => c with { FullScreen = c.FullScreen with { Style = v } }), Styles, warning: CoverArt.Warning),
+        SettingItems.Choice("Where Sixel is not possible", s => s.Ui.Covers.SixelFallback, (s, v) => Covers(s, c => c with { SixelFallback = v }), Fallbacks, "terminals without Sixel, covers partly out of view", warning: CoverArt.Warning),
         SettingItems.Choice("Waveform style", s => s.Ui.Waveform.Style, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Style = v } } }, Waveforms, "clicking the waveform changes it too"),
         SettingItems.Toggle("Waveform", s => s.Ui.Waveform.Enabled, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Enabled = v } } }, "off: none shown, none downloaded", restart: true),
+        SettingItems.Toggle("Version number", s => s.Ui.ShowVersion, (s, v) => s with { Ui = s.Ui with { ShowVersion = v } }, "faint, under the volume bar"),
     ];
 
     private static List<SettingItem> ThemeRows(UserSettings settings)
@@ -166,6 +172,13 @@ public static class SettingsPages
         SettingItems.Number("Covers: most kept", s => s.Cache.Covers.Normal.MaxEntries, (s, v) => Cache(s, c => c with { Normal = c.Normal with { MaxEntries = v } }), 0, 100000, 250, zeroText: "no limit", restart: true),
         SettingItems.Number("Big covers: days kept", s => s.Cache.Covers.Big.TtlDays, (s, v) => Cache(s, c => c with { Big = c.Big with { TtlDays = v } }), 0, 3650, 5, zeroText: "not cached", hint: "the full-screen cover (900 px)", restart: true),
         SettingItems.Number("Big covers: most kept", s => s.Cache.Covers.Big.MaxEntries, (s, v) => Cache(s, c => c with { Big = c.Big with { MaxEntries = v } }), 0, 100000, 10, zeroText: "no limit", restart: true),
+    ];
+
+    private static List<SettingItem> HistoryRows() =>
+    [
+        SettingItems.Number("Tracks: days shown", s => s.History.TrackDays, (s, v) => s with { History = s.History with { TrackDays = v } }, 1, 365, 1, hint: "the Played tab lists the tracks played this far back (albums: 7 and 30 days)"),
+        SettingItems.Number("Album listened to at", s => s.History.ListenPercent, (s, v) => s with { History = s.History with { ListenPercent = v } }, 50, 100, 25, hint: "percent of an album's tracks to play for it to count as listened to: 50, 75 or 100"),
+        SettingItems.Info("Play log", "kept forever", "a track counts as played at half its length"),
     ];
 
     private static List<SettingItem> StartupRows() =>

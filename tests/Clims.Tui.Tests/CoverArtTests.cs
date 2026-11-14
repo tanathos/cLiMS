@@ -80,6 +80,8 @@ public class CoverArtTests
         try
         {
             CoverArt.SetStyle(CoverPlace.Library, CoverMode.Braille);
+            Assert.Equal(CoverMode.Sextant, CoverArt.NextStyle(CoverPlace.Library));
+            CoverArt.SetStyle(CoverPlace.Library, CoverMode.C64Quadrant);
             Assert.Equal(CoverMode.HalfBlock, CoverArt.NextStyle(CoverPlace.Library));
         }
         finally

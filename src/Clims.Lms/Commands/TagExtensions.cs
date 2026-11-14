@@ -9,7 +9,7 @@ public static class TagExtensions
         (TrackTags.Year, 'y'), (TrackTags.Url, 'u'), (TrackTags.ArtworkTrackId, 'J'), (TrackTags.CoverId, 'c'),
         (TrackTags.AlbumId, 'e'), (TrackTags.ArtistId, 's'), (TrackTags.GenreId, 'p'), (TrackTags.Genre, 'g'),
         (TrackTags.Disc, 'i'), (TrackTags.DiscCount, 'q'), (TrackTags.Bitrate, 'r'), (TrackTags.SampleRate, 'T'),
-        (TrackTags.SampleSize, 'I'), (TrackTags.Lossless, 'Q'), (TrackTags.Compilation, 'C'),
+        (TrackTags.SampleSize, 'I'), (TrackTags.Lossless, 'Q'), (TrackTags.Compilation, 'C'), (TrackTags.ArtworkUrl, 'K'), (TrackTags.Remote, 'x'),
     };
 
     private static readonly (AlbumTags Flag, char Letter)[] AlbumLetters =

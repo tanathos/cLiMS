@@ -29,11 +29,17 @@ public static class CatalogPaths
     /// <summary>The lyrics store: one file for every server (lyrics belong to the song). Unlike the caches it holds things that cost a search to get back.</summary>
     public static string LyricsFile(string? folder = null) => Path.Combine(folder ?? DataFolder, "lyrics.db");
 
+    /// <summary>The artist and album information found online: one file for every server (an artist is the same on all of them). It is a cache and may be deleted.</summary>
+    public static string InfoFile(string? folder = null) => Path.Combine(folder ?? DataFolder, "info.db");
+
     /// <summary>The cache file for a server, keyed by its UUID so that changing the address does not lose the index.</summary>
     public static string For(string serverUuid, string? folder = null) => Named("catalog", serverUuid, folder);
 
     /// <summary>The cover cache file for a server (apart from the index, so each can be deleted on its own).</summary>
     public static string CoversFor(string serverUuid, string? folder = null) => Named("covers", serverUuid, folder);
+
+    /// <summary>The play log of a server. Unlike the other per-server files it is the only copy of its data: never delete it with the caches.</summary>
+    public static string HistoryFor(string serverUuid, string? folder = null) => Named("history", serverUuid, folder);
 
     private static string Named(string prefix, string serverUuid, string? folder)
     {

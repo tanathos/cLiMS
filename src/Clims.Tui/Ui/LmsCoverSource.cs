@@ -169,7 +169,9 @@ public sealed class LmsCoverSource : ICoverSource, IDisposable
             var size = big ? BigRequestSize : RequestSize;
             // Disk first (off the UI thread), then the server; only an image that decodes is stored.
             var tier = big ? _cacheSettings.Big : _cacheSettings.Normal;
-            var store = _cacheSettings.Enabled && tier.Active ? _disk?.Invoke() : null;
+            // A stream's artwork (an address on the server, not a library cover id) changes with the song: not kept on disk.
+            var remote = plain.StartsWith('/');
+            var store = _cacheSettings.Enabled && tier.Active && !remote ? _disk?.Invoke() : null;
             CoverImage? image = null;
             if (store is not null)
             {
@@ -179,7 +181,7 @@ public sealed class LmsCoverSource : ICoverSource, IDisposable
 
             if (image is null)
             {
-                using var request = new HttpRequestMessage(HttpMethod.Get, ArtworkUrl.Cover(_baseUri, plain, size, size));
+                using var request = new HttpRequestMessage(HttpMethod.Get, remote ? new Uri(_baseUri, plain) : ArtworkUrl.Cover(_baseUri, plain, size, size));
                 request.Headers.Authorization = _auth;
                 using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
                 response.EnsureSuccessStatusCode();

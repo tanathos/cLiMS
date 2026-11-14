@@ -24,6 +24,54 @@ public class LyricsServiceTests
         Assert.Equal(1, provider.Calls);
     }
 
+
+    [Fact]
+    public async Task The_log_tells_what_each_provider_answered_and_which_result_was_taken()
+    {
+        using var temp = new TempFolder();
+        var lines = new List<string>();
+        var service = new LyricsService(new LyricsStore(temp.File("lyrics.db")), [new StubProvider("first", _ => null), new StubProvider("second", _ => Found("two", "second"))], TimeSpan.FromDays(1), () => _now, lines.Add);
+
+        await service.FindAsync(Song);
+        await service.FindAsync(Song);
+
+        Assert.Contains(lines, l => l.Contains("searching first, second"));
+        Assert.Contains(lines, l => l.Contains("first has no match"));
+        Assert.Contains(lines, l => l.Contains("second matched, selected (plain text)"));
+        Assert.Contains(lines, l => l.Contains("stored copy used (source second)"));
+    }
+
+    [Fact]
+    public async Task Asking_for_another_provider_skips_the_one_that_gave_the_stored_lyrics_and_walks_on_from_it()
+    {
+        using var temp = new TempFolder();
+        var a = new StubProvider("a", _ => Found("from a", "a"));
+        var b = new StubProvider("b", _ => null);
+        var c = new StubProvider("c", _ => Found("from c", "c"));
+        var service = Service(temp, a, c);
+        Assert.Equal("a", (await service.FindAsync(Song))!.Source);
+
+        var again = await Service(temp, a, b, c).FindAsync(Song, force: true, otherThan: "a");
+
+        Assert.Equal("c", again!.Source);
+        Assert.Equal(1, a.Calls);
+        Assert.Equal(1, b.Calls);
+    }
+
+    [Fact]
+    public async Task When_no_other_provider_has_it_the_stored_lyrics_are_kept()
+    {
+        using var temp = new TempFolder();
+        var a = new StubProvider("a", _ => Found("from a", "a"));
+        var b = new StubProvider("b", _ => null);
+        var service = Service(temp, a, b);
+        await service.FindAsync(Song);
+
+        var again = await service.FindAsync(Song, force: true, otherThan: "a");
+
+        Assert.Equal("a", again!.Source);
+        Assert.Equal(1, a.Calls);
+    }
     [Fact]
     public async Task Providers_are_asked_in_order_and_the_first_hit_wins()
     {

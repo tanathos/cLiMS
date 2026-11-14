@@ -17,7 +17,7 @@ public sealed class LmsPlayerOptions
     public TimeSpan RetryInterval { get; init; } = TimeSpan.FromSeconds(3);
 
     /// <summary>Most queue entries read from the server (longer queues show their first part).</summary>
-    public int MaxQueue { get; init; } = 500;
+    public int MaxQueue { get; init; } = 5000;
 
     /// <summary>A "previous" press later than this into a track restarts the track instead of going back.</summary>
     public TimeSpan RestartThreshold { get; init; } = TimeSpan.FromSeconds(3);
