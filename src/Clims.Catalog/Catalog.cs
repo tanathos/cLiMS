@@ -22,6 +22,7 @@ public sealed partial class Catalog
     private readonly SearchKeys[] _genreKeys;
     private TrackIndex? _trackIndex;
     private GenreIndex? _genreIndex;
+    private Dictionary<int, List<string>>? _namesOfTrack;
     private int _version;
 
     /// <summary>Builds the model. Lists keep the order given; tracks are grouped by album and sorted by disc and number.</summary>
@@ -177,8 +178,8 @@ public sealed partial class Catalog
             }
 
             var tracks = _tracks.TryGetValue(albumId, out var t) ? t : Array.Empty<CatalogTrack>();
-            var genres = tracks.Where(x => !string.IsNullOrWhiteSpace(x.Genre))
-                .GroupBy(x => x.Genre!, StringComparer.OrdinalIgnoreCase)
+            var genres = tracks.SelectMany(GenresOf)
+                .GroupBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .OrderByDescending(g => g.Count())
                 .Select(g => g.Key)
                 .ToList();
@@ -248,15 +249,60 @@ public sealed partial class Catalog
     {
         lock (_gate)
         {
-            return _genreIndex ??= GenreIndex.Build(_albumById, _tracks);
+            return _genreIndex ??= GenreIndex.Build(_albumById, _tracks, GenresOf);
         }
+    }
+
+    /// <summary>Every genre name of a track (all of them once the index stores them, else the one the sync read).</summary>
+    /// <param name="track">The track.</param>
+    public IReadOnlyList<string> GenresOfTrack(CatalogTrack track)
+    {
+        lock (_gate)
+        {
+            return GenresOf(track).ToList();
+        }
+    }
+
+    /// <summary>Every genre name of a track: all of them when the index stores them, else the one the sync read. Call under the gate.</summary>
+    private IEnumerable<string> GenresOf(CatalogTrack track)
+    {
+        if (GenreTracks is not null)
+        {
+            _namesOfTrack ??= BuildNamesOfTrack();
+            if (_namesOfTrack.TryGetValue(track.Id, out var names))
+            {
+                return names;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(track.Genre) ? Array.Empty<string>() : new[] { track.Genre };
+    }
+
+    private Dictionary<int, List<string>> BuildNamesOfTrack()
+    {
+        var byId = _genres.GroupBy(g => g.Id).ToDictionary(g => g.Key, g => g.First().Name);
+        var map = new Dictionary<int, List<string>>();
+        foreach (var (genreId, trackIds) in GenreTracks!)
+        {
+            if (!byId.TryGetValue(genreId, out var name) || string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            foreach (var trackId in trackIds)
+            {
+                (map.TryGetValue(trackId, out var list) ? list : map[trackId] = new List<string>()).Add(name);
+            }
+        }
+
+        return map;
     }
 
     private sealed class GenreIndex
     {
         public required Dictionary<string, List<CatalogAlbum>> AlbumsByGenre { get; init; }
 
-        public static GenreIndex Build(Dictionary<int, CatalogAlbum> albums, Dictionary<int, CatalogTrack[]> tracks)
+        public static GenreIndex Build(Dictionary<int, CatalogAlbum> albums, Dictionary<int, CatalogTrack[]> tracks, Func<CatalogTrack, IEnumerable<string>> genresOf)
         {
             var map = new Dictionary<string, List<CatalogAlbum>>(StringComparer.OrdinalIgnoreCase);
             foreach (var (albumId, albumTracks) in tracks)
@@ -266,11 +312,11 @@ public sealed partial class Catalog
                     continue;
                 }
 
-                foreach (var genre in albumTracks.Select(t => t.Genre).Where(g => !string.IsNullOrWhiteSpace(g)).Distinct(StringComparer.OrdinalIgnoreCase))
+                foreach (var genre in albumTracks.SelectMany(genresOf).Distinct(StringComparer.OrdinalIgnoreCase))
                 {
-                    if (!map.TryGetValue(genre!, out var list))
+                    if (!map.TryGetValue(genre, out var list))
                     {
-                        map[genre!] = list = new List<CatalogAlbum>();
+                        map[genre] = list = new List<CatalogAlbum>();
                     }
 
                     list.Add(album);

@@ -8,6 +8,47 @@ public static class PlayHistory
         plays.Where(p => p.PlayedAt >= since).OrderByDescending(p => p.PlayedAt).ToList();
 
     /// <summary>
+    /// The genres of the plays since <paramref name="since"/>, the most played first, each with the genres that came along on the same tracks
+    /// (a play of a Death Metal + Melodic Death Metal track counts for both, and for Melodic Death Metal under Death Metal).
+    /// </summary>
+    /// <param name="plays">Every play logged.</param>
+    /// <param name="since">Plays before this moment are left out.</param>
+    /// <param name="genresOf">The genres of the track a play was of (empty when unknown).</param>
+    public static IReadOnlyList<GenrePlays> Genres(IEnumerable<PlayRecord> plays, DateTimeOffset since, Func<PlayRecord, IReadOnlyList<string>> genresOf)
+    {
+        var totals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var pairs = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var play in plays.Where(p => p.PlayedAt >= since))
+        {
+            var genres = genresOf(play).Where(g => !string.IsNullOrWhiteSpace(g)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var genre in genres)
+            {
+                names.TryAdd(genre, genre);
+                totals[genre] = totals.GetValueOrDefault(genre) + 1;
+                if (!pairs.TryGetValue(genre, out var with))
+                {
+                    pairs[genre] = with = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                }
+
+                foreach (var other in genres.Where(o => !string.Equals(o, genre, StringComparison.OrdinalIgnoreCase)))
+                {
+                    with[other] = with.GetValueOrDefault(other) + 1;
+                }
+            }
+        }
+
+        return totals
+            .OrderByDescending(t => t.Value).ThenBy(t => t.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(t => new GenrePlays(
+                names[t.Key],
+                t.Value,
+                pairs[t.Key].OrderByDescending(p => p.Value).ThenBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(p => new GenrePlays(names[p.Key], p.Value, Array.Empty<GenrePlays>())).ToList()))
+            .ToList();
+    }
+
+    /// <summary>
     /// What names an album across a rebuild of the server's library (LMS may hand out new ids): its artist and title, without case or accents.
     /// </summary>
     public static string AlbumKey(string artist, string album) => TextFolding.Fold(artist) + "|" + TextFolding.Fold(album);

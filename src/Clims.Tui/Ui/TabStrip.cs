@@ -94,9 +94,12 @@ public sealed class TabStrip : PaintView
         _choiceSpans.Clear();
         FillRow(0, 0, W, Theme.Alt);
         var x = 1;
+        // Too narrow for the names: show only the numbers.
+        var full = 1 + _titles.Select((t, i) => $" {i + 1} {t} ".Length + 1).Sum();
+        var compact = full > W;
         for (var i = 0; i < _titles.Length; i++)
         {
-            var label = $" {i + 1} {_titles[i]} ";
+            var label = compact ? $" {i + 1} " : $" {i + 1} {_titles[i]} ";
             var attr = i == _selected ? new Attribute(Theme.Bg, Theme.Accent)
                 : Over(x, x + label.Length, 0) ? Theme.Hover
                 : new Attribute(Theme.Fg, Theme.BgAlt);

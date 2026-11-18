@@ -204,13 +204,15 @@ public sealed class InfoDialog : PaintView
         }
     }
 
+    protected override bool TracksHover => true;
+
+    // Moving the pointer repaints the view: the pictures must not be cleared and sent again each time (they would flicker).
+    protected override bool StableSixels => true;
+
     protected override void Paint()
     {
-        for (var y = 0; y < H; y++)
-        {
-            FillRow(y, 0, W, Base);
-        }
-
+        // No fill of the whole view here: the base clear already did it, skipping the cells of pictures that have not moved
+        // (writing over a sixel's cells erases it, and it would be sent again at every repaint).
         var border = new Attribute(Theme.Border, Theme.BgAlt);
         Put(0, 0, "┌" + new string('─', Math.Max(0, W - 2)) + "┐", border);
         Put(0, H - 1, "└" + new string('─', Math.Max(0, W - 2)) + "┘", border);
@@ -221,6 +223,7 @@ public sealed class InfoDialog : PaintView
         }
 
         Put(2, 0, " Info ", new Attribute(Theme.Accent, Theme.BgAlt));
+        Put(W - 2, 0, "X", Over(W - 2, W - 1, 0) ? Theme.Hover : new Attribute(Theme.Fg, Theme.BgAlt, Terminal.Gui.Drawing.TextStyle.Bold));
         if (_album is null)
         {
             return;
@@ -605,6 +608,12 @@ public sealed class InfoDialog : PaintView
         if (mouse.Flags.HasFlag(MouseFlags.WheeledUp))
         {
             Scroll(-3);
+            return true;
+        }
+
+        if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && mouse.Position is { Y: 0 } close && close.X == W - 2)
+        {
+            CloseRequested?.Invoke();
             return true;
         }
 
