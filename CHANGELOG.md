@@ -3,6 +3,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-11-18
+
 ### Added
 
 - **Random albums:** an eighth tab (`8`) showing 50 random albums of the library in the same list or grid as Recently added; `8` again on the tab picks 50 others.
