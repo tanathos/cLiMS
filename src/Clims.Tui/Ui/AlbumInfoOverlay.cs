@@ -153,6 +153,7 @@ public sealed class AlbumInfoOverlay : PaintView
             hint += "  ·  ↑↓ scroll";
         }
 
+        Put(W - 2, 0, "X", Over(W - 2, W - 1, 0) ? Theme.Hover : new Attribute(Theme.Fg, Theme.Bg, TextStyle.Bold));
         Put(x, H - 2, Clip(hint, W - x), dim); // one empty line below it, so it does not touch the border
         if (width < 8)
         {
@@ -617,8 +618,12 @@ public sealed class AlbumInfoOverlay : PaintView
 
         if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && mouse.Position is { } p)
         {
-            // A click no longer closes the view (Esc does): it presses a control or switches the time to a countdown.
-            if (_buttons.FirstOrDefault(b => b.Y == p.Y && p.X >= b.X0 && p.X < b.X1) is { Run: { } run })
+            // A click elsewhere does not close the view (Esc and the X in the corner do): it presses a control or switches the time to a countdown.
+            if (p.Y == 0 && p.X == W - 2)
+            {
+                CloseRequested?.Invoke();
+            }
+            else if (_buttons.FirstOrDefault(b => b.Y == p.Y && p.X >= b.X0 && p.X < b.X1) is { Run: { } run })
             {
                 run();
             }

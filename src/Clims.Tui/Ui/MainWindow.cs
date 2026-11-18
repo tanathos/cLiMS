@@ -36,6 +36,7 @@ public sealed class MainWindow : Window
     private readonly FooterView _footer;
     private readonly QueueTab _queue;
     private readonly RecentTab _recent;
+    private readonly RandomTab _random;
     private readonly GenresTab _genres;
     private readonly OnlineTab _online;
     private readonly WaveformService? _waves;
@@ -99,7 +100,7 @@ public sealed class MainWindow : Window
         SetScheme(Theme.Dark);
 
         _header = new HeaderBar(player, () => catalog.Status) { X = 0, Y = 0 };
-        _tabs = new TabStrip("Search", "Library", "Queue", "Recently added", "Genres", "Online", "Played") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
+        _tabs = new TabStrip("Search", "Library", "Queue", "Recently added", "Genres", "Online", "Played", "Random albums") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
 
         _search = new SearchTab();
         _library = new LibraryTab();
@@ -111,7 +112,9 @@ public sealed class MainWindow : Window
         _played.PlayRequested += Play;
         _played.OpenRequested += album => ShowInLibrary(album, scrollToAlbum: true);
         _played.ContextRequested += OnAlbumContext;
-        _pages = new View[] { _search, _library, _queue, _recent, _genres, _online, _played };
+        _random = new RandomTab();
+        _random.Albums.ContextRequested += OnAlbumContext;
+        _pages = new View[] { _search, _library, _queue, _recent, _genres, _online, _played, _random };
         foreach (var page in _pages)
         {
             page.X = 0;
@@ -217,7 +220,10 @@ public sealed class MainWindow : Window
         _recent.Albums.PlayRequested += Play;
         _recent.Albums.QueueRequested += OnQueueRequested;
         _recent.Albums.VisibleAlbumsChanged += _refresher.SetVisible;
-        foreach (var albums in new[] { _library.Albums, _recent.Albums })
+        _random.Albums.PlayRequested += Play;
+        _random.Albums.QueueRequested += OnQueueRequested;
+        _random.Albums.VisibleAlbumsChanged += _refresher.SetVisible;
+        foreach (var albums in new[] { _library.Albums, _recent.Albums, _random.Albums })
         {
             albums.ArtistClicked += album => ShowInLibrary(album, scrollToAlbum: false);
             albums.GenreClicked += genre =>
@@ -258,6 +264,7 @@ public sealed class MainWindow : Window
 
             _library.Albums.SetNeedsDraw();
             _recent.Albums.SetNeedsDraw();
+            _random.Albums.SetNeedsDraw();
         });
         CoverArt.Source.Updated += () => Interlocked.Exchange(ref _coversDirty, 1);
 
@@ -420,6 +427,17 @@ public sealed class MainWindow : Window
             SixelCovers.Release(_recent.Albums);
             CoverArt.Source.Want(_recent.Albums, Array.Empty<CoverKey>());
             _recent.Albums.ForgetVisible();
+        }
+
+        if (index == 7)
+        {
+            _random.Albums.ResetCovers();
+        }
+        else
+        {
+            SixelCovers.Release(_random.Albums);
+            CoverArt.Source.Want(_random.Albums, Array.Empty<CoverKey>());
+            _random.Albums.ForgetVisible();
         }
 
         if (index != 0)
@@ -590,6 +608,7 @@ public sealed class MainWindow : Window
         };
         _library.SetCatalog(catalog, message);
         _recent.SetCatalog(catalog, message);
+        _random.SetCatalog(catalog, message);
         RefreshPlayed();
         _genres.SetCatalog(catalog, message);
         _search.SetCatalog(catalog);
@@ -691,6 +710,7 @@ public sealed class MainWindow : Window
         _info.SetNeedsDraw();
         _library.Albums.SetNeedsDraw();
         _recent.Albums.SetNeedsDraw();
+        _random.Albums.SetNeedsDraw();
         _played.SetNeedsDraw();
         _search.List.SetNeedsDraw();
         _footer.SetNeedsDraw();
@@ -705,6 +725,7 @@ public sealed class MainWindow : Window
             _sixelSeen = true;
             _library.Albums.SetNeedsDraw();
             _recent.Albums.SetNeedsDraw();
+            _random.Albums.SetNeedsDraw();
             _played.SetNeedsDraw();
             _search.List.SetNeedsDraw();
         }
@@ -718,6 +739,7 @@ public sealed class MainWindow : Window
             {
             _library.Albums.SetNeedsDraw();
             _recent.Albums.SetNeedsDraw();
+            _random.Albums.SetNeedsDraw();
             _played.SetNeedsDraw();
             _search.List.SetNeedsDraw();
             }
@@ -734,6 +756,7 @@ public sealed class MainWindow : Window
 
         _player.Tick(now - _lastTick);
         _lastTick = now;
+        _header.Adapt(Viewport.Width);
         _footer.ShowCover = Viewport.Width >= MinWidth;
         _footer.ShowWaveform = _waveformEnabled && Viewport.Height >= MinHeight;
         // While the album view is open the screen under it stays still: repainting it would wipe the cover image (a sixel is erased by any text written over it).
@@ -775,9 +798,9 @@ public sealed class MainWindow : Window
         }
 
         // Next / previous track work from everywhere, even while typing in a text field.
-        if (key == Key.N.WithAlt || key == Key.P.WithAlt)
+        if (key == Key.N.WithAlt || key == Key.P.WithAlt || key == Key.CursorRight.WithAlt || key == Key.CursorLeft.WithAlt)
         {
-            if (key == Key.N.WithAlt)
+            if (key == Key.N.WithAlt || key == Key.CursorRight.WithAlt)
             {
                 if (!OnRadio) { _player.Next(); }
             }
@@ -786,6 +809,14 @@ public sealed class MainWindow : Window
                 if (!OnRadio) { _player.Previous(); }
             }
 
+            key.Handled = true;
+            return;
+        }
+
+        // Ctrl+F opens the full-screen album view (as a click on the cover in the footer does).
+        if (key == Key.F.WithCtrl && !_infoVisible && !_menuVisible)
+        {
+            OpenInfo();
             key.Handled = true;
             return;
         }
@@ -1034,10 +1065,15 @@ public sealed class MainWindow : Window
                     return false;
                 });
                 break;
-            case '1' or '2' or '3' or '4' or '5' or '6' or '7' when !typeAhead:
+            case '1' or '2' or '3' or '4' or '5' or '6' or '7' or '8' when !typeAhead:
                 if (ch == '4' && _tabs.Selected == 3)
                 {
                     _recent.Refresh(); // pressing 4 on the tab itself asks the server again
+                }
+
+                if (ch == '8' && _tabs.Selected == 7)
+                {
+                    _random.Shuffle(); // pressing 8 on the tab itself picks again
                 }
 
                 _tabs.Selected = ch - '1';
@@ -1081,6 +1117,8 @@ public sealed class MainWindow : Window
                     _library.Albums.SetNeedsDraw();
                     _recent.Albums.ResetCovers();
                     _recent.Albums.SetNeedsDraw();
+                    _random.Albums.ResetCovers();
+                    _random.Albums.SetNeedsDraw();
                     _played.ResetCovers();
                     _played.SetNeedsDraw();
                     _info.SetNeedsDraw();
@@ -1090,6 +1128,7 @@ public sealed class MainWindow : Window
                     CoverArt.LibrarySize = CoverArt.NextSize(CoverArt.LibrarySize);
                     _library.Albums.Relayout();
                     _recent.Albums.Relayout();
+                    _random.Albums.Relayout();
                     _played.ResetCovers();
                     _played.SetNeedsDraw();
                 }
@@ -1099,6 +1138,7 @@ public sealed class MainWindow : Window
                     CoverArt.Layout = CoverArt.Layout == AlbumLayout.List ? AlbumLayout.Grid : AlbumLayout.List;
                     _library.Albums.LayoutChanged();
                     _recent.Albums.LayoutChanged();
+                    _random.Albums.LayoutChanged();
                 }
                 else if (key == Key.F2)
                 {
@@ -1201,6 +1241,7 @@ public sealed class MainWindow : Window
         _footer.SetNeedsDraw();
         _library.Albums.SetNeedsDraw();
         _recent.Albums.SetNeedsDraw();
+        _random.Albums.SetNeedsDraw();
         _played.SetNeedsDraw();
         _search.List.SetNeedsDraw();
         FocusPage();
@@ -1260,6 +1301,7 @@ public sealed class MainWindow : Window
         _footer.SetNeedsDraw();
         _library.Albums.SetNeedsDraw();
         _recent.Albums.SetNeedsDraw();
+        _random.Albums.SetNeedsDraw();
         _played.SetNeedsDraw();
         _search.List.SetNeedsDraw();
         SetNeedsDraw();
@@ -1282,10 +1324,12 @@ public sealed class MainWindow : Window
         SixelCovers.Release(_library.Albums);
         SixelCovers.Release(_search.List);
         SixelCovers.Release(_recent.Albums);
+        SixelCovers.Release(_random.Albums);
         SixelCovers.Release(_played);
         SixelCovers.Release(_footer);
         _library.Albums.ResetCovers();
         _recent.Albums.ResetCovers();
+        _random.Albums.ResetCovers();
         _played.ResetCovers();
         _search.List.ResetCovers();
         _footer.ResetCovers();
@@ -1317,6 +1361,7 @@ public sealed class MainWindow : Window
         _footer.SetNeedsDraw();
         _library.Albums.SetNeedsDraw();
         _recent.Albums.SetNeedsDraw();
+        _random.Albums.SetNeedsDraw();
         _played.SetNeedsDraw();
         _search.List.SetNeedsDraw();
         SetNeedsDraw();
@@ -1351,7 +1396,9 @@ public sealed class MainWindow : Window
         SixelCovers.Release(_library.Albums);
         SixelCovers.Release(_search.List);
         SixelCovers.Release(_recent.Albums);
+        SixelCovers.Release(_random.Albums);
         SixelCovers.Release(_played);
+        CoverArt.Source.Want(_random.Albums, Array.Empty<CoverKey>());
         CoverArt.Source.Want(_played, Array.Empty<CoverKey>());
         CoverArt.Source.Want(_library.Albums, Array.Empty<CoverKey>());
         CoverArt.Source.Want(_search.List, Array.Empty<CoverKey>());
@@ -1367,6 +1414,7 @@ public sealed class MainWindow : Window
         _library.Albums.SetNeedsDraw();
         _recent.Albums.ResetCovers();
         _recent.Albums.SetNeedsDraw();
+        _random.Albums.SetNeedsDraw();
         _search.List.SetNeedsDraw();
     }
 
@@ -1406,6 +1454,7 @@ public sealed class MainWindow : Window
         _footer.ShowVersion = settings.Ui.ShowVersion;
         _library.Albums.LayoutChanged();
         _recent.Albums.LayoutChanged();
+        _random.Albums.LayoutChanged();
         RefreshPlayed();
         // The cover (and a sixel waveform) are the same images in new cells: take them off the screen so they are sent again.
         SixelCovers.Release(_footer);
@@ -1413,10 +1462,10 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>True when the arrow keys belong to the grid of albums (it has the focus) and not to the seek shortcut.</summary>
-    private bool GridArrows => CoverArt.Layout == AlbumLayout.Grid && (_library.Albums.HasFocus || _recent.Albums.HasFocus);
+    private bool GridArrows => CoverArt.Layout == AlbumLayout.Grid && (_library.Albums.HasFocus || _recent.Albums.HasFocus || _random.Albums.HasFocus);
 
     /// <summary>True when the arrow keys belong to the Played tab's grid of albums (in its list of tracks they still seek).</summary>
-    private bool PlayedArrows => _played.HasFocus && _played.Current != PlayedView.Section.Tracks;
+    private bool PlayedArrows => _played.HasFocus && _played.Current is PlayedView.Section.Week or PlayedView.Section.Month;
 
     private void LeaveSearch()
     {
@@ -1451,6 +1500,9 @@ public sealed class MainWindow : Window
                 break;
             case 6:
                 _played.SetFocus();
+                break;
+            case 7:
+                _random.Albums.SetFocus();
                 break;
         }
     }

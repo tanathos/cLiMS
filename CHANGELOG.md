@@ -3,6 +3,24 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-11-18
+
+### Added
+
+- **Random albums:** an eighth tab (`8`) showing 50 random albums of the library in the same list or grid as Recently added; `8` again on the tab picks 50 others.
+- `Ctrl+F` opens the full-screen album view, like a click on the cover in the player.
+- `Alt+→` and `Alt+←` act as `Alt+n` and `Alt+p`: next / previous track, from anywhere.
+- Played tab: a fourth list, **Genres · most played**, ranking the genres of everything in the play log. Open a genre (Enter, Space or a click on its arrow) to see the genres played along with it and how many plays carried both (e.g. Melodic Death Metal under Death Metal). A double click (or `t`) opens the plays of the genre (or of the genre pair) in the bottom half of the view.
+
+### Changed
+
+- New README screenshots: Random albums, the most played genres (opened and with their plays) and the small-window layout.
+- **Small windows:** the layout adapts instead of cutting things off. When the tab names do not fit, the tab strip shows only the numbers; when the player buttons and the volume do not all fit, the buttons show only their icons (shuffle included) and the volume bar shortens, so the volume never disappears; the search box in the header narrows to keep the player name, the Server button and the menu icon visible; and the key legend at the bottom of the footer drops its descriptions and shows only the keys.
+
+### Fixed
+
+- Albums now show every genre their tracks carry (Library, Recently added, full-screen album view), not only the one the sync read for each track; clicking a genre lists albums that have it as a second genre too. A resync (F5) is needed once for indexes made before the full genre lists were stored.
+
 ## [0.9.3] - 2026-11-14
 
 ### Added

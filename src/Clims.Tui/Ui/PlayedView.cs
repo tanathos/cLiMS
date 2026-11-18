@@ -21,7 +21,22 @@ public sealed class PlayedView : PaintView
         Tracks,
         Week,
         Month,
+        Genres,
     }
+
+    /// <summary>A line of the genre list: a genre, or one of the genres played along with it.</summary>
+    private readonly record struct GenreRow(GenrePlays Item, GenrePlays? Parent);
+
+    private IReadOnlyList<GenrePlays> _genres = Array.Empty<GenrePlays>();
+    private readonly HashSet<string> _opened = new(StringComparer.OrdinalIgnoreCase);
+    private List<GenreRow> _genreRows = new();
+    private List<(PlayRecord Play, IReadOnlyList<string> Genres)> _playGenres = new();
+    private List<PlayRecord> _detail = new();
+    private string _detailTitle = "";
+    private int _detailSelected;
+    private int _detailOffset;
+    private bool _inDetail;
+    private bool _dragDetail;
 
     private readonly List<(int X0, int X1, Section Section)> _spans = new();
     private MusicCatalog? _catalog;
@@ -61,16 +76,19 @@ public sealed class PlayedView : PaintView
 
     private bool OnTracks => _section == Section.Tracks;
 
+    /// <summary>One row per line, no covers: the tracks and the genres.</summary>
+    private bool OnList => _section is Section.Tracks or Section.Genres;
+
     /// <summary>Rows of text under a cover: the title, the artist and the listens.</summary>
     private const int TextRows = 3;
 
     /// <summary>Covers across: one list of tracks is a single column.</summary>
-    private int Cols => OnTracks ? 1 : Math.Max(1, (W - 1 - 2) / (CoverCols + 4));
+    private int Cols => OnList ? 1 : Math.Max(1, (W - 1 - 2) / (CoverCols + 4));
 
-    private int SlotW => OnTracks ? Math.Max(1, W - 1) : Math.Max(1, (W - 1) / Cols);
+    private int SlotW => OnList ? Math.Max(1, W - 1) : Math.Max(1, (W - 1) / Cols);
 
     /// <summary>Rows of one line of the list: a track, or a cover with its text and a blank row.</summary>
-    private int ItemHeight => OnTracks ? 1 : CoverRows + TextRows + 1;
+    private int ItemHeight => OnList ? 1 : CoverRows + TextRows + 1;
 
     private int TotalRows => (Count + Cols - 1) / Cols * ItemHeight;
 
@@ -78,6 +96,7 @@ public sealed class PlayedView : PaintView
     {
         Section.Tracks => _tracks.Count,
         Section.Week => _week.Count,
+        Section.Genres => _genreRows.Count,
         _ => _month.Count,
     };
 
@@ -113,8 +132,61 @@ public sealed class PlayedView : PaintView
         _tracks = PlayHistory.Tracks(plays, now.AddDays(-_trackDays));
         _week = PlayHistory.Albums(plays, now.AddDays(-7), listenPercent);
         _month = PlayHistory.Albums(plays, now.AddDays(-30), listenPercent);
+        _playGenres = catalog is null ? new() : plays.Select(p => (p, GenresOfPlay(catalog, p))).ToList();
+        var lookup = _playGenres.ToDictionary(x => x.Play, x => x.Genres, ReferenceEqualityComparer.Instance as IEqualityComparer<PlayRecord>);
+        _genres = catalog is null ? Array.Empty<GenrePlays>() : PlayHistory.Genres(plays, DateTimeOffset.MinValue, play => lookup[play]);
+        _detail = new List<PlayRecord>();
+        _inDetail = false;
+        RebuildGenreRows();
         _selected = Math.Clamp(_selected, 0, Math.Max(0, Count - 1));
         SetNeedsDraw();
+    }
+
+    private IReadOnlyList<string> GenresOfPlay(MusicCatalog catalog, PlayRecord play)
+    {
+        if (Resolve(play.AlbumId, play.Artist, play.Album) is not { } album)
+        {
+            return Array.Empty<string>();
+        }
+
+        var tracks = catalog.TracksOf(album.Id);
+        var title = TextFolding.Fold(play.Title);
+        var track = tracks.FirstOrDefault(t => t.Id == play.TrackId && TextFolding.Fold(t.Title) == title)
+            ?? tracks.FirstOrDefault(t => TextFolding.Fold(t.Title) == title);
+        return track is null ? Array.Empty<string>() : catalog.GenresOfTrack(track);
+    }
+
+    private void RebuildGenreRows()
+    {
+        _genreRows = new List<GenreRow>();
+        foreach (var genre in _genres)
+        {
+            _genreRows.Add(new GenreRow(genre, null));
+            if (_opened.Contains(genre.Genre))
+            {
+                _genreRows.AddRange(genre.Together.Select(c => new GenreRow(c, genre)));
+            }
+        }
+    }
+
+    /// <summary>Opens or closes the co-genres under the selected genre (a co-genre line closes its genre).</summary>
+    private void ToggleGenre()
+    {
+        if (_selected >= _genreRows.Count)
+        {
+            return;
+        }
+
+        var row = _genreRows[_selected];
+        var genre = row.Parent ?? row.Item;
+        if (genre.Together.Count == 0 || !_opened.Add(genre.Genre))
+        {
+            _opened.Remove(genre.Genre);
+        }
+
+        RebuildGenreRows();
+        _selected = Math.Max(0, _genreRows.FindIndex(r => r.Parent is null && r.Item.Genre == genre.Genre));
+        Move(0);
     }
 
     /// <summary>Shows another list.</summary>
@@ -126,6 +198,7 @@ public sealed class PlayedView : PaintView
         }
 
         _section = section;
+        CloseDetail();
         _selected = 0;
         _offset = 0;
         ResetCovers();
@@ -140,7 +213,7 @@ public sealed class PlayedView : PaintView
             return;
         }
 
-        var rowsOnScreen = Math.Max(1, H - HeadRows);
+        var rowsOnScreen = Math.Max(1, ListRows);
         var total = TotalRows;
         _offset = Math.Clamp(_offset, 0, Math.Max(0, total - rowsOnScreen));
 
@@ -153,7 +226,7 @@ public sealed class PlayedView : PaintView
         for (var row = _offset / ItemHeight; row * cols < Count; row++)
         {
             var top = HeadRows + row * ItemHeight - _offset;
-            if (top >= H)
+            if (top >= HeadRows + ListRows)
             {
                 break;
             }
@@ -164,6 +237,10 @@ public sealed class PlayedView : PaintView
                 if (OnTracks)
                 {
                     PaintTrack(_tracks[i], i, top);
+                }
+                else if (_section == Section.Genres)
+                {
+                    PaintGenre(_genreRows[i], i, top);
                 }
                 else
                 {
@@ -179,13 +256,111 @@ public sealed class PlayedView : PaintView
         }
 
         PaintHeading();
-        PaintScrollbar(total, _offset, rowsOnScreen);
+        PaintScrollbar(total, _offset, rowsOnScreen, HeadRows, rowsOnScreen);
+        PaintDetail();
+    }
+
+    /// <summary>The bottom half under the genre list: the plays of the genre that was double clicked, newest first.</summary>
+    private void PaintDetail()
+    {
+        if (!DetailOpen)
+        {
+            return;
+        }
+
+        var top = DetailTop;
+        FillRow(top, 0, W, Theme.Normal);
+        Put(1, top, Clip($"─ Plays of {_detailTitle} ({_detail.Count}) · Esc close · Tab switch · Enter play · t opens ", Math.Max(1, W - 3)).PadRight(Math.Max(0, W - 3), '─'), Theme.Dim);
+        var rows = DetailRows;
+        _detailSelected = Math.Clamp(_detailSelected, 0, Math.Max(0, _detail.Count - 1));
+        _detailOffset = Math.Clamp(_detailOffset, 0, Math.Max(0, _detail.Count - rows));
+        if (_detailSelected < _detailOffset)
+        {
+            _detailOffset = _detailSelected;
+        }
+        else if (_detailSelected >= _detailOffset + rows)
+        {
+            _detailOffset = _detailSelected - rows + 1;
+        }
+
+        for (var r = 0; r < rows; r++)
+        {
+            var i = _detailOffset + r;
+            if (i < _detail.Count)
+            {
+                PaintTrack(_detail[i], i, top + 1 + r, _inDetail && i == _detailSelected);
+            }
+            else
+            {
+                FillRow(top + 1 + r, 0, W - 1, Theme.Normal);
+            }
+        }
+
+        PaintScrollbar(_detail.Count, _detailOffset, rows, top + 1, rows);
+    }
+
+    private bool DetailOpen => _section == Section.Genres && _detail.Count > 0 && H > HeadRows + 8;
+
+    private int DetailTop => HeadRows + ListRows;
+
+    private int DetailRows => Math.Max(1, H - DetailTop - 1);
+
+    /// <summary>Rows of the main list: all of them, or the top half while the plays of a genre are shown.</summary>
+    private int ListRows => _section == Section.Genres && _detail.Count > 0 && H > HeadRows + 8 ? Math.Max(3, (H - HeadRows) / 2) : H - HeadRows;
+
+    private void OpenDetail()
+    {
+        if (_selected >= _genreRows.Count)
+        {
+            return;
+        }
+
+        var row = _genreRows[_selected];
+        var wanted = row.Parent is { } parent ? new[] { parent.Genre, row.Item.Genre } : new[] { row.Item.Genre };
+        _detailTitle = string.Join(" + ", wanted);
+        _detail = _playGenres
+            .Where(p => wanted.All(w => p.Genres.Contains(w, StringComparer.OrdinalIgnoreCase)))
+            .Select(p => p.Play).OrderByDescending(p => p.PlayedAt).ToList();
+        _detailSelected = 0;
+        _detailOffset = 0;
+        _inDetail = false;
+        SetNeedsDraw();
+    }
+
+    private void CloseDetail()
+    {
+        _detail = new List<PlayRecord>();
+        _inDetail = false;
+        SetNeedsDraw();
+    }
+
+    private void PlayDetail()
+    {
+        if (_catalog is not { } catalog || _detailSelected >= _detail.Count)
+        {
+            return;
+        }
+
+        var play = _detail[_detailSelected];
+        if (Resolve(play.AlbumId, play.Artist, play.Album) is not { } album)
+        {
+            return;
+        }
+
+        var tracks = catalog.TracksOf(album.Id);
+        var title = TextFolding.Fold(play.Title);
+        var at = tracks.ToList().FindIndex(t => TextFolding.Fold(t.Title) == title);
+        if (tracks.Count > 0)
+        {
+            PlayRequested?.Invoke(album, tracks, Math.Max(0, at));
+        }
     }
 
     private string EmptyText => _section switch
     {
         Section.Tracks => $"Nothing played in the last {_trackDays} day(s). Tracks are logged once they have played for half of their length.",
         Section.Week => $"No album listened to ({_percent}% or more) in the last 7 days.",
+        Section.Genres => "No genre to show: tracks are logged once played, and genres come from the library index.",
         _ => $"No album listened to ({_percent}% or more) in the last 30 days.",
     };
 
@@ -198,6 +373,7 @@ public sealed class PlayedView : PaintView
             (Section.Tracks, $"Tracks · last {_trackDays} day(s) ({_tracks.Count})"),
             (Section.Week, $"Albums · last week ({_week.Count})"),
             (Section.Month, $"Albums · last month ({_month.Count})"),
+            (Section.Genres, $"Genres · most played ({_genres.Count})"),
         })
         {
             var on = section == _section;
@@ -209,9 +385,9 @@ public sealed class PlayedView : PaintView
         Put(1, 1, new string('─', Math.Max(0, W - 3)), Theme.Dim);
     }
 
-    private void PaintTrack(PlayRecord play, int index, int y)
+    private void PaintTrack(PlayRecord play, int index, int y, bool? selectedRow = null)
     {
-        var selected = index == _selected;
+        var selected = selectedRow ?? index == _selected;
         var attr = selected ? (HasFocus ? Theme.Selected : Theme.SelectedDim) : Theme.Normal;
         FillRow(y, 0, W - 1, attr);
         var when = When(play.PlayedAt.ToLocalTime(), _now.ToLocalTime());
@@ -224,6 +400,34 @@ public sealed class PlayedView : PaintView
         Put(18, y, Clip(play.Title, titleW - 1), attr);
         Put(18 + titleW, y, Clip(play.Artist, artistW - 1), dim);
         Put(18 + titleW + artistW, y, Clip(play.Album, albumW - 1), dim);
+    }
+
+    private void PaintGenre(GenreRow row, int index, int y)
+    {
+        var selected = index == _selected;
+        var attr = selected ? (HasFocus ? Theme.Selected : Theme.SelectedDim) : Theme.Normal;
+        var dim = selected ? attr : new Terminal.Gui.Drawing.Attribute(Theme.FgDim, Theme.Bg);
+        FillRow(y, 0, W - 1, attr);
+
+        var item = row.Item;
+        string left;
+        string right;
+        if (row.Parent is { } parent)
+        {
+            left = "      + " + item.Genre;
+            right = $"{item.Plays}  ({item.Plays * 100 / Math.Max(1, parent.Plays)}% of {parent.Genre})";
+        }
+        else
+        {
+            var total = Math.Max(1, _genres.Max(g => g.Plays));
+            var mark = item.Together.Count == 0 ? " " : _opened.Contains(item.Genre) ? "▾" : "▸";
+            left = $" {mark} {item.Genre}";
+            right = $"{item.Plays} play(s)  {new string('█', Math.Max(1, item.Plays * 20 / total))}";
+        }
+
+        var room = Math.Max(10, W - 3);
+        Put(1, y, Clip(left, room - right.Length - 1), row.Parent is null ? attr : dim);
+        Put(Math.Max(1, room - right.Length), y, right, dim);
     }
 
     private void PaintAlbum(AlbumListen listen, int index, int top, int col)
@@ -302,7 +506,7 @@ public sealed class PlayedView : PaintView
         }
 
         _selected = Math.Clamp(_selected + delta, 0, Count - 1);
-        var rows = Math.Max(1, H - HeadRows);
+        var rows = Math.Max(1, ListRows);
         var top = _selected / Cols * ItemHeight;
         if (top < _offset)
         {
@@ -318,13 +522,13 @@ public sealed class PlayedView : PaintView
 
     private void Scroll(int rows)
     {
-        _offset = Math.Clamp(_offset + rows, 0, Math.Max(0, TotalRows - Math.Max(1, H - HeadRows)));
+        _offset = Math.Clamp(_offset + rows, 0, Math.Max(0, TotalRows - Math.Max(1, ListRows)));
         SetNeedsDraw();
     }
 
     private void Switch(int delta)
     {
-        var next = ((int)_section + delta + 3) % 3;
+        var next = ((int)_section + delta + 4) % 4;
         Show((Section)next);
     }
 
@@ -346,7 +550,7 @@ public sealed class PlayedView : PaintView
     /// <summary>The album of the selected line and its tracks (null when the index does not know it), with the logged track's position for a track line.</summary>
     private (CatalogAlbum Album, IReadOnlyList<CatalogTrack> Tracks, int Index)? Selected()
     {
-        if (_catalog is not { } catalog || _selected >= Count)
+        if (_catalog is not { } catalog || _selected >= Count || _section == Section.Genres)
         {
             return null;
         }
@@ -376,6 +580,12 @@ public sealed class PlayedView : PaintView
 
     private void Activate()
     {
+        if (_section == Section.Genres)
+        {
+            ToggleGenre();
+            return;
+        }
+
         if (Selected() is not { } chosen)
         {
             return;
@@ -404,8 +614,56 @@ public sealed class PlayedView : PaintView
 
     protected override bool OnKeyDown(Key key)
     {
+        if (DetailOpen)
+        {
+            if (key == Key.Esc)
+            {
+                CloseDetail();
+                return true;
+            }
+
+            if (key == Key.Tab || key == Key.Tab.WithShift)
+            {
+                _inDetail = !_inDetail;
+                SetNeedsDraw();
+                return true;
+            }
+
+            if (_inDetail)
+            {
+                var step = key.KeyCode switch
+                {
+                    KeyCode.CursorDown => 1,
+                    KeyCode.CursorUp => -1,
+                    KeyCode.PageDown => Math.Max(1, H - DetailTop - 2),
+                    KeyCode.PageUp => -Math.Max(1, H - DetailTop - 2),
+                    KeyCode.Home => -_detail.Count,
+                    KeyCode.End => _detail.Count,
+                    _ => 0,
+                };
+                if (step != 0)
+                {
+                    _detailSelected = Math.Clamp(_detailSelected + step, 0, _detail.Count - 1);
+                    SetNeedsDraw();
+                    return true;
+                }
+
+                if (key.KeyCode == KeyCode.Enter)
+                {
+                    PlayDetail();
+                    return true;
+                }
+            }
+        }
+
+        if (_section == Section.Genres && key == Key.T && !_inDetail && _selected < _genreRows.Count)
+        {
+            OpenDetail();
+            return true;
+        }
+
         var cols = Cols;
-        var page = Math.Max(1, (H - HeadRows) / ItemHeight) * cols;
+        var page =Math.Max(1, ListRows / ItemHeight) * cols;
         switch (key.KeyCode)
         {
             case KeyCode.CursorDown:
@@ -414,10 +672,13 @@ public sealed class PlayedView : PaintView
             case KeyCode.CursorUp:
                 Move(-cols);
                 return true;
-            case KeyCode.CursorRight when !OnTracks:
+            case KeyCode.Space when _section == Section.Genres:
+                ToggleGenre();
+                return true;
+            case KeyCode.CursorRight when !OnList:
                 Move(1);
                 return true;
-            case KeyCode.CursorLeft when !OnTracks:
+            case KeyCode.CursorLeft when !OnList:
                 Move(-1);
                 return true;
             case KeyCode.CursorRight:
@@ -465,24 +726,45 @@ public sealed class PlayedView : PaintView
             return true;
         }
 
-        if (mouse.Flags.HasFlag(MouseFlags.WheeledDown))
+        if (mouse.Flags.HasFlag(MouseFlags.WheeledDown) || mouse.Flags.HasFlag(MouseFlags.WheeledUp))
         {
-            Scroll(3);
-            return true;
-        }
-
-        if (mouse.Flags.HasFlag(MouseFlags.WheeledUp))
-        {
-            Scroll(-3);
-            return true;
-        }
-
-        var rows = Math.Max(1, H - HeadRows);
-        if (ScrollbarMouse(mouse, TotalRows > rows, y =>
+            var step = mouse.Flags.HasFlag(MouseFlags.WheeledDown) ? 3 : -3;
+            if (DetailOpen && mouse.Position is { } wheel && wheel.Y > DetailTop)
             {
-                _offset = OffsetFromScrollbar(y, TotalRows, rows);
+                _detailOffset = Math.Clamp(_detailOffset + step, 0, Math.Max(0, _detail.Count - DetailRows));
                 SetNeedsDraw();
-            }))
+            }
+            else
+            {
+                Scroll(step);
+            }
+
+            return true;
+        }
+
+        var rows = Math.Max(1, ListRows);
+        var pressed = mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed) && !mouse.Flags.HasFlag(MouseFlags.PositionReport);
+        if (pressed && mouse.Position is { } down)
+        {
+            _dragDetail = DetailOpen && down.Y > DetailTop;
+        }
+
+        if (DetailOpen && _dragDetail)
+        {
+            if (ScrollbarMouse(mouse, _detail.Count > DetailRows, y =>
+                {
+                    _detailOffset = OffsetFromScrollbar(y, _detail.Count, DetailRows, DetailRows);
+                    SetNeedsDraw();
+                }, DetailTop + 1, DetailRows))
+            {
+                return true;
+            }
+        }
+        else if (ScrollbarMouse(mouse, TotalRows > rows, y =>
+            {
+                _offset = OffsetFromScrollbar(y, TotalRows, rows, rows);
+                SetNeedsDraw();
+            }, HeadRows, rows))
         {
             return true;
         }
@@ -500,6 +782,44 @@ public sealed class PlayedView : PaintView
                     {
                         Show(section);
                         break;
+                    }
+                }
+
+                return true;
+            }
+
+            if (_section == Section.Genres && DetailOpen && p.Y > DetailTop)
+            {
+                _inDetail = true;
+                var at = p.Y - DetailTop - 1 + _detailOffset;
+                if (at >= 0 && at < _detail.Count)
+                {
+                    _detailSelected = at;
+                    if (mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked))
+                    {
+                        PlayDetail();
+                    }
+                }
+
+                SetNeedsDraw();
+                return true;
+            }
+
+            if (_section == Section.Genres && p.Y >= HeadRows && p.Y < HeadRows + ListRows && p.X < W - 1)
+            {
+                _inDetail = false;
+                var at = p.Y - HeadRows + _offset;
+                if (at < _genreRows.Count)
+                {
+                    _selected = at;
+                    SetNeedsDraw();
+                    if (mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked))
+                    {
+                        OpenDetail();
+                    }
+                    else if (click && _genreRows[at].Parent is null && p.X <= 4)
+                    {
+                        ToggleGenre(); // a single click on the arrow
                     }
                 }
 

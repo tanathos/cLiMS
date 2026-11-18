@@ -81,13 +81,14 @@ public sealed class FooterView : PaintView
         _buttons.Clear();
         _wave = (0, 0);
         _still = null;
-        const string hint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-7 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
+        const string fullHint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-8 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
+        const string shortHint = "Space  ←/→  Alt+n/p  +/-  /  1-8  ?  F5  F6  Ctrl+Q";
         if (_player.Current is not { } now)
         {
             _seek = _totalBox = (0, 0);
             Put(1, 0, Clip(_player.Problem ?? "Nothing playing", W - 2), _player.Problem is null ? Theme.Dim : new Attribute(Theme.Warn, Theme.Bg));
             PaintControls(1);
-            Put(1, 5, Clip(hint, PaintVersion(1) - 1), Theme.Dim);
+            PaintHint(1, fullHint, shortHint);
             return;
         }
 
@@ -130,7 +131,14 @@ public sealed class FooterView : PaintView
         }
 
         PaintControls(x0);
-        Put(x0, 5, Clip(hint, PaintVersion(x0) - x0), Theme.Dim);
+        PaintHint(x0, fullHint, shortHint);
+    }
+
+    /// <summary>The key legend on the last row; the descriptions are dropped when the full text does not fit.</summary>
+    private void PaintHint(int x0, string full, string compact)
+    {
+        var room = PaintVersion(x0) - x0;
+        Put(x0, 5, Clip(full.Length <= room ? full : compact, room), Theme.Dim);
     }
 
     /// <summary>The user clicked the cover: show the playing album full screen.</summary>
@@ -461,17 +469,22 @@ public sealed class FooterView : PaintView
     {
         var x = x0;
         var live = _player.Current?.Station is null;   // a radio stream cannot skip or seek
-        x = Button(x, 4, "|◀ prev", _player.Previous, live);
-        x = Button(x + 2, 4, "◀◀ -10s", () => _player.Seek(TimeSpan.FromSeconds(-10)), live);
-        x = Button(x + 2, 4, _player.IsPlaying ? "❚❚ pause" : "▶ play", _player.TogglePlay);
-        x = Button(x + 2, 4, "+10s ▶▶", () => _player.Seek(TimeSpan.FromSeconds(10)), live);
-        x = Button(x + 2, 4, "next ▶|", _player.Next, live);
+        // Full labels need the five buttons, the shuffle button and the volume; if they do not all fit, only the icons are shown.
+        const int fullButtonsWidth = 11 + 12 + 12 + 12 + 12 + 4 * 2 + 2 + 13;
+        const int fullVolumeWidth = 30;
+        var compact = x0 + fullButtonsWidth + 2 + fullVolumeWidth > W;
+        var barWidth = compact ? 10 : 20;
+        x = Button(x, 4, compact ? "|◀" : "|◀ prev", _player.Previous, live);
+        x = Button(x + 2, 4, compact ? "◀◀" : "◀◀ -10s", () => _player.Seek(TimeSpan.FromSeconds(-10)), live);
+        x = Button(x + 2, 4, _player.IsPlaying ? (compact ? "❚❚" : "❚❚ pause") : (compact ? "▶" : "▶ play"), _player.TogglePlay);
+        x = Button(x + 2, 4, compact ? "▶▶" : "+10s ▶▶", () => _player.Seek(TimeSpan.FromSeconds(10)), live);
+        x = Button(x + 2, 4, compact ? "▶|" : "next ▶|", _player.Next, live);
 
-        const int barWidth = 20;
         var vx = W - barWidth - 10;
-        if (x + 2 + "[ ⇄ shuffle ]".Length < vx - 1)
+        var shuffle = compact ? "⇄" : "⇄ shuffle";
+        if (x + 2 + shuffle.Length + 4 < vx - 1)
         {
-            x = Button(x + 2, 4, "⇄ shuffle", _player.ToggleShuffle, active: _player.Shuffle);
+            x = Button(x + 2, 4, shuffle, _player.ToggleShuffle, active: _player.Shuffle);
         }
 
         if (vx > x + 4)

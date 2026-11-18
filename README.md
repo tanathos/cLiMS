@@ -15,7 +15,7 @@ Browse a large library, search it as you type, see real cover art in the termina
 - **Genres explorer:** a fifth tab. Pick a genre and the next column lists the genres that share at least one track with it; pick again to narrow further (Rock, then Heavy Metal, then Thrash Metal). The artists of the tracks tagged with the whole chain are listed underneath, and a random queue of 25, 50 or 100 of those tracks can replace or join the queue. Needs a resync once: a track can carry several genres, which the sync now reads from the server genre by genre.
 - **Instant search** on every keystroke over a local index (about 2 ms on 20 000 tracks). The server's own search fills in while the index is incomplete.
 - **Info** in the album menu (right click on a cover): a dialog of three quarters of the window with a picture of the artist, what MusicBrainz knows about the artist (type, origin, years, genres, members, links) and about the album (type, date, label, catalogue number, track count, rating). It looks things up only when opened, and keeps the answers in `info.db` for 30 days. The biography of the artist and a description of the album are the introductions of their English Wikipedia articles (CC BY-SA, credited in the dialog; found through the Wikidata links of MusicBrainz, else by a strict search). `r` looks everything up again, Tab and Enter (or a click) open a link in the default browser. The sources are providers (`Clims.Info`): MusicBrainz and Wikipedia.
-- **Played:** a seventh tab (`7`) from a play log of its own: the tracks of the last days, and the albums listened to (half of them or more) in the last week and the last month, with how many times. The albums are a grid of covers with title, artist and listen count; `Tab` switches the list, a double click or `Enter` opens an album in the Library, a right click offers Play / Enqueue.
+- **Played:** a seventh tab (`7`) from a play log of its own: the tracks of the last days, and the albums listened to (half of them or more) in the last week and the last month, with how many times, and a ranking of the most played genres with the genres played along with each. The albums are a grid of covers with title, artist and listen count; `Tab` switches the list, a double click or `Enter` opens an album in the Library, a right click offers Play / Enqueue.
 - **Grid layout** (`F7`) for the Library and Recently added tabs: a wall of covers, where a click opens the album's tracklist in a panel under its row, on a pixellated or tinted version of the cover.
 - **Real covers** as Sixel images (with half-block, quadrant and braille fallbacks for other terminals), or in other styles: sextant, octant, Game Boy and C64 palettes, chunky pixel art.
 - **Playback** on your LMS player: play/pause, seek, volume, next/previous, status kept in step through server events.
@@ -41,6 +41,10 @@ The Recently added tab: the newest 50 albums on the server, newest first:
 
 ![Recently added](screenshots/recent.png)
 
+The Random albums tab (`8`): 50 albums picked at random from the library, in the same list (or grid) as Recently added; press `8` again for 50 others:
+
+![Random albums](screenshots/random.png)
+
 The Genres explorer: Death Metal, then Thrash Metal, then Experimental, each column narrowing to the genres that share tracks with the choices so far. The artists of the tracks tagged with all three are listed underneath (click "74 tracks" to list the tracks instead), and a random queue can be started from them:
 
 ![Genres](screenshots/genres.png)
@@ -53,13 +57,21 @@ The same tab for the albums listened to in the last week (and month), a grid of 
 
 ![Played albums](screenshots/played-albums.png)
 
+The most played genres, ranked by plays from the play log. Enter (or a click on the arrow) opens a genre to show the genres played along with it, and how many of its plays carried both:
+
+![Most played genres](screenshots/played-genres.png)
+
+A double click (or `t`) on a genre or a pair lists its plays in the bottom half of the view:
+
+![Plays of a genre](screenshots/played-genres-open.png)
+
 Info, from the right-click menu of an album: the artist's photo, biography (Wikipedia), members and links, then the album's facts and description. Links open in the browser with a click, `r` looks everything up again:
 
 ![Artist info](screenshots/info.png)
 
 ![Album info](screenshots/info-album.png)
 
-Click the cover in the player to see the playing album full screen: the cover on the left; on the right the artist, album and year, the track, genre, length and format, the lyrics, and at the bottom a progress bar for the track and, when the queue has more than one track, one for the whole queue. The queue bar is cut into one stretch per track, as long as the track, with a gap between them; with too many tracks for gaps, the stretches touch and alternate between shades of the accent colour.
+Click the cover in the player (or press `Ctrl+F`) to see the playing album full screen: the cover on the left; on the right the artist, album and year, the track, genre, length and format, the lyrics, and at the bottom a progress bar for the track and, when the queue has more than one track, one for the whole queue. The queue bar is cut into one stretch per track, as long as the track, with a gap between them; with too many tracks for gaps, the stretches touch and alternate between shades of the accent colour.
 
 ![Full-screen cover](screenshots/cover.png)
 
@@ -94,6 +106,10 @@ The colour picker, here on the dark Obsidian theme:
 The built-in key reference (`?`):
 
 ![Help](screenshots/help.png)
+
+In a small window the layout adapts instead of cutting things off: the tabs show only their numbers, the player buttons only their icons (the volume bar stays), the search box in the header narrows, and the key legend at the bottom drops its descriptions:
+
+![Small window](screenshots/small-window.png)
 
 ## Requirements
 - [.NET 10 SDK](https://dotnet.microsoft.com/download) to build from source, or a published build: the default download needs no .NET, the `-framework-dependent` one needs the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0).
@@ -231,7 +247,7 @@ Press `?` in the app for the same list.
 | Key | Action |
 |---|---|
 | `/` | Focus the search box (typing switches to the Search tab and searches at once; `Esc` clears and returns to the previous tab, `Enter`/`Down` jumps to results) |
-| `1` `2` `3` `4` `5` `6` `7` | Search / Library / Queue / Recently added / Genres / Online / Played tab (click the tab strip too; `4` on the tab again asks the server for the newest albums) |
+| `1` `2` `3` `4` `5` `6` `7` `8` | Search / Library / Queue / Recently added / Genres / Online / Played / Random albums tab (click the tab strip too; `4` on the tab again asks the server for the newest albums; `8` on the tab again picks 50 other random albums) |
 | `Tab` | Move focus between panes |
 | letters | Type-ahead in the left list (artist, genre or year) |
 | `F7` | Library and Recently added: switch between the list and the grid of covers. In the grid the arrows move over the covers, `Enter` opens or closes the tracklist panel, `a` / `n` add / play next the whole album; with a panel open the arrows move over its tracks, `Enter` plays one, `Esc` closes it |
@@ -239,14 +255,14 @@ Press `?` in the app for the same list.
 | `Enter` or double click | Play the selected track, album or search result: replaces the queue and restarts the stream (not gapless). A single click only selects |
 | Right click | On an album cover (whole album), a track, or an artist, genre or year of the Library's left list (all their albums): menu with Play and Enqueue (arrows, `Enter` and `Esc` work in it too) |
 | `a` / `n` | Add the highlighted track to the end of the queue / play it next (gapless); `A` / `N` do the same for the whole album |
-| Played tab | `Tab` / `Shift+Tab` switch between tracks, albums of the last week and of the last month; the arrows move; `Enter` or a double click opens an album in the Library (a track: plays it); right click: Play / Enqueue |
+| Played tab | `Tab` / `Shift+Tab` switch between tracks, albums of the last week and of the last month, and the most played genres (`Enter` / `Space` / click on the arrow: the genres played along; double click or `t`: the plays of the genre, `Esc` closes them); the arrows move; `Enter` or a double click opens an album in the Library (a track: plays it); right click: Play / Enqueue |
 | Recently added tab | The Library's album list (same keys: `Enter` plays, `a` / `n` and `A` / `N` queue) with only the newest 50 albums, newest first |
 | Genres tab | `Up` `Down` pick a genre, `Enter` or `Right` go to the next column of genres that share a track with it, `Left` or `Backspace` back, `Ctrl+F` filter the active column, `Esc` clear; `Alt+R` random queue that replaces the queue (asks first), `Alt+Q` random queue appended, `[` `]` queue size 25 / 50 / 100 |
 | Online tab | `Enter` open a radio, app, folder or search box, or play what is playable (replaces the queue); `o` open something that is also playable, `a` add it, `n` play it next; in a list of tracks (a playlist, Liked Songs…) `A` adds all of them to the queue, `Alt+A` replaces the queue with them and starts playing (click *shuffle* in the footer first for a random order); `Esc` or `Backspace` up one level, `r` ask the server again |
 | Queue tab | `Enter` play that entry, `x` or `Delete` remove, `X` remove everything after the selected entry, `Shift+Up/Down` move, `c` clear (asks), `s` save under a name, `o` saved queues (`Enter` replace after asking, `a` append, `x` delete, `Esc` back) |
 | `Space` | Play / pause |
 | `Left` `Right` | Seek -10 s / +10 s |
-| `Alt+n` `Alt+p` | Next / previous track (work everywhere, also while typing) |
+| `Alt+n` `Alt+p` (or `Alt+→` `Alt+←`) | Next / previous track (work everywhere, also while typing) |
 | `+` `-` | Volume |
 | `F2` | Connect screen: another server, or a login |
 | `F10` or `Alt+S` | Settings page (or click the ☰ at the top right); `Esc` closes it |

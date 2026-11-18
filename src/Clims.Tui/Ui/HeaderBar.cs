@@ -16,10 +16,15 @@ public sealed class HeaderBar : View
     private const int ServerButtonWidth = 8; // exactly the width of "⇄ Server"
     private const int GearWidth = 2; // the icon is one cell; the second is blank but still hovers and clicks
 
+    private const int MinSearchWidth = 12;
+
     private readonly StatusText _status;
+    private readonly IPlayerController _player;
+    private int _searchWidth = SearchWidth;
 
     public HeaderBar(IPlayerController player, Func<SyncStatus> syncStatus)
     {
+        _player = player;
         CanFocus = false; // a click on the bar's empty cells must not move focus to the search box
         Height = Rows;
         Width = Dim.Fill();
@@ -49,6 +54,24 @@ public sealed class HeaderBar : View
     public event Action? SyncClicked;
 
     public void Refresh() => _status.SetNeedsDraw();
+
+    /// <summary>Narrows the search box when the window is too small for the full width, so the player name, server button and gear stay visible.</summary>
+    public void Adapt(int width)
+    {
+        var left = Pad + 9;
+        var right = Pad + ServerButtonWidth + 1 + GearWidth + 1;
+        var status = _player.PlayerName.Length + 3;
+        var search = Math.Clamp(width - left - 2 - status - right, MinSearchWidth, SearchWidth);
+        if (search == _searchWidth)
+        {
+            return;
+        }
+
+        _searchWidth = search;
+        Search.Width = search;
+        _status.X = left + search + 2;
+        SetNeedsDraw();
+    }
 
     /// <summary>Symbol, text and colour for a sync status (the five states of search.md section 10, plus demo).</summary>
     public static (string Symbol, string Label, Color Color) Describe(SyncStatus s, DateTimeOffset now) => s.State switch

@@ -184,20 +184,21 @@ public abstract class PaintView : View
     protected abstract void Paint();
 
     /// <summary>Draws a one-column scrollbar on the right edge. Nothing is drawn when everything fits.</summary>
-    protected void PaintScrollbar(int total, int offset, int visible)
+    protected void PaintScrollbar(int total, int offset, int visible, int top = 0, int height = -1)
     {
-        if (total <= visible || H < 1 || W < 1)
+        height = height < 0 ? H - top : Math.Min(height, H - top);
+        if (total <= visible || height < 1 || W < 1)
         {
             return;
         }
 
-        var (thumbStart, thumbLength) = Thumb(total, offset, visible, H);
+        var (thumbStart, thumbLength) = Thumb(total, offset, visible, height);
         var track = new Attribute(Theme.Border, Theme.Bg);
         var thumb = new Attribute(Theme.Thumb, Theme.Bg);
-        for (var y = 0; y < H; y++)
+        for (var y = 0; y < height; y++)
         {
             var onThumb = y >= thumbStart && y < thumbStart + thumbLength;
-            Put(W - 1, y, onThumb ? "█" : "│", onThumb ? thumb : track);
+            Put(W - 1, top + y, onThumb ? "█" : "│", onThumb ? thumb : track);
         }
     }
 
@@ -335,7 +336,7 @@ public abstract class PaintView : View
     /// keeps moving it wherever the pointer goes. The release that ends the drag is consumed, so it never reaches the
     /// rows as a click. Returns true when the event was a scrollbar one; <paramref name="setOffset"/> gets the row of the pointer.
     /// </summary>
-    protected bool ScrollbarMouse(Mouse mouse, bool scrollable, Action<int> setOffset)
+    protected bool ScrollbarMouse(Mouse mouse, bool scrollable, Action<int> setOffset, int top = 0, int height = -1)
     {
         var flags = mouse.Flags;
         var press = flags.HasFlag(MouseFlags.LeftButtonPressed);
@@ -351,16 +352,16 @@ public abstract class PaintView : View
         {
             if (mouse.Position is { } at && press)
             {
-                setOffset(at.Y);
+                setOffset(at.Y - top);
             }
 
             _barDrag = !clicked;
             return true;
         }
 
-        if (fresh && scrollable && mouse.Position is { } p && p.X >= W - 1)
+        if (fresh && scrollable && mouse.Position is { } p && p.X >= W - 1 && p.Y >= top && (height < 0 || p.Y < top + height))
         {
-            setOffset(p.Y);
+            setOffset(p.Y - top);
             _barDrag = true;
             return true;
         }
@@ -369,10 +370,11 @@ public abstract class PaintView : View
     }
 
     /// <summary>Offset that puts the scrollbar thumb's centre at row y (click-to-jump).</summary>
-    protected int OffsetFromScrollbar(int y, int total, int visible)
+    protected int OffsetFromScrollbar(int y, int total, int visible, int height = -1)
     {
-        var length = Thumb(total, 0, visible, H).Length;
-        var travel = Math.Max(1, H - length);
+        height = height < 0 ? H : height;
+        var length = Thumb(total, 0, visible, height).Length;
+        var travel = Math.Max(1, height - length);
         var thumbTop = Math.Clamp(y - length / 2, 0, travel);
         return Math.Clamp(thumbTop * (total - visible) / travel, 0, Math.Max(0, total - visible));
     }
