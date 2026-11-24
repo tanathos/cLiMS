@@ -19,6 +19,7 @@ public sealed class HelpOverlay : PaintView
         ("F2  ⇄ Server", "Connect to another server or enter a login (button at the top right)"),
         ("F5", "Resync the library, or cancel a running sync"),
         ("F3  F4", "Cover style / cover size (full-screen view: its own)"),
+        ("F8  F9", "Footer: waveform / spectrum (live from the player when vismux is set up, else from the file) / next spectrum style; a click on the spectrum changes its style too"),
         ("F10  Alt+S  ☰", "Settings (the ☰ at the top right): servers, cover and waveform styles, lyrics, cache, start-up; saved at once"),
         ("?  Ctrl+Q", "This help / Quit"),
         ("Library and search results", ""),

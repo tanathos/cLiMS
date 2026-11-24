@@ -57,15 +57,20 @@ public static class SettingItems
         Change = (s, delta) => set(s, Math.Clamp(get(s) + delta * step, min, max)),
     };
 
-    public static SettingItem Text(string label, Func<UserSettings, string> get, Func<UserSettings, string, UserSettings> set, string hint = "") => new()
+    public static SettingItem Text(string label, Func<UserSettings, string> get, Func<UserSettings, string, UserSettings> set, string hint = "", bool restart = false, bool allowEmpty = false) => new()
     {
         Label = label,
         Kind = SettingKind.Text,
         Hint = hint,
+        NeedsRestart = restart,
+        AllowEmpty = allowEmpty,
         Value = get,
         EditText = get,
         Edit = set,
     };
+
+    /// <summary>The title of a group of rows; it cannot be selected.</summary>
+    public static SettingItem Heading(string title) => new() { Label = title, Kind = SettingKind.Heading, Value = _ => "" };
 
     public static SettingItem Info(string label, string value, string hint = "") => new() { Label = label, Kind = SettingKind.Info, Hint = hint, Value = _ => value };
 }

@@ -38,6 +38,36 @@ public sealed class AlbumInfoOverlay : PaintView
     /// <summary>The player the controls under the progress bar drive; without one they are not shown.</summary>
     public Data.IPlayerController? Player { get; set; }
 
+    /// <summary>True (the setting): the cover is drawn in shades of grey while the player is paused or stopped.</summary>
+    public bool GrayscaleOnPause { get; set; }
+
+    /// <summary>True (the setting): a waveform or spectrum above the progress bars, under the lyrics.</summary>
+    public bool ShowVisualizer { get; set; }
+
+    /// <summary>True: the spectrum instead of the waveform (the footer's choice, F8).</summary>
+    public bool ShowSpectrum { get; set; }
+
+    public SpectrumStyle SpectrumStyle { get; set; } = SpectrumStyle.Bars;
+
+    public WaveformStyle WaveformStyle { get; set; } = WaveformStyle.Blocks;
+
+    /// <summary>The spectrum to draw. Its own, not the footer's: reading the live one empties it.</summary>
+    public SpectrumFeed? Feed { get; set; }
+
+    /// <summary>The analysed tracks (waveforms and spectra), or null in demo mode.</summary>
+    public Clims.Waveform.WaveformService? Waves { get; set; }
+
+    /// <summary>A click on the waveform or spectrum: the main window goes to the next style.</summary>
+    public event Action? VisualizerClicked;
+
+    private int _stripY = -1;
+    private (int X0, int X1) _stripX;
+    private int _peaksTrack = -1;
+    private float[] _demoPeaks = [];
+
+    /// <summary>True while the strip is on screen and moving, which needs a repaint much faster than the clock does.</summary>
+    public bool Animated => _stripY >= 0 && ShowSpectrum && (Feed?.IsLive == true || Player?.IsPlaying == true);
+
     protected override bool TracksHover => true;
 
     /// <summary>The name to show for where a streamed track comes from; null: no tag.</summary>
@@ -143,7 +173,8 @@ public sealed class AlbumInfoOverlay : PaintView
         var small = new CoverKey(album.ArtworkId, album.Id);
         // The large picture takes a moment to arrive: show the list-size one meanwhile.
         WantCover(big);
-        DrawCover(left, top, cols, rows, CoverArt.Source.TryGet(big) is null ? small : big, CoverPlace.FullScreen);
+        var paused = GrayscaleOnPause && Player is { IsPlaying: false };
+        DrawCover(left, top, cols, rows, CoverArt.Source.TryGet(big) is null ? small : big, CoverPlace.FullScreen, paused);
 
         var x = left + cols + 5;
         var width = W - x - 3;
@@ -220,7 +251,77 @@ public sealed class AlbumInfoOverlay : PaintView
 
         PaintTrackBar(x, barsTop + (multi ? 1 : 0), width, now.Track.Duration);
         PaintControls(x, barsTop + (multi ? 2 : 1), width);
-        PaintLyrics(x, y0 + 9, y0 + 10, barsTop - 2, width);
+
+        // The waveform or spectrum takes the two rows above the bars (and an empty row between it and the lyrics) when the
+        // lyrics, if there are any, keep at least three rows; otherwise the window is too small for it.
+        var lyricsBottom = barsTop - 2;
+        _stripY = -1;
+        if (ShowVisualizer && width >= 8)
+        {
+            var stripY = barsTop - 3;
+            var lyricsRows = stripY - 2 - (y0 + 10) + 1;
+            if (_lyricsState == LyricsState.Idle ? stripY >= y0 + 9 : lyricsRows >= 3)
+            {
+                _stripY = stripY;
+                lyricsBottom = stripY - 2;
+                PaintVisualizer(now, x, stripY, width);
+            }
+        }
+
+        PaintLyrics(x, y0 + 9, y0 + 10, lyricsBottom, width);
+    }
+
+    /// <summary>The waveform or the spectrum of the playing track, over two rows; the same choice and styles as the footer.</summary>
+    private void PaintVisualizer(NowPlaying now, int x, int y, int width)
+    {
+        _stripX = (x, x + width);
+        var track = now.Track;
+        if (ShowSpectrum && Feed is { IsLive: true } live)
+        {
+            live.Update(track);
+            PutSpectrum(x, y, width, SpectrumStyle, live.Levels);
+        }
+        else if (now.IsRemote)
+        {
+            // A stream is not a file the server can analyse.
+            Put(x, y, Clip("Waveform not available", width), Theme.Dim);
+        }
+        else if (ShowSpectrum && Feed is { } feed)
+        {
+            if (feed.Update(track))
+            {
+                PutSpectrum(x, y, width, SpectrumStyle, feed.Levels);
+            }
+            else if (Waves is not null)
+            {
+                Put(x, y, Clip(SpectrumFeed.Pending(Waves, track, "spectrum"), width), Theme.Dim);
+            }
+        }
+        else if (!ShowSpectrum)
+        {
+            float[] peaks;
+            if (Waves is null)
+            {
+                if (_peaksTrack != track.Id)
+                {
+                    (_peaksTrack, _demoPeaks) = (track.Id, FooterView.MakePeaks(track.Id));
+                }
+
+                peaks = _demoPeaks;
+            }
+            else if (Waves.TryGet(track.Id) is { } profile)
+            {
+                peaks = profile.Peaks;
+            }
+            else
+            {
+                Put(x, y, Clip(SpectrumFeed.Pending(Waves, track, "waveform"), width), Theme.Dim);
+                return;
+            }
+
+            var played = track.Duration > TimeSpan.Zero ? (int)(width * Math.Clamp(_elapsed / track.Duration, 0, 1)) : 0;
+            PutWaveform(x, y, width, peaks, played, WaveformStyle);
+        }
     }
 
     /// <summary>Widths of the fields left (played time) and right (total or remaining time) of the bars, the same for both bars so they line up.</summary>
@@ -626,6 +727,10 @@ public sealed class AlbumInfoOverlay : PaintView
             else if (_buttons.FirstOrDefault(b => b.Y == p.Y && p.X >= b.X0 && p.X < b.X1) is { Run: { } run })
             {
                 run();
+            }
+            else if (_stripY >= 0 && p.Y is var py && (py == _stripY || py == _stripY + 1) && p.X >= _stripX.X0 && p.X < _stripX.X1)
+            {
+                VisualizerClicked?.Invoke();
             }
             else if (Player is { Current.Station: null } seekable && _trackBar.X1 > _trackBar.X0 && p.Y == _trackBar.Y && p.X >= _trackBar.X0 && p.X < _trackBar.X1)
             {

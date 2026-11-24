@@ -2,6 +2,7 @@ using Clims.Tui.Settings;
 using Clims.Catalog;
 using Clims.Info;
 using Clims.Tui.Data;
+using Clims.Visualizer;
 using Clims.Waveform;
 using Terminal.Gui.App;
 using Terminal.Gui.Drawing;
@@ -16,6 +17,7 @@ public sealed class MainWindow : Window
     private const int MinWidth = 100;
     private const int MinHeight = 30;
     private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan LiveInterval = TimeSpan.FromMilliseconds(33);
     private static readonly TimeSpan NoticeDuration = TimeSpan.FromSeconds(5);
 
     private readonly IApplication _app;
@@ -40,6 +42,7 @@ public sealed class MainWindow : Window
     private readonly GenresTab _genres;
     private readonly OnlineTab _online;
     private readonly WaveformService? _waves;
+    private readonly VismuxClient? _live;
     private readonly bool _waveformEnabled;
     private readonly LyricsFeed? _lyrics;
     private string _waveSignature = "";
@@ -124,6 +127,35 @@ public sealed class MainWindow : Window
         }
 
         _footer = new FooterView(player, _waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows, WaveformStyle = waveformStyle, ShowVersion = settings?.Current.Ui.ShowVersion ?? true };
+        _footer.SpectrumStyle = settings?.Current.Ui.Visualizer.Style ?? SpectrumStyle.Bars;
+        if (settings?.Current.Ui.Visualizer is { Host.Length: > 0 } visualizer)
+        {
+            // Needs vismux on the player. With a live feed the spectrum is what the footer shows to begin with (F8 switches).
+            _live = new VismuxClient(visualizer.Host, visualizer.Port, CrashLog.Info);
+            _footer.Live = _live;
+            _footer.ShowSpectrum = true;
+        }
+
+        // The full-screen view draws its own copy of the waveform or spectrum (it has its own feed: reading the live one empties it).
+        _info.Waves = _waves;
+        _info.Feed = new SpectrumFeed(player, _waves) { Live = _live };
+        _info.ShowVisualizer = settings?.Current.Ui.Visualizer.FullScreen ?? false;
+        _info.GrayscaleOnPause = settings?.Current.Ui.Covers.FullScreenGrayOnPause ?? false;
+        SyncVisualizer();
+        _info.VisualizerClicked += () =>
+        {
+            if (_footer.ShowSpectrum)
+            {
+                _footer.NextSpectrumStyle();
+            }
+            else
+            {
+                _footer.WaveformStyle = (WaveformStyle)(((int)_footer.WaveformStyle + 1) % Enum.GetValues<WaveformStyle>().Length);
+            }
+
+            SyncVisualizer();
+        };
+
         _help.X = 0;
         _help.Y = HeaderBar.Rows + 1;
         _help.Width = Dim.Fill();
@@ -276,6 +308,23 @@ public sealed class MainWindow : Window
         }
 
         _app.AddTimeout(FrameInterval, OnTick);
+        // The footer is otherwise redrawn once a second (see OnTick); the spectrum needs about 30 frames a second.
+        _app.AddTimeout(LiveInterval, () =>
+        {
+            if (_infoVisible)
+            {
+                if (_info.Animated)
+                {
+                    _info.SetNeedsDraw();
+                }
+            }
+            else if (_footer.Animated)
+            {
+                _footer.SetNeedsDraw();
+            }
+
+            return true;
+        });
         UpdateTabTitle();
         player.Changed += () => _app.Invoke(OnPlayerChanged);
         if (lyrics is not null)
@@ -329,6 +378,7 @@ public sealed class MainWindow : Window
         {
             _recent.Cancel();
             _refresher.Dispose();
+            _live?.Dispose();
         }
 
         base.Dispose(disposing);
@@ -1140,6 +1190,20 @@ public sealed class MainWindow : Window
                     _recent.Albums.LayoutChanged();
                     _random.Albums.LayoutChanged();
                 }
+                else if (key == Key.F8)
+                {
+                    // Waveform or spectrum in the footer. For this session only.
+                    _footer.ShowSpectrum = !_footer.ShowSpectrum;
+                    _footer.SetNeedsDraw();
+                    SyncVisualizer();
+                }
+                else if (key == Key.F9)
+                {
+                    // The next spectrum style (and the spectrum itself, if the waveform was showing).
+                    _footer.ShowSpectrum = true;
+                    _footer.NextSpectrumStyle();
+                    SyncVisualizer();
+                }
                 else if (key == Key.F2)
                 {
                     RequestServerChange();
@@ -1442,6 +1506,15 @@ public sealed class MainWindow : Window
         SetNeedsDraw();
     }
 
+    /// <summary>The full-screen view draws the waveform or spectrum the way the footer does: same choice, same styles.</summary>
+    private void SyncVisualizer()
+    {
+        _info.ShowSpectrum = _footer.ShowSpectrum;
+        _info.SpectrumStyle = _footer.SpectrumStyle;
+        _info.WaveformStyle = _footer.WaveformStyle;
+        _info.SetNeedsDraw();
+    }
+
     /// <summary>A setting was changed (and saved): what can be applied now is.</summary>
     private void OnSettingsChanged(UserSettings settings)
     {
@@ -1451,6 +1524,10 @@ public sealed class MainWindow : Window
         SetScheme(Theme.Dark);
         SetNeedsDraw();
         _footer.WaveformStyle = settings.Ui.Waveform.Style;
+        _footer.SpectrumStyle = settings.Ui.Visualizer.Style;
+        _info.ShowVisualizer = settings.Ui.Visualizer.FullScreen;
+        _info.GrayscaleOnPause = settings.Ui.Covers.FullScreenGrayOnPause;
+        SyncVisualizer();
         _footer.ShowVersion = settings.Ui.ShowVersion;
         _library.Albums.LayoutChanged();
         _recent.Albums.LayoutChanged();

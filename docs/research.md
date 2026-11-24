@@ -97,7 +97,15 @@ Notes for approach 1:
 
 Your player (verified): `squeezelite`, firmware `v2.0.0-1476-pCP` (ralph-irving build), plays FLAC from `/mnt/Music`.
 
-### Option L1 – Squeezelite visualiser (`-v`) + UDP relay  ✅ feasible, best candidate
+### Option L1 – Squeezelite visualiser (`-v`) + UDP relay  ✅ verified, implemented
+
+**Verified (2026-11-24):** on the player above (armv7l, `armhf` build of vismux, Squeezelite `-v`), `tools/Clims.VismuxProbe` received about 50 frames/s with no sequence gaps (177 KiB/s, which is a continuous 44.1 kHz stereo 16-bit stream), one full frame and then deltas, non-zero samples while playing. Implemented in `src/Clims.Visualizer`. The wire format below is from vismux's `vismux.h` / `source.c` / `destination.c` (branch `prerelease1`), and corrects the first sketch further down:
+- A destination sends a 16-byte `PACKET_REQ` (version 2, type 0x02, rest zero) to UDP 23483 and repeats it every second; the source forgets clients silent for 2 s. It answers with `PACKET_SUB_ACK` (0x04, payload: the source MAC). There is no unsubscribe packet.
+- `PACKET_DATA` (0x01) = 16-byte header (`version u8, type u8, payload_len u16, sequence u32, 2 × u32 reserved`) + 16-byte vis header (`buf_size u32, buf_index u32, rate u32, running u8, format u8, 2 reserved`), all big-endian, + int16 samples in the byte order named by `format` (0 little, 1 big). `payload_len` = 16 + sample bytes.
+- A full frame (whole 16384-sample ring, sent on subscribe) and a delta (the ring range up to `buf_index`) differ only by length. A paused source sends one silent frame with `running = 0` and then nothing.
+- Not defined by the source: channel layout. The stream matches stereo in bandwidth, so the code assumes interleaved L/R; not yet checked with a hard-panned track. Latency to the speakers is not measured.
+
+Original sketch (before verification; the header sizes here are superseded by the list above):
 - Squeezelite `-v` "creates a shared memory segment that contains some of the audio being played, so that an external visualiser can read and process this" ([man page](https://ralph-irving.github.io/squeezelite.html)). Used today by Jivelite, CAVA, etc. [sourced]
 - SHM `/dev/shm/squeezelite-<MAC>` holds `vis_t { rwlock; buf_size; buf_index; running; rate; updated; int16_t buffer[16384] }` – a ring buffer of the **actual PCM being sent to the DAC** (layout taken from vismux's copy of the struct; not verified against Squeezelite source; interleaving not stated) [sourced].
 - The SHM is local to the Pi, so it must be forwarded. **[vismux](https://github.com/blaisedias/vismux)** (C, GPLv3+, prebuilt for armhf/aarch64/armv6, documented on piCorePlayer) does exactly this over **UDP**: source on the Pi (`vismux --player --wait-for-shm`, started via pCP Tweaks → User command), 60 fps polling, delta packets of new int16 samples, default port 23483 (discovery 23484, magic `VISMUXv0`). Wire format: 10-byte header + 16-byte vis header (`buf_size, buf_index, running, rate`, big-endian) + raw little-endian int16 samples. [sourced; README was read by an agent, not by me]

@@ -162,6 +162,13 @@ public sealed class SettingsOverlay : PaintView
             var rowAttr = selected ? Theme.Selected : text;
             FillRow(y, 1, W - 1, rowAttr);
 
+            if (item.Kind == SettingKind.Heading)
+            {
+                var title = "── " + item.Label + " ";
+                Put(2, y, Clip(title + new string('─', Math.Max(0, W - 6 - title.Length)), W - 4), head);
+                continue;
+            }
+
             var label = (item.Kind == SettingKind.Server ? (item.Connected ? "● " : "  ") : "") + item.Label;
             Put(LabelX, y, Clip(label, ValueX - LabelX - 2), item.Kind == SettingKind.Info && !selected ? dim : rowAttr);
             if (item.NeedsRestart)
@@ -239,7 +246,7 @@ public sealed class SettingsOverlay : PaintView
         SettingKind.Text when _model.CanPickColor => "Enter type #RRGGBB (empty: the theme's colour) · p or click ✎ open the colour picker",
         SettingKind.Text => "Enter edit",
         SettingKind.Action => "Enter add a server",
-        SettingKind.Info or null => "",
+        SettingKind.Info or SettingKind.Heading or null => "",
         _ => "←→ or Enter change",
     };
 
@@ -307,7 +314,7 @@ public sealed class SettingsOverlay : PaintView
         }
         else if (key == Key.Home)
         {
-            _model.MoveTo(0);
+            _model.MoveToFirst();
         }
         else if (key == Key.End)
         {
@@ -404,6 +411,11 @@ public sealed class SettingsOverlay : PaintView
 
     private void ClickRow(int index, int x, bool doubleClick)
     {
+        if (!_model.Items[index].Selectable)
+        {
+            return; // a heading or an information row: the selected row must not react to a click elsewhere
+        }
+
         _model.MoveTo(index);
         switch (_model.Current)
         {

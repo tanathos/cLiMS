@@ -379,6 +379,55 @@ public abstract class PaintView : View
         return Math.Clamp(thumbTop * (total - visible) / travel, 0, Math.Max(0, total - visible));
     }
 
+    /// <summary>Draws a spectrum over two rows: <paramref name="bands"/> stretched over <paramref name="width"/> cells, in the given style.</summary>
+    protected void PutSpectrum(int x, int y, int width, SpectrumStyle style, float[] bands)
+    {
+        var rows = SpectrumGlyphs.Render(style, bands, width);
+        PutSpectrumRow(x, y, rows.Top, rows.TopKind);
+        PutSpectrumRow(x, y + 1, rows.Bottom, rows.BottomKind);
+    }
+
+    /// <summary>Writes one row of a spectrum, a run of cells of the same kind at a time.</summary>
+    private void PutSpectrumRow(int x, int y, char[] chars, byte[] kinds)
+    {
+        var bar = Theme.Mix(Theme.Accent, Theme.Bg, 0.2);
+        var start = 0;
+        for (var i = 1; i <= chars.Length; i++)
+        {
+            if (i < chars.Length && kinds[i] == kinds[start])
+            {
+                continue;
+            }
+
+            var attribute = kinds[start] switch
+            {
+                SpectrumFrame.Inverted => new Attribute(Theme.Bg, bar),
+                SpectrumFrame.Hot => new Attribute(Theme.Mix(Theme.Warn, Theme.Bg, 0.1), Theme.Bg),
+                _ => new Attribute(bar, Theme.Bg),
+            };
+            Put(x + start, y, new string(chars, start, i - start), attribute);
+            start = i;
+        }
+    }
+
+    /// <summary>
+    /// Draws a waveform over two rows in text characters (blocks, or braille for any other style): the first
+    /// <paramref name="played"/> cells in the accent colour, the rest dimmer. The waveform is background decoration, so both colours are soft.
+    /// </summary>
+    protected void PutWaveform(int x, int y, int width, float[] peaks, int played, WaveformStyle style)
+    {
+        var (topText, bottomText) = style == WaveformStyle.Blocks ? WaveformGlyphs.Blocks(peaks, width) : WaveformGlyphs.Braille(peaks, width);
+        var top = topText.ToCharArray();
+        var bottom = bottomText.ToCharArray();
+        played = Math.Clamp(played, 0, width);
+        var done = new Attribute(Theme.Mix(Theme.Accent, Theme.Bg, 0.35), Theme.Bg);
+        var todo = new Attribute(Theme.Mix(Theme.FgDim, Theme.Bg, 0.45), Theme.Bg);
+        Put(x, y, new string(top, 0, played), done);
+        Put(x + played, y, new string(top, played, width - played), todo);
+        Put(x, y + 1, new string(bottom, 0, played), done);
+        Put(x + played, y + 1, new string(bottom, played, width - played), todo);
+    }
+
     /// <summary>Writes text at (x, y), clipped to the view width. Returns the x after the text.</summary>
     protected int Put(int x, int y, string text, Attribute attr)
     {
@@ -410,7 +459,7 @@ public abstract class PaintView : View
     }
 
     /// <summary>Draws a cover in the style chosen for <paramref name="place"/>; cells outside the view are skipped so it scrolls like text.</summary>
-    protected void DrawCover(int x, int y, int cols, int rows, CoverKey key, CoverPlace place)
+    protected void DrawCover(int x, int y, int cols, int rows, CoverKey key, CoverPlace place, bool grayscale = false)
     {
         _wantedCovers.Add(key);
         var image = CoverArt.Source.TryGet(key);
@@ -420,7 +469,7 @@ public abstract class PaintView : View
             return;
         }
 
-        DrawImage(image, x, y, cols, rows, place);
+        DrawImage(grayscale ? image.Grayscale() : image, x, y, cols, rows, place);
     }
 
     /// <summary>Draws a picture the view already has (not one asked from the cover source) in the style chosen for <paramref name="place"/>.</summary>

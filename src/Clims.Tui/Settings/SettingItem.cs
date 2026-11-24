@@ -45,4 +45,7 @@ public sealed class SettingItem
 
     /// <summary>Server rows: whether the connection is open to this server now.</summary>
     public bool Connected { get; init; }
+
+    /// <summary>False for rows that are only shown (information, headings): the selection skips them.</summary>
+    public bool Selectable => Kind is not (SettingKind.Info or SettingKind.Heading);
 }

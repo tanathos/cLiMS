@@ -14,6 +14,9 @@ public sealed record CoverStylesSettings
     /// <summary>The full-screen cover.</summary>
     public CoverPlaceSettings FullScreen { get; init; } = new();
 
+    /// <summary>True: the full-screen cover turns grey while the player is paused or stopped.</summary>
+    public bool FullScreenGrayOnPause { get; init; }
+
     /// <summary>The style used where Sixel is chosen but the terminal cannot do it.</summary>
     public CoverMode SixelFallback { get; init; } = CoverMode.Quadrant;
 }
