@@ -31,6 +31,42 @@ public sealed class ThemeTests : IDisposable
     }
 
     [Fact]
+    public void The_matrix_theme_is_green_on_black_and_readable()
+    {
+        var p = Themes.Matrix.Palette;
+        Assert.Same(Themes.Matrix, Themes.Find("matrix"));
+        Assert.True(Themes.IsPredefined("Matrix"));
+
+        // Phosphor green accent on a near-black background; every text colour on the backgrounds it is drawn on stays legible.
+        Assert.Equal(Theme.Rgb(0, 255, 65), p[ThemeSlot.Accent]);
+        Assert.True(Luma(p[ThemeSlot.Bg]) < 0.03);
+        foreach (var text in new[] { ThemeSlot.Fg, ThemeSlot.Accent, ThemeSlot.FgDim })
+        {
+            foreach (var back in new[] { ThemeSlot.Bg, ThemeSlot.BgAlt, ThemeSlot.BgSelectedDim })
+            {
+                Assert.True(Contrast(p[text], p[back]) >= 4.5, $"{text} on {back}");
+            }
+        }
+
+        Assert.True(Contrast(p[ThemeSlot.Fg], p[ThemeSlot.BgSelected]) >= 4.5, "Fg on BgSelected");
+        Assert.True(Contrast(p[ThemeSlot.Bg], p[ThemeSlot.HoverBg]) >= 4.5, "hovered text (Bg on HoverBg)");
+    }
+
+    private static double Luma(Terminal.Gui.Drawing.Color c) => 0.2126 * Lin(c.R) + 0.7152 * Lin(c.G) + 0.0722 * Lin(c.B);
+
+    private static double Lin(int v)
+    {
+        var s = v / 255.0;
+        return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+    }
+
+    private static double Contrast(Terminal.Gui.Drawing.Color a, Terminal.Gui.Drawing.Color b)
+    {
+        double hi = Math.Max(Luma(a), Luma(b)), lo = Math.Min(Luma(a), Luma(b));
+        return (hi + 0.05) / (lo + 0.05);
+    }
+
+    [Fact]
     public void The_default_theme_keeps_the_colours_cLiMS_always_had()
     {
         var p = Themes.Default.Palette;

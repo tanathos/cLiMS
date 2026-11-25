@@ -74,7 +74,7 @@ public sealed class SettingsModel
         var items = Items;
         for (var i = Selected + delta; i >= 0 && i < items.Count; i += delta)
         {
-            if (items[i].Kind != SettingKind.Info)
+            if (items[i].Selectable)
             {
                 Selected = i;
                 return;
@@ -82,10 +82,17 @@ public sealed class SettingsModel
         }
     }
 
+    /// <summary>Selects the first row that can be selected (not a heading).</summary>
+    public void MoveToFirst()
+    {
+        ClearTransient();
+        Selected = FirstSelectable(0, 1);
+    }
+
     public void MoveTo(int index)
     {
         ClearTransient();
-        if (index >= 0 && index < Items.Count && Items[index].Kind != SettingKind.Info)
+        if (index >= 0 && index < Items.Count && Items[index].Selectable)
         {
             Selected = index;
         }
@@ -273,7 +280,7 @@ public sealed class SettingsModel
     {
         var keep = Selected;
         Selected = Math.Clamp(keep, 0, Math.Max(0, Items.Count - 1));
-        if (Current is { Kind: SettingKind.Info })
+        if (Current is { Selectable: false })
         {
             Selected = FirstSelectable(0, 1);
         }
@@ -284,7 +291,7 @@ public sealed class SettingsModel
         var items = Items;
         for (var i = from; i >= 0 && i < items.Count; i += step)
         {
-            if (items[i].Kind != SettingKind.Info)
+            if (items[i].Selectable)
             {
                 return i;
             }

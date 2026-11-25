@@ -16,11 +16,15 @@ Browse a large library, search it as you type, see real cover art in the termina
 - **Instant search** on every keystroke over a local index (about 2 ms on 20 000 tracks). The server's own search fills in while the index is incomplete.
 - **Info** in the album menu (right click on a cover): a dialog of three quarters of the window with a picture of the artist, what MusicBrainz knows about the artist (type, origin, years, genres, members, links) and about the album (type, date, label, catalogue number, track count, rating). It looks things up only when opened, and keeps the answers in `info.db` for 30 days. The biography of the artist and a description of the album are the introductions of their English Wikipedia articles (CC BY-SA, credited in the dialog; found through the Wikidata links of MusicBrainz, else by a strict search). `r` looks everything up again, Tab and Enter (or a click) open a link in the default browser. The sources are providers (`Clims.Info`): MusicBrainz and Wikipedia.
 - **Played:** a seventh tab (`7`) from a play log of its own: the tracks of the last days, and the albums listened to (half of them or more) in the last week and the last month, with how many times, and a ranking of the most played genres with the genres played along with each. The albums are a grid of covers with title, artist and listen count; `Tab` switches the list, a double click or `Enter` opens an album in the Library, a right click offers Play / Enqueue.
-- **Grid layout** (`F7`) for the Library and Recently added tabs: a wall of covers, where a click opens the album's tracklist in a panel under its row, on a pixellated or tinted version of the cover.
+- **Grid layout** (`F7`) for the Library and Recently added tabs: a wall of covers, where a click opens the album's tracklist in a panel under its row, on a pixellated or tinted version of the cover. In the panel the artist and the year are links to the Library (the artist, and the year), and the ▶ next to the title plays the album; all three light up under the pointer.
 - **Real covers** as Sixel images (with half-block, quadrant and braille fallbacks for other terminals), or in other styles: sextant, octant, Game Boy and C64 palettes, chunky pixel art.
 - **Playback** on your LMS player: play/pause, seek, volume, next/previous, status kept in step through server events.
 - **Queue** you can reorder, trim and clear, plus **named saved queues** kept on your PC.
 - **Waveform** of the current track, decoded from the real file (FLAC, MP3, Ogg, WAV). Click it to change its look: block characters, braille, or a Sixel image. The style at start-up is `UI.Waveform.Style` in `settings.json` (`Blocks`, `Braille`, `Sixel`).
+- **Live spectrum** of what the player is outputting right now, in place of the waveform (radio streams too), in six styles (Bars, Slim, Mirror, Braille, Heat and Chromagram). It needs a small helper, [vismux](https://github.com/PaulWebster/vismux), next to Squeezelite on the player: see [Live spectrum (vismux)](#live-spectrum-vismux). `F8` switches between waveform and spectrum, `F9` (or a click on it) changes the style. Without vismux, `F8` still shows a spectrum computed from the file, following the playhead.
+- **Beat flash:** with the live feed, the spectrum bars rest a little dimmer and flash to the full accent colour on the drum hits, the snare above all (off by default; Settings → UI → Visualizer → *Beat flash*).
+- **Visualizer in full screen:** an option adds the same waveform or spectrum to the full-screen album view, above the progress bars and under the lyrics.
+- **Grey cover on pause:** an option turns the cover of the full-screen view to shades of grey while the player is paused.
 - **Lyrics** in the full-screen album view: synced lines follow the music (highlighted and kept in the middle), plain ones scroll. Found once, stored for good in `lyrics.db`, so a song is never searched twice. Online lookup (LRCLIB, optionally DarkLyrics and lyrics.ovh) is off until you turn it on. See [Lyrics](#lyrics).
 - **First-run connect screen:** finds servers on your network, or takes an address by hand, with optional username and password. Password-protected servers are supported everywhere. See [Connecting to a server](#connecting-to-a-server).
 - **Offline friendly:** every server gets its own saved index (`catalog-<server uuid>.db`), so browsing works while the server is away, and switching servers never mixes libraries.
@@ -75,6 +79,18 @@ Click the cover in the player (or press `Ctrl+F`) to see the playing album full 
 
 ![Full-screen cover](screenshots/cover.png)
 
+Above the progress bars, under the lyrics, the full-screen view can show the waveform or the live spectrum (Settings → UI → Visualizer → *Visualizer in full screen*; here the Slim style). With *Full-screen grey on pause* on (Settings → UI → Covers), the cover turns grey while the player is paused (the footer and the lists keep their colours) and the spectrum follows the playhead instead of the live feed:
+
+![Full-screen cover, paused](screenshots/cover-paused.png)
+
+The first five spectrum styles in the footer, top to bottom: Bars, Slim, Mirror, Braille and Heat (the upper row in the warning colour). `F9` or a click on the spectrum goes to the next one, `F8` switches back to the waveform:
+
+![Spectrum styles](screenshots/spectrum-styles.png)
+
+The sixth style, Chromagram, shows which notes are playing: a bar of two cells for each note from C3 up, as many as the width allows (up to five octaves, C3 to B7), with the names above (the Cs carry their octave: C3, C4 …) and the clearly strongest note in the warning colour. In a window too narrow for 12 notes the octaves are folded into the 12 pitch classes instead. It is worked out from the samples of the player, so it needs the live feed (without it the footer says so):
+
+![Chromagram spectrum style](screenshots/spectrum-chromagram.png)
+
 `R` in that view looks for the lyrics at the next enabled provider: here the synced lyrics from LRCLIB were replaced by the plain ones from DarkLyrics (press it again to go back):
 
 ![Lyrics from another provider](screenshots/lyrics-provider.png)
@@ -95,6 +111,10 @@ Themes (settings page, Theme tab): nine predefined themes, a swatch and hex valu
 
 ![Paper theme](screenshots/theme-paper.png)
 
+And the dark Matrix theme, the green of falling code on black (here with the live spectrum):
+
+![Matrix theme](screenshots/theme-matrix.png)
+
 The Theme tab with the light Sunny theme: every colour of the theme is listed and can be changed, and your changes can be saved under a name:
 
 ![Theme settings](screenshots/theme-settings.png)
@@ -102,6 +122,10 @@ The Theme tab with the light Sunny theme: every colour of the theme is listed an
 The colour picker, here on the dark Obsidian theme:
 
 ![Colour picker](screenshots/theme-picker.png)
+
+The UI tab of the settings page: the settings are grouped under *Views*, *Covers* and *Visualizer* (↻ marks what needs a restart):
+
+![UI settings](screenshots/settings-ui.png)
 
 The built-in key reference (`?`):
 
@@ -129,7 +153,7 @@ dotnet run --project src/Clims.Tui -- --lms http://192.168.1.x:9000
 No server at hand? `dotnet run --project src/Clims.Tui -- --demo` starts with built-in fake data.
 
 ### First sync
-After connecting, the app asks `Library not synced yet (N tracks, M albums). Sync now?` in the tab strip. Answer `Y` (or click). A sync takes about 1.5 minutes on a Raspberry Pi; the Library tab is usable after the first ten seconds (artists and albums), and albums on screen fetch their own tracks meanwhile. The index is saved in `%LOCALAPPDATA%\cLiMS\catalog-<server uuid>.db` (safe to delete; it is only a cache), so later launches start in a few seconds.
+After connecting, the app asks `Library not synced yet (N tracks, M albums). Sync now?` on the line above the tabs, at the right. Answer `Y` (or click). A sync takes about 1.5 minutes on a Raspberry Pi; the Library tab is usable after the first ten seconds (artists and albums), and albums on screen fetch their own tracks meanwhile. The index is saved in `%LOCALAPPDATA%\cLiMS\catalog-<server uuid>.db` (safe to delete; it is only a cache), so later launches start in a few seconds.
 
 If the server's last scan or counts change, the header shows `Server changed, resync pending` and you are asked once; `Later` asks again at the next launch.
 
@@ -160,7 +184,7 @@ Files, all in `%LOCALAPPDATA%\cLiMS` (or the folder named by the `CLIMS_DATA` en
 
 ## Settings
 
-Press **`F10`** (or **`Alt+S`**, or click the **☰** at the top right) for the settings page. It has a tab for each group: **Servers** (the servers you have connected to: `Enter` connects to one now, `u` makes it the one that opens at start, `e` renames it, `d` removes it after asking, `+ Add a server…` opens the connect screen; the server in use cannot be removed), **UI** (cover style for the library lists, the footer and the full-screen cover; the library cover size; the style used where Sixel is not possible; the waveform style and whether it is shown), **Lyrics** (of the server that opens at start), **Cache** and **Startup** (the first tab, and whether to connect at once). `Tab` goes to the next tab, `↑` `↓` select, `←` `→` or `Enter` change, `Esc` closes. Every change is saved as soon as it is made; styles and sizes apply at once, and the rows marked **↻** take effect at the next start.
+Press **`F10`** (or **`Alt+S`**, or click the **☰** at the top right) for the settings page. It has a tab for each group: **Servers** (the servers you have connected to: `Enter` connects to one now, `u` makes it the one that opens at start, `e` renames it, `d` removes it after asking, `+ Add a server…` opens the connect screen; the server in use cannot be removed), **UI** (in three groups under headings: *Views*, the album layout and its grid panel and the version number; *Covers*, the cover style for the library lists, the footer and the full-screen cover, the library cover size, the grey cover on pause and the style used where Sixel is not possible; *Visualizer*, whether the waveform is shown and its style, the spectrum style, the beat flash, the visualizer in the full-screen view and the address of the live feed), **Lyrics** (of the server that opens at start), **Cache** and **Startup** (the first tab, and whether to connect at once). `Tab` goes to the next tab, `↑` `↓` select, `←` `→` or `Enter` change, `Esc` closes. Every change is saved as soon as it is made; styles and sizes apply at once, and the rows marked **↻** take effect at the next start.
 
 The page edits `settings.json` (in the data folder, indented, safe to edit by hand while cLiMS is not running). Every value is optional; this is the layout with the defaults:
 
@@ -185,9 +209,11 @@ The page edits `settings.json` (in the data folder, indented, safe to edit by ha
       "Footer": { "Style": "Sixel" },
       "Library": { "Style": "Sixel", "Size": "Medium" },
       "FullScreen": { "Style": "Sixel" },
+      "FullScreenGrayOnPause": false,
       "SixelFallback": "Quadrant"
     },
     "Waveform": { "Enabled": true, "Style": "Blocks" },
+    "Visualizer": { "Host": "", "Port": 23483, "Style": "Bars", "FullScreen": false, "BeatPulse": false },
     "ShowVersion": true,
     "Theme": { "Name": "Default", "Colors": {}, "Saved": {} }
   }
@@ -195,10 +221,11 @@ The page edits `settings.json` (in the data folder, indented, safe to edit by ha
 ```
 
 - `Servers` is the list behind the switcher; `Startup.Server` is the UUID (or address) of the one that opens at start, `Startup.View` the first tab (`Library`, `Recent`, `Queue`, `Genres`, `Search`) and `AutoConnect: false` shows the connect screen at every start (an address given with `--lms` or `CLIMS_LMS_URL` still connects at once). The lyrics settings belong to each server.
-- **Theme.** `UI.Theme.Name` is `Default`, `Obsidian`, `Midnight`, `Nord`, `High contrast`, `Light`, `Paper` or `Sunny`; `UI.Theme.Colors` overrides single colours of it, by slot name, as `#RRGGBB`, e.g. `"Colors": { "Accent": "#FF8800", "Bg": "#000000" }`. The slots are `Bg`, `BgHeader`, `BgAlt`, `BgSelected`, `BgSelectedDim`, `Fg`, `FgDim`, `Accent`, `Good`, `Bad`, `Warn`, `HoverBg`, `HoverFg`, `Border`, `Faint`, `Marker` and `Thumb`. Unknown names and bad colours are ignored. The Theme tab of the settings page picks the theme and edits every colour (Enter on a colour, empty text restores the theme's; `p` or a click on the ✎ icon opens a colour picker dialog to fine tune it); changes show at once. *Save theme as…* keeps the theme and your colour changes under a name (`UI.Theme.Saved`: the name → `{ "Base": "Nord", "Colors": { "Accent": "#FF8800" } }`); saved themes are listed after the predefined ones in the picker, so you can try other themes and come back, and *Delete saved theme* removes the one in use.
+- **Theme.** `UI.Theme.Name` is `Default`, `Obsidian`, `Midnight`, `Matrix`, `Nord`, `High contrast`, `Light`, `Paper` or `Sunny`; `UI.Theme.Colors` overrides single colours of it, by slot name, as `#RRGGBB`, e.g. `"Colors": { "Accent": "#FF8800", "Bg": "#000000" }`. The slots are `Bg`, `BgHeader`, `BgAlt`, `BgSelected`, `BgSelectedDim`, `Fg`, `FgDim`, `Accent`, `Good`, `Bad`, `Warn`, `HoverBg`, `HoverFg`, `Border`, `Faint`, `Marker` and `Thumb`. Unknown names and bad colours are ignored. The Theme tab of the settings page picks the theme and edits every colour (Enter on a colour, empty text restores the theme's; `p` or a click on the ✎ icon opens a colour picker dialog to fine tune it); changes show at once. *Save theme as…* keeps the theme and your colour changes under a name (`UI.Theme.Saved`: the name → `{ "Base": "Nord", "Colors": { "Accent": "#FF8800" } }`); saved themes are listed after the predefined ones in the picker, so you can try other themes and come back, and *Delete saved theme* removes the one in use.
 - **History.** `History.TrackDays` (default 3) is how far back the Played tab lists tracks; the album lists always cover 7 and 30 days. `History.ListenPercent` (50, 75 or 100; default 50) is how much of an album must be played for it to count as listened to. The log itself is `history-<server uuid>.db` in the data folder: it is never trimmed, and deleting the other `.db` files (caches) does not touch it.
 - **Album layout.** `UI.AlbumLayout` is `List` (default) or `Grid` for the Library and Recently added tabs; `F7` switches for the session. The grid shows the covers in rows with title and artist; a click on a cover (or `Enter`) opens a panel under its row with the cover, title and tracklist, and a click on the cover or the ✕ (or `Esc`) closes it. ▶ next to the title plays the album, a double click on a track plays it, right click gives the Play / Enqueue menu. `UI.GridBackground` is `Pixellated` (the cover enlarged and blocky behind the panel, held back so the text stays readable) or `Tint` (one colour of the cover). Both are on the UI page of the settings.
 - Cover `Style` is `Sixel`, `HalfBlock`, `Quadrant`, `Braille`, `Sextant`, `Octant`, `GameBoy`, `C64`, `GameBoyQuadrant`, `C64Quadrant`, `Chunky` or `ChunkyScanlines`; `Size` (library and recently added lists only) is `Small` (16x8 cells), `Medium` (24x12) or `Large` (32x16). `SixelFallback` is the style used on terminals without Sixel, or for a cover that is partly out of view. `F3` and `F4` change them for the session only. Waveform `Style` is `Blocks`, `Braille` or `Sixel`; `Enabled: false` hides the waveform and downloads no waveform files. `UI.ShowVersion: false` hides the faint version number under the volume bar (also a switch on the UI page of the settings).
+- **Visualizer.** `UI.Visualizer.Host` is the address of the player running vismux (empty: no live feed; a restart applies it) and `Port` the port of vismux (23483). `Style` is `Bars`, `Slim`, `Mirror`, `Braille`, `Heat` or `Chromagram` (`F9` changes it for the session). `FullScreen: true` adds the waveform or spectrum to the full-screen album view. `BeatPulse` (default `false`) makes the spectrum bars flash on the drum hits of the live feed. `UI.Covers.FullScreenGrayOnPause: true` draws the full-screen cover in grey while the player is paused.
 - **Older files.** A `settings.json` from before version 0.9.2 (flat keys such as `LmsUrl`, `Waveform` and `CoverCache`) is converted at the first launch: the old file is kept as `settings.v1.json` (`settings.v1.1.json` and so on if that name is taken) and the converted settings are saved as `settings.json`. The backup is never touched again.
 - A wrong value, such as a misspelt style name, makes the whole file unreadable: it is then kept as `settings.v1.json` and the defaults are used, so check the names after editing by hand.
 
@@ -238,6 +265,20 @@ Two local sources are tried before any provider, and they work with `OnlineLooku
 
 Keys in the album view: `Up` `Down` `PgUp` `PgDn` and the wheel scroll (synced lyrics follow the music again after 8 seconds), `[` `]` shift the timing of synced lyrics by half a second, `R` looks for another version: it skips the provider the current lyrics came from and asks the next enabled one (each press tries the next, round and round; the stored lyrics stay when no other has the track), `L` turns online lookup on.
 
+## Live spectrum (vismux)
+
+The live spectrum shows what the player is outputting right now, so it needs a small helper on the player: [vismux](https://github.com/PaulWebster/vismux) reads the buffer of Squeezelite's visualiser and forwards it over UDP. Nothing is needed on the LMS server, which has no peak or spectrum data of its own. This is the setup that was tested, a Raspberry Pi with piCorePlayer (Squeezelite `v2.0.0-1476-pCP`), vismux on the same Pi and cLiMS on a PC in the same network:
+
+1. **Squeezelite with `-v`.** On piCorePlayer: Squeezelite settings, *Various input*, add `-v`, save and restart Squeezelite. Check that `ls /dev/shm/squeezelite-*` shows a file.
+2. **vismux on the player.** Download the build for your CPU from [the vismux releases](https://github.com/PaulWebster/vismux/releases) into `/home/tc`: `armhf` for a 32-bit Pi 2, 3, 4 or Zero 2 (`uname -m` says `armv7l`), `aarch64` for a 64-bit system, `armv6` for the first Pi and the Zero. Unpack it, `chmod +x` the binary and check that `./vismux-armhf --version` runs.
+3. **Start it with the player.** The command is `/home/tc/vismux-armhf --player --wait-for-shm` (`--mac` names the player if there are several). On piCorePlayer put it in the *User command* of the Tweaks page and run `pcp br` to save it, otherwise it is gone after a reboot.
+4. **Network.** UDP port 23483 (the data) and 23484 (discovery) of the player must be reachable from the PC.
+5. **cLiMS.** Settings → UI → Visualizer → *Live feed: player address*, restart. With a track playing, the footer shows the spectrum within a second.
+
+To check the stream without the interface, run `dotnet run --project tools/Clims.VismuxProbe -- <player address>` while something plays: it subscribes like cLiMS does, draws a level meter and ends with `RESULT: OK` when samples arrive, or says what is missing. `clims.log` has a `Visualizer:` line for what the live feed does (subscribing, receiving, errors).
+
+What to expect: 32 bands from 40 Hz to 16 kHz, drawn about 30 times a second, scaled to the loudest recent band over a 40 dB range, so dense music looks flatter than sparse music. The samples are what Squeezelite hands to the sound card, so the picture can run ahead of what you hear by the size of the sound card's buffer; this was not measured. The code assumes interleaved stereo samples (the data rate matches that, and the channel order was not tested with a hard-panned track).
+
 ## Header status
 `○ Not synced` · `◐ Sync in progress, live search only · artists ✓ albums ✓ tracks 42%` · `● Synced (2 h ago)` · `◔ Server changed, resync pending` · `✕ Offline (using local index)` · `✕ Login required (F2)` · `◇ Demo data (no server)`. Click it, or press `F5`, to resync or cancel a running sync.
 
@@ -252,7 +293,7 @@ Press `?` in the app for the same list.
 | letters | Type-ahead in the left list (artist, genre or year) |
 | `F7` | Library and Recently added: switch between the list and the grid of covers. In the grid the arrows move over the covers, `Enter` opens or closes the tracklist panel, `a` / `n` add / play next the whole album; with a panel open the arrows move over its tracks, `Enter` plays one, `Esc` closes it |
 | `F6` | Switch the left list: Album Artist / Genre / Year (or click the ≡ icon in its header); click the ▾/▴ arrow to sort ascending/descending; drag the divider to resize the column (22 characters to half the screen); the ⌕ next to "All ..." (or `Ctrl+F`) turns that row into a filter field, `x` or `Esc` closes it |
-| `Enter` or double click | Play the selected track, album or search result: replaces the queue and restarts the stream (not gapless). A single click only selects |
+| `Enter` or double click | Play the selected track, album or search result: replaces the queue and restarts the stream. A double click on the cover of an album in the list layout plays that album from its first track (not gapless). A single click only selects |
 | Right click | On an album cover (whole album), a track, or an artist, genre or year of the Library's left list (all their albums): menu with Play and Enqueue (arrows, `Enter` and `Esc` work in it too) |
 | `a` / `n` | Add the highlighted track to the end of the queue / play it next (gapless); `A` / `N` do the same for the whole album |
 | Played tab | `Tab` / `Shift+Tab` switch between tracks, albums of the last week and of the last month, and the most played genres (`Enter` / `Space` / click on the arrow: the genres played along; double click or `t`: the plays of the genre, `Esc` closes them); the arrows move; `Enter` or a double click opens an album in the Library (a track: plays it); right click: Play / Enqueue |
@@ -268,8 +309,10 @@ Press `?` in the app for the same list.
 | `F10` or `Alt+S` | Settings page (or click the ☰ at the top right); `Esc` closes it |
 | `F5` | Resync the library, or cancel a running sync |
 | `F3` | Cycle the cover style of the lists (of the full-screen cover while it is open): Sixel (default, real pixels), half-block, quadrant, braille, sextant, octant, Game Boy, C64 (octant blocks), Game Boy and C64 (quadrant blocks), chunky, chunky with scanlines. For this session; the defaults are in `UI.Covers` of `settings.json` |
+| `F8` | Footer (and the full-screen view, when it shows it): waveform or spectrum. For this session |
+| `F9` | Next spectrum style: Bars, Slim, Mirror, Braille, Heat, Chromagram (and switches to the spectrum if the waveform was showing). A click on the spectrum does the same |
 | `F4` | Cycle the list cover size: 24x12 cells (`Medium`, default), 32x16 (`Large`), 16x8 (`Small`). In the full-screen view it cycles the size of that cover: full height, 75%, 50% |
-| `Y` / `L` / `N` / `Enter` / `Esc` | Answer a question shown in the tab strip (`Enter` = first answer, `Esc` = last) |
+| `Y` / `L` / `N` / `Enter` / `Esc` | Answer a question shown above the tabs, at the right (`Enter` = first answer, `Esc` = last) |
 | `?` | Key reference |
 | `Ctrl+Q` | Quit (`Esc` never quits; it only closes or goes back) |
 
@@ -302,6 +345,8 @@ dotnet publish src/Clims.Tui -c Release -r win-x64 --no-self-contained -p:Publis
 |---|---|
 | `src/Clims.Lms` | UI-free LMS client library: JSON-RPC, typed models, events, server discovery and connection check ([README](src/Clims.Lms/README.md)) |
 | `src/Clims.Catalog` | UI-free local catalogue: in-memory model, SQLite store, sync service and state machine ([README](src/Clims.Catalog/README.md)) |
+| `src/Clims.Visualizer` | UI-free live spectrum: subscribes to the vismux UDP stream of the player and turns the samples into bands |
+| `tools/Clims.VismuxProbe` | Command-line probe: `dotnet run --project tools/Clims.VismuxProbe -- <player-ip>` shows whether the vismux stream arrives |
 | `src/Clims.Waveform` | UI-free waveform peaks of a track: download, decode, cache ([README](src/Clims.Waveform/README.md)) |
 | `src/Clims.Info` | UI-free artist and album information: a provider interface, the MusicBrainz and Wikipedia providers (with Wikidata for pictures), a SQLite cache and the service that ties them together |
 | `src/Clims.Lyrics` | UI-free lyrics: LRC parser, permanent SQLite store, LRCLIB / DarkLyrics / lyrics.ovh providers and the service that ties them together |
@@ -325,7 +370,7 @@ Done so far (details in [`docs/sprint.md`](docs/sprint.md)):
 | 0.8.0 | Full-screen album view, album context menu, sort label, queue position in the player | Done |
 | 0.9.0 | Genres explorer (tab `5`) with random queues, cover cache on disk, compressed and framework-dependent builds, mouse and resize fixes | Done |
 
-Deferred: player selector, live visualiser, key binding configuration, remembering several servers at once.
+Deferred: player selector, key binding configuration, remembering several servers at once.
 
 ## Releases
 Versions follow [Semantic Versioning](https://semver.org/) (`0.y.z` until 1.0: minor versions may change behaviour). Each release is a git tag `vX.Y.Z` with a GitHub Release holding single-file builds for `win-x64`, `linux-x64` and `osx-arm64` (zip or tar.gz, plus `SHA256SUMS`), each as a self-contained build and a smaller `-framework-dependent` one that needs the .NET 10 runtime. Changes are listed in [`CHANGELOG.md`](CHANGELOG.md). Download from the [Releases page](https://github.com/tanathos/cLiMS/releases); `Clims.Tui --version` prints the version. The builds are not code-signed, so Windows SmartScreen warns on first run, and only Windows Terminal has been tested.

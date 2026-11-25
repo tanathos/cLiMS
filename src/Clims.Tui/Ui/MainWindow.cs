@@ -2,6 +2,7 @@ using Clims.Tui.Settings;
 using Clims.Catalog;
 using Clims.Info;
 using Clims.Tui.Data;
+using Clims.Visualizer;
 using Clims.Waveform;
 using Terminal.Gui.App;
 using Terminal.Gui.Drawing;
@@ -16,6 +17,7 @@ public sealed class MainWindow : Window
     private const int MinWidth = 100;
     private const int MinHeight = 30;
     private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan LiveInterval = TimeSpan.FromMilliseconds(33);
     private static readonly TimeSpan NoticeDuration = TimeSpan.FromSeconds(5);
 
     private readonly IApplication _app;
@@ -25,6 +27,7 @@ public sealed class MainWindow : Window
     private readonly AlbumRefresher _refresher;
     private readonly HeaderBar _header;
     private readonly TabStrip _tabs;
+    private readonly MessageLine _messages;
     private readonly PlayedView _played;
     private readonly InfoDialog? _infoDialog;
     private bool _infoDialogVisible;
@@ -40,6 +43,7 @@ public sealed class MainWindow : Window
     private readonly GenresTab _genres;
     private readonly OnlineTab _online;
     private readonly WaveformService? _waves;
+    private readonly VismuxClient? _live;
     private readonly bool _waveformEnabled;
     private readonly LyricsFeed? _lyrics;
     private string _waveSignature = "";
@@ -100,6 +104,8 @@ public sealed class MainWindow : Window
         SetScheme(Theme.Dark);
 
         _header = new HeaderBar(player, () => catalog.Status) { X = 0, Y = 0 };
+        // Questions and notices: the blank bottom row of the header, right above the tabs.
+        _messages = new MessageLine { X = 0, Y = HeaderBar.Rows - 1, Width = Dim.Fill(), Height = 1 };
         _tabs = new TabStrip("Search", "Library", "Queue", "Recently added", "Genres", "Online", "Played", "Random albums") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
 
         _search = new SearchTab();
@@ -124,6 +130,37 @@ public sealed class MainWindow : Window
         }
 
         _footer = new FooterView(player, _waves) { X = 0, Y = Pos.AnchorEnd(FooterView.Rows), Width = Dim.Fill(), Height = FooterView.Rows, WaveformStyle = waveformStyle, ShowVersion = settings?.Current.Ui.ShowVersion ?? true };
+        _footer.SpectrumStyle = settings?.Current.Ui.Visualizer.Style ?? SpectrumStyle.Bars;
+        if (settings?.Current.Ui.Visualizer is { Host.Length: > 0 } visualizer)
+        {
+            // Needs vismux on the player. With a live feed the spectrum is what the footer shows to begin with (F8 switches).
+            _live = new VismuxClient(visualizer.Host, visualizer.Port, CrashLog.Info);
+            _footer.Live = _live;
+            _footer.ShowSpectrum = true;
+        }
+
+        // The full-screen view draws its own copy of the waveform or spectrum (it has its own feed: reading the live one empties it).
+        _info.Waves = _waves;
+        var beatPulse = settings?.Current.Ui.Visualizer.BeatPulse ?? false;
+        _footer.BeatPulse = beatPulse;
+        _info.Feed = new SpectrumFeed(player, _waves) { Live = _live, BeatPulse = beatPulse };
+        _info.ShowVisualizer = settings?.Current.Ui.Visualizer.FullScreen ?? false;
+        _info.GrayscaleOnPause = settings?.Current.Ui.Covers.FullScreenGrayOnPause ?? false;
+        SyncVisualizer();
+        _info.VisualizerClicked += () =>
+        {
+            if (_footer.ShowSpectrum)
+            {
+                _footer.NextSpectrumStyle();
+            }
+            else
+            {
+                _footer.WaveformStyle = (WaveformStyle)(((int)_footer.WaveformStyle + 1) % Enum.GetValues<WaveformStyle>().Length);
+            }
+
+            SyncVisualizer();
+        };
+
         _help.X = 0;
         _help.Y = HeaderBar.Rows + 1;
         _help.Width = Dim.Fill();
@@ -151,7 +188,7 @@ public sealed class MainWindow : Window
         _info.Height = Dim.Fill();
         _info.Visible = false;
 
-        Add(_header, _header.Search, _tabs);
+        Add(_header, _header.Search, _messages, _tabs);
         Add(_pages);
         Add(_help);
         if (_settings is not null)
@@ -246,6 +283,14 @@ public sealed class MainWindow : Window
         _footer.AlbumClicked += album => ShowInLibrary(album, scrollToAlbum: true);
         _search.ArtistChosen += artist =>
         {
+            // LMS also lists people who only appear on tracks (guests, "Band/Guest" credits). The Library's artist list is the Album
+            // Artist list, so there is nothing to open: say so and stay on the results.
+            if (_catalog.Current is { } index && index.AlbumCountOf(artist.Id) == 0)
+            {
+                Notice($"{artist.Name} has no album of its own: it only appears on tracks.");
+                return;
+            }
+
             _tabs.Selected = 1;
             _library.SelectArtist(artist.Id);
             _library.Artists.SetFocus();
@@ -276,6 +321,23 @@ public sealed class MainWindow : Window
         }
 
         _app.AddTimeout(FrameInterval, OnTick);
+        // The footer is otherwise redrawn once a second (see OnTick); the spectrum needs about 30 frames a second.
+        _app.AddTimeout(LiveInterval, () =>
+        {
+            if (_infoVisible)
+            {
+                if (_info.Animated)
+                {
+                    _info.SetNeedsDraw();
+                }
+            }
+            else if (_footer.Animated)
+            {
+                _footer.SetNeedsDraw();
+            }
+
+            return true;
+        });
         UpdateTabTitle();
         player.Changed += () => _app.Invoke(OnPlayerChanged);
         if (lyrics is not null)
@@ -296,7 +358,7 @@ public sealed class MainWindow : Window
                 ShowInLibrary(album, scrollToAlbum: false);
             }
         };
-        _queue.ClearRequested += () => _tabs.ShowPrompt(
+        _queue.ClearRequested += () => _messages.ShowPrompt(
             "Clear the whole queue? Playback stops.",
             new PromptChoice('Y', "Clear", _player.ClearQueue),
             new PromptChoice('N', "No", () => { }));
@@ -309,7 +371,7 @@ public sealed class MainWindow : Window
             }
 
             // Loading a queue restarts the stream, which is audible as a gap: say so before doing it.
-            _tabs.ShowPrompt(
+            _messages.ShowPrompt(
                 $"Replace the queue with \"{saved.Name}\"? The music restarts (not gapless).",
                 new PromptChoice('Y', "Replace", () => _player.PlaySaved(saved, true)),
                 new PromptChoice('N', "No", () => { }));
@@ -329,6 +391,7 @@ public sealed class MainWindow : Window
         {
             _recent.Cancel();
             _refresher.Dispose();
+            _live?.Dispose();
         }
 
         base.Dispose(disposing);
@@ -565,7 +628,7 @@ public sealed class MainWindow : Window
 
     private void Notice(string text)
     {
-        _tabs.ShowNotice(text);
+        _messages.ShowNotice(text);
         _noticeUntil = DateTime.UtcNow + NoticeDuration;
     }
 
@@ -619,7 +682,7 @@ public sealed class MainWindow : Window
         var text = prompt.Reason == SyncPromptReason.FirstBuild
             ? $"Library not synced yet ({prompt.Detail}). Sync now?"
             : $"Server library changed ({prompt.Detail}). Resync now?";
-        _tabs.ShowPrompt(text, new PromptChoice('Y', "Sync now", StartSync), new PromptChoice('L', "Later", _catalog.DeferSync));
+        _messages.ShowPrompt(text, new PromptChoice('Y', "Sync now", StartSync), new PromptChoice('L', "Later", _catalog.DeferSync));
     }
 
     /// <summary>F5 or a click on the status: ask whether to resync, or whether to cancel a running sync.</summary>
@@ -634,12 +697,12 @@ public sealed class MainWindow : Window
         }
         else if (status.State == SyncState.Syncing)
         {
-            _tabs.ShowPrompt(label + ". Cancel it?", new PromptChoice('Y', "Cancel sync", _catalog.CancelSync), new PromptChoice('N', "Keep going", () => { }));
+            _messages.ShowPrompt(label + ". Cancel it?", new PromptChoice('Y', "Cancel sync", _catalog.CancelSync), new PromptChoice('N', "Keep going", () => { }));
         }
         else
         {
             var text = status.State == SyncState.Synced ? $"Synced {HeaderBar.Age(status.SyncedAt, now)}" : label;
-            _tabs.ShowPrompt(text + ", resync now?", new PromptChoice('Y', "Resync", StartSync), new PromptChoice('N', "No", () => { }));
+            _messages.ShowPrompt(text + ", resync now?", new PromptChoice('Y', "Resync", StartSync), new PromptChoice('N', "No", () => { }));
         }
     }
 
@@ -652,7 +715,7 @@ public sealed class MainWindow : Window
             return;
         }
 
-        _tabs.ShowPrompt(
+        _messages.ShowPrompt(
             $"Replace the queue with {items.Count} random tracks of {what}? The music restarts (not gapless).",
             new PromptChoice('Y', "Replace", () => _player.PlayTracks(items, true)),
             new PromptChoice('N', "No", () => { }));
@@ -748,9 +811,9 @@ public sealed class MainWindow : Window
         if (_noticeUntil != DateTime.MinValue && now > _noticeUntil)
         {
             _noticeUntil = DateTime.MinValue;
-            if (_tabs.Choices.Count == 0)
+            if (_messages.Choices.Count == 0)
             {
-                _tabs.ClearMessage();
+                _messages.ClearMessage();
             }
         }
 
@@ -981,7 +1044,7 @@ public sealed class MainWindow : Window
         }
 
         // Esc in the results clears the search and goes back to the tab the user came from.
-        if (key == Key.Esc && _tabs.Selected == 0 && _tabs.Choices.Count == 0)
+        if (key == Key.Esc && _tabs.Selected == 0 && _messages.Choices.Count == 0)
         {
             LeaveSearch();
             key.Handled = true;
@@ -991,11 +1054,11 @@ public sealed class MainWindow : Window
         var ch = key.AsRune.Value is > 32 and < 0xFFFF ? (char)key.AsRune.Value : '\0';
 
         // A pending question (sync now?) takes its answer keys before anything else.
-        if (_tabs.Choices.Count > 0)
+        if (_messages.Choices.Count > 0)
         {
-            if ((key == Key.Enter && _tabs.Answer(_tabs.Choices[0].Key))
-                || (key == Key.Esc && _tabs.Answer(_tabs.Choices[^1].Key))
-                || (ch != '\0' && _tabs.Answer(ch)))
+            if ((key == Key.Enter && _messages.Answer(_messages.Choices[0].Key))
+                || (key == Key.Esc && _messages.Answer(_messages.Choices[^1].Key))
+                || (ch != '\0' && _messages.Answer(ch)))
             {
                 key.Handled = true;
                 return;
@@ -1139,6 +1202,20 @@ public sealed class MainWindow : Window
                     _library.Albums.LayoutChanged();
                     _recent.Albums.LayoutChanged();
                     _random.Albums.LayoutChanged();
+                }
+                else if (key == Key.F8)
+                {
+                    // Waveform or spectrum in the footer. For this session only.
+                    _footer.ShowSpectrum = !_footer.ShowSpectrum;
+                    _footer.SetNeedsDraw();
+                    SyncVisualizer();
+                }
+                else if (key == Key.F9)
+                {
+                    // The next spectrum style (and the spectrum itself, if the waveform was showing).
+                    _footer.ShowSpectrum = true;
+                    _footer.NextSpectrumStyle();
+                    SyncVisualizer();
                 }
                 else if (key == Key.F2)
                 {
@@ -1442,6 +1519,15 @@ public sealed class MainWindow : Window
         SetNeedsDraw();
     }
 
+    /// <summary>The full-screen view draws the waveform or spectrum the way the footer does: same choice, same styles.</summary>
+    private void SyncVisualizer()
+    {
+        _info.ShowSpectrum = _footer.ShowSpectrum;
+        _info.SpectrumStyle = _footer.SpectrumStyle;
+        _info.WaveformStyle = _footer.WaveformStyle;
+        _info.SetNeedsDraw();
+    }
+
     /// <summary>A setting was changed (and saved): what can be applied now is.</summary>
     private void OnSettingsChanged(UserSettings settings)
     {
@@ -1451,6 +1537,16 @@ public sealed class MainWindow : Window
         SetScheme(Theme.Dark);
         SetNeedsDraw();
         _footer.WaveformStyle = settings.Ui.Waveform.Style;
+        _footer.SpectrumStyle = settings.Ui.Visualizer.Style;
+        _footer.BeatPulse = settings.Ui.Visualizer.BeatPulse;
+        if (_info.Feed is { } feed)
+        {
+            feed.BeatPulse = settings.Ui.Visualizer.BeatPulse;
+        }
+
+        _info.ShowVisualizer = settings.Ui.Visualizer.FullScreen;
+        _info.GrayscaleOnPause = settings.Ui.Covers.FullScreenGrayOnPause;
+        SyncVisualizer();
         _footer.ShowVersion = settings.Ui.ShowVersion;
         _library.Albums.LayoutChanged();
         _recent.Albums.LayoutChanged();

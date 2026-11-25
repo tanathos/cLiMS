@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Description>Live spectrum of what the player is playing: subscribes to the vismux UDP stream of Squeezelite's visualiser (-v) and turns the samples into bands.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The FFT of the waveform analysis is reused for the live spectrum. -->
+    <ProjectReference Include="..\Clims.Waveform\Clims.Waveform.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Clims.Visualizer.Tests" />
+  </ItemGroup>
+
+</Project>

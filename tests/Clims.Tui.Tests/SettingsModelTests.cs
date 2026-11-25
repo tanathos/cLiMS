@@ -44,6 +44,47 @@ public sealed class SettingsModelTests : IDisposable
     }
 
     [Fact]
+    public void The_ui_page_has_three_groups_under_headings_that_cannot_be_selected()
+    {
+        var model = Model();
+        model.SetPage(1);
+
+        Assert.Equal(["Views", "Covers", "Visualizer"], model.Items.Where(i => i.Kind == SettingKind.Heading).Select(i => i.Label));
+        Assert.Equal(SettingKind.Heading, model.Items[0].Kind);
+        Assert.Equal("Album layout", model.Current!.Label); // the first row that can be selected, not the heading above it
+
+        // Down through the whole page never lands on a heading; Up and Home do not either.
+        for (var i = 0; i < model.Items.Count; i++)
+        {
+            model.Move(1);
+            Assert.True(model.Current!.Selectable);
+        }
+
+        for (var i = 0; i < model.Items.Count; i++)
+        {
+            model.Move(-1);
+            Assert.True(model.Current!.Selectable);
+        }
+
+        model.MoveToFirst();
+        Assert.Equal("Album layout", model.Current!.Label);
+        model.MoveTo(0);
+        Assert.Equal("Album layout", model.Current!.Label);
+    }
+
+    [Fact]
+    public void Each_group_holds_its_own_settings()
+    {
+        var model = Model();
+        model.SetPage(1);
+        var labels = model.Items.Select(i => i.Label).ToList();
+
+        Assert.True(labels.IndexOf("Album layout") < labels.IndexOf("Covers"));
+        Assert.True(labels.IndexOf("Covers") < labels.IndexOf("Footer cover") && labels.IndexOf("Footer cover") < labels.IndexOf("Visualizer"));
+        Assert.True(labels.IndexOf("Visualizer") < labels.IndexOf("Spectrum style"));
+    }
+
+    [Fact]
     public void A_toggle_flips_and_is_saved_at_once_and_a_restart_is_flagged()
     {
         var model = Open(Model(), "UI", "Waveform");

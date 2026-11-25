@@ -102,5 +102,42 @@ public sealed class CoverImage : IDisposable
         return grid;
     }
 
-    public void Dispose() => _source.Dispose();
+    // Rec. 709 luma: the same grey from each channel.
+    private static readonly float[] LumaMatrix =
+    [
+        0.2126f, 0.7152f, 0.0722f, 0, 0,
+        0.2126f, 0.7152f, 0.0722f, 0, 0,
+        0.2126f, 0.7152f, 0.0722f, 0, 0,
+        0, 0, 0, 1, 0,
+    ];
+
+    private CoverImage? _gray;
+
+    /// <summary>
+    /// The same picture in shades of grey, made on first use and kept with this one (and disposed with it). Its label differs, so
+    /// anything cached by label (a sixel, the cells blanked under one) treats it as another image.
+    /// </summary>
+    public CoverImage Grayscale()
+    {
+        if (_gray is not null)
+        {
+            return _gray;
+        }
+
+        var bitmap = new SKBitmap(_source.Width, _source.Height);
+        using (var canvas = new SKCanvas(bitmap))
+        using (var paint = new SKPaint { ColorFilter = SKColorFilter.CreateColorMatrix(LumaMatrix) })
+        using (var image = SKImage.FromBitmap(_source))
+        {
+            canvas.DrawImage(image, 0, 0, new SKSamplingOptions(), paint);
+        }
+
+        return _gray = new CoverImage(bitmap, Label + "|gray");
+    }
+
+    public void Dispose()
+    {
+        _gray?.Dispose();
+        _source.Dispose();
+    }
 }

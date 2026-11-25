@@ -23,4 +23,7 @@ public enum SettingKind
 
     /// <summary>A line of information; it cannot be changed here.</summary>
     Info,
+
+    /// <summary>The title of a group of rows. It cannot be selected.</summary>
+    Heading,
 }

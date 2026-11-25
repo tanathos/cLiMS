@@ -3,6 +3,35 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-11-24
+
+### Added
+
+- **Live spectrum.** With [vismux](https://github.com/PaulWebster/vismux) running next to Squeezelite (started with `-v`) on the player, the footer draws the spectrum of what the player is outputting right now instead of the waveform, radio streams included. Set the player's address under Settings → UI → Visualizer → *Live feed: player address* (`UI.Visualizer.Host`, optionally `Port`) and restart; without an address nothing changes. Setup steps are in the new README section *Live spectrum (vismux)*. New library `Clims.Visualizer` (the vismux UDP protocol, the sample ring, a 32-band analyzer) and `tools/Clims.VismuxProbe`, a command-line probe that shows whether the stream arrives.
+- **Spectrum styles:** Bars, Slim, Mirror, Braille, Heat and Chromagram. `F9`, or a click on the spectrum, goes to the next one; the style at start-up is Settings → UI → Visualizer → *Spectrum style* (`UI.Visualizer.Style`).
+- **Chromagram** spectrum style: which notes are playing, a bar of two cells for each from C3 up, as many as the width allows (up to five octaves, C3 to B7). The names are above the bars (the Cs carry their octave) and the clearly strongest note is drawn in the warning colour; in a window too narrow for 12 notes the octaves are folded into the 12 pitch classes. It is worked out from the samples of the player (an 8192-point FFT, its spectral peaks placed on the nearest note), so it needs the live feed; without one the footer says so. New `Chromagram` in `Clims.Visualizer`, new `IVisualSource.TakeChroma`, new screenshot `spectrum-chromagram.png`.
+- **Beat flash** (Settings → UI → Visualizer, `UI.Visualizer.BeatPulse`, off by default): with the live feed, the drum hits (the snare above all) are found in the samples (a sudden rise of the bands from 1.5 to 11 kHz, every 12 ms) and the spectrum bars rest dimmer and flash to the full accent colour on each, in the footer and in the full-screen strip. The spectrum computed from the file does not flash. New `OnsetDetector`.
+- **`F8`** switches the footer between the waveform and the spectrum. Without a live feed the spectrum is the one computed from the file, following the playhead, so `F8` works without vismux too. The spectrum is repainted about 30 times a second while it moves.
+- **Visualizer in full screen** (Settings → UI → Visualizer, `UI.Visualizer.FullScreen`, off by default): the full-screen album view also shows the waveform or spectrum, above the progress bars and under the lyrics. It follows the footer's choice (`F8`, `F9`), and a click on it changes the style. It is left out when the window is too small to leave the lyrics three rows.
+- **Grey cover on pause** (Settings → UI → Covers → *Full-screen grey on pause*, `UI.Covers.FullScreenGrayOnPause`, off by default): the cover of the full-screen view turns to shades of grey while the player is paused or stopped, and back to colour when it plays.
+- **Matrix theme:** a new predefined theme, the green of falling code on black: phosphor green (`#00FF41`) for accents, a paler green for text, deep green for selections and frames. It is listed after Midnight in the theme picker (`UI.Theme.Name: "Matrix"`); every colour can be changed and saved like those of the other themes.
+- New README screenshots: the full-screen view with the spectrum, the same view paused with the grey cover, the five spectrum styles, and the grouped UI settings.
+
+- **Grid panel links:** in the open panel of the grid layout the artist and the year under the title are links, underlined like those of the list layout: the artist opens the Library on that artist, the year the Library's Year view on that year. They, and the ▶ that plays the album, change colour under the pointer.
+- **Double click on a cover plays the album:** in the list layout of the Library, Recently added and Random albums, a double click on an album's cover replaces the queue with the album and starts its first track (a single click still does nothing).
+
+### Changed
+
+- **Messages have their own line.** Questions with answers (*Sync now?*, *Clear the whole queue?*…) and short notices (such as the sync progress) are now shown on the blank row of the header just above the tabs, right-aligned and ending where the *⇄ Server* button ends, instead of in the free space of the tab strip. They get the whole width of the window, so long messages are no longer cut short. The answers work as before: `Y` / `N` / `L`, `Enter` (the first answer), `Esc` (the last), or a click.
+- **Settings, UI tab:** the settings are grouped under headings: *Views* (album layout, grid panel background, version number), *Covers* (everything about cover images) and *Visualizer* (waveform, spectrum and the live feed). Headings cannot be selected: the arrow keys, `Home` and the mouse skip them.
+- `cover.png` in the README is a new screenshot of the full-screen view (it now shows the spectrum strip).
+
+### Fixed
+
+- Search: choosing an artist that has no album of its own (LMS also lists people who only appear on tracks, such as a "Band/Guest" credit) used to go to the Library and show nothing. It now stays on the results and says so on the message line above the tabs.
+- Grid layout: the cover in an open panel no longer loses its left edge column (a black band) when the panel is repainted, for example when moving over its tracks or pointing at a link. The cells next to a Sixel image are left alone while the image stays where it is, because the terminal erases the image's edge column when a neighbouring cell is rewritten.
+- Settings page: a click on a row that cannot be selected (an information row, now also a heading) no longer changes the setting that was selected before.
+
 ## [0.9.4] - 2026-11-18
 
 ### Added

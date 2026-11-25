@@ -11,6 +11,7 @@ public static class SettingsPages
     private static readonly AlbumLayout[] Layouts = [AlbumLayout.List, AlbumLayout.Grid];
     private static readonly GridBackdrop[] Backdrops = [GridBackdrop.Pixellated, GridBackdrop.Tint];
     private static readonly WaveformStyle[] Waveforms = [WaveformStyle.Blocks, WaveformStyle.Braille, WaveformStyle.Sixel];
+    private static readonly SpectrumStyle[] SpectrumStyles = Enum.GetValues<SpectrumStyle>();
     private static readonly StartupView[] Views = [StartupView.Library, StartupView.Recent, StartupView.Queue, StartupView.Genres, StartupView.Search];
 
     /// <param name="settings">The settings as they are now.</param>
@@ -54,18 +55,42 @@ public static class SettingsPages
         return rows;
     }
 
+    /// <summary>The UI tab: three groups, each under its heading.</summary>
     private static List<SettingItem> UiRows() =>
+    [
+        SettingItems.Heading("Views"),
+        .. ViewsRows(),
+        SettingItems.Heading("Covers"),
+        .. CoversRows(),
+        SettingItems.Heading("Visualizer"),
+        .. VisualizerRows(),
+    ];
+
+    private static List<SettingItem> ViewsRows() =>
     [
         SettingItems.Choice("Album layout", s => s.Ui.AlbumLayout, (s, v) => s with { Ui = s.Ui with { AlbumLayout = v } }, Layouts, "library and recently added: a list, or a grid of covers (F7 switches for the session)"),
         SettingItems.Choice("Grid panel background", s => s.Ui.GridBackground, (s, v) => s with { Ui = s.Ui with { GridBackground = v } }, Backdrops, "the tracklist under a cover of the grid: the cover enlarged and blocky, or one tint of it"),
+        SettingItems.Toggle("Version number", s => s.Ui.ShowVersion, (s, v) => s with { Ui = s.Ui with { ShowVersion = v } }, "faint, under the volume bar"),
+    ];
+
+    private static List<SettingItem> CoversRows() =>
+    [
         SettingItems.Choice("Library covers", s => s.Ui.Covers.Library.Style, (s, v) => Covers(s, c => c with { Library = c.Library with { Style = v } }), Styles, "lists: library, recent, search, genres", warning: CoverArt.Warning),
         SettingItems.Choice("Library cover size", s => s.Ui.Covers.Library.Size ?? CoverSize.Medium, (s, v) => Covers(s, c => c with { Library = c.Library with { Size = v } }), Sizes, "16x8, 24x12 or 32x16 cells"),
         SettingItems.Choice("Footer cover", s => s.Ui.Covers.Footer.Style, (s, v) => Covers(s, c => c with { Footer = c.Footer with { Style = v } }), Styles, warning: CoverArt.Warning),
         SettingItems.Choice("Full-screen cover", s => s.Ui.Covers.FullScreen.Style, (s, v) => Covers(s, c => c with { FullScreen = c.FullScreen with { Style = v } }), Styles, warning: CoverArt.Warning),
+        SettingItems.Toggle("Full-screen grey on pause", s => s.Ui.Covers.FullScreenGrayOnPause, (s, v) => Covers(s, c => c with { FullScreenGrayOnPause = v }), "the cover of the full-screen view turns to shades of grey while the player is paused"),
         SettingItems.Choice("Where Sixel is not possible", s => s.Ui.Covers.SixelFallback, (s, v) => Covers(s, c => c with { SixelFallback = v }), Fallbacks, "terminals without Sixel, covers partly out of view", warning: CoverArt.Warning),
-        SettingItems.Choice("Waveform style", s => s.Ui.Waveform.Style, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Style = v } } }, Waveforms, "clicking the waveform changes it too"),
+    ];
+
+    private static List<SettingItem> VisualizerRows() =>
+    [
         SettingItems.Toggle("Waveform", s => s.Ui.Waveform.Enabled, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Enabled = v } } }, "off: none shown, none downloaded", restart: true),
-        SettingItems.Toggle("Version number", s => s.Ui.ShowVersion, (s, v) => s with { Ui = s.Ui with { ShowVersion = v } }, "faint, under the volume bar"),
+        SettingItems.Choice("Waveform style", s => s.Ui.Waveform.Style, (s, v) => s with { Ui = s.Ui with { Waveform = s.Ui.Waveform with { Style = v } } }, Waveforms, "clicking the waveform changes it too"),
+        SettingItems.Choice("Spectrum style", s => s.Ui.Visualizer.Style, (s, v) => s with { Ui = s.Ui with { Visualizer = s.Ui.Visualizer with { Style = v } } }, SpectrumStyles, "F8 switches between waveform and spectrum, F9 or a click on the spectrum changes its style"),
+        SettingItems.Toggle("Beat flash", s => s.Ui.Visualizer.BeatPulse, (s, v) => s with { Ui = s.Ui with { Visualizer = s.Ui.Visualizer with { BeatPulse = v } } }, "with the live feed, the spectrum bars rest dimmer and flash brighter on the drum hits"),
+        SettingItems.Toggle("Visualizer in full screen", s => s.Ui.Visualizer.FullScreen, (s, v) => s with { Ui = s.Ui with { Visualizer = s.Ui.Visualizer with { FullScreen = v } } }, "the waveform or spectrum above the progress bars of the full-screen album view, under the lyrics"),
+        SettingItems.Text("Live feed: player address", s => s.Ui.Visualizer.Host, (s, v) => s with { Ui = s.Ui with { Visualizer = s.Ui.Visualizer with { Host = v.Trim() } } }, "address of the player running vismux (Squeezelite -v); empty: off. Replaces the waveform while it plays", restart: true, allowEmpty: true),
     ];
 
     private static List<SettingItem> ThemeRows(UserSettings settings)
