@@ -288,6 +288,13 @@ public sealed class FooterView : PaintView
         set => _feed.Live = value;
     }
 
+    /// <summary>True: the spectrum bars flash on the beat of the music.</summary>
+    public bool BeatPulse
+    {
+        get => _feed.BeatPulse;
+        set => _feed.BeatPulse = value;
+    }
+
     /// <summary>True while the live spectrum is being drawn.</summary>
     public bool IsLive => ShowWaveform && ShowSpectrum && _feed.IsLive;
 
@@ -324,7 +331,7 @@ public sealed class FooterView : PaintView
         }
 
         _wave = (x, x + width); // a click on it changes the style
-        PutSpectrum(x, y, width, SpectrumStyle, _feed.Levels);
+        PutSpectrum(x, y, width, SpectrumStyle, _feed);
     }
 
     /// <summary>Goes to the next <see cref="SpectrumStyle"/>.</summary>

@@ -78,7 +78,16 @@ public static class Themes
         [Border] = C(34, 46, 84), [Faint] = C(52, 66, 108), [Marker] = C(80, 98, 146), [Thumb] = C(130, 148, 190),
     }));
 
-    public static IReadOnlyList<ThemeDefinition> All { get; } = [Default, Obsidian, Midnight, Nord, HighContrast, Light, Paper, Sunny];
+    /// <summary>Black with the green of falling code: phosphor green text and accents, deep green backgrounds, a pale green highlight.</summary>
+    public static ThemeDefinition Matrix { get; } = new("Matrix", new ThemePalette(new Dictionary<ThemeSlot, Color>
+    {
+        [Bg] = C(1, 9, 3), [BgHeader] = C(0, 3, 1), [BgAlt] = C(5, 26, 11), [BgSelected] = C(0, 82, 24), [BgSelectedDim] = C(2, 38, 14),
+        [Fg] = C(150, 245, 170), [FgDim] = C(0, 160, 24), [Accent] = C(0, 255, 65), [Good] = C(57, 255, 20), [Bad] = C(255, 82, 82),
+        [Warn] = C(204, 255, 0), [HoverBg] = C(0, 200, 55), [HoverFg] = C(225, 255, 230),
+        [Border] = C(0, 59, 0), [Faint] = C(0, 92, 20), [Marker] = C(0, 122, 28), [Thumb] = C(0, 175, 42),
+    }));
+
+    public static IReadOnlyList<ThemeDefinition> All { get; } = [Default, Obsidian, Midnight, Matrix, Nord, HighContrast, Light, Paper, Sunny];
 
     public static IReadOnlyList<string> Names { get; } = All.Select(t => t.Name).ToList();
 

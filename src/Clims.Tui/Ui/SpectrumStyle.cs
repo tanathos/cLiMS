@@ -17,4 +17,7 @@ public enum SpectrumStyle
 
     /// <summary>Bars whose upper row is drawn in the warning colour, so the loud parts stand out.</summary>
     Heat,
+
+    /// <summary>The 12 notes (C, C#, D … B) with the octaves added up: the names above, the bars below, the strongest one highlighted. Needs the live feed.</summary>
+    Chromagram,
 }

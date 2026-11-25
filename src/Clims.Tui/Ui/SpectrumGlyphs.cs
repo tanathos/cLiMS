@@ -36,6 +36,84 @@ public static class SpectrumGlyphs
         return frame;
     }
 
+    private static readonly string[] PitchClasses = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+    /// <summary>
+    /// The notes of the chromagram over <paramref name="width"/> cells, as many as fit with a bar of two cells for each and a cell
+    /// between them, from C3 up (the Cs carry their octave: C3, C4 …). With less room than 12 notes need, the octaves are folded into
+    /// the 12 pitch classes instead, each with a wider bar. The note that is clearly strongest is drawn in the warning colour.
+    /// </summary>
+    /// <param name="notes">Level of each note from <see cref="Clims.Visualizer.Chromagram.FirstMidi"/> up, 0 to 1.</param>
+    public static SpectrumFrame Chroma(float[] notes, int width)
+    {
+        const int pitch = 3;
+        var count = Math.Min(notes.Length, (width + 1) / pitch);
+        if (count >= 12)
+        {
+            var names = new string[count];
+            for (var i = 0; i < count; i++)
+            {
+                var midi = Clims.Visualizer.Chromagram.FirstMidi + i;
+                names[i] = midi % 12 == 0 ? "C" + (midi / 12 - 1) : PitchClasses[midi % 12];
+            }
+
+            return Layout(notes.AsSpan(0, count).ToArray(), names, width, pitch);
+        }
+
+        var folded = new float[12];
+        for (var i = 0; i < notes.Length; i++)
+        {
+            var pitchClass = (Clims.Visualizer.Chromagram.FirstMidi + i) % 12;
+            folded[pitchClass] = Math.Max(folded[pitchClass], notes[i]);
+        }
+
+        return Layout(folded, PitchClasses, width, width / 12);
+    }
+
+    /// <summary>A name on the upper row and a bar of 8 steps on the lower one for each level, <paramref name="pitch"/> cells apart (the last of them a gap).</summary>
+    private static SpectrumFrame Layout(float[] levels, string[] names, int width, int pitch)
+    {
+        var frame = new SpectrumFrame(width);
+        if (width <= 0 || levels.Length == 0 || pitch < 1)
+        {
+            return frame;
+        }
+
+        var strongest = 0;
+        for (var n = 1; n < levels.Length; n++)
+        {
+            strongest = levels[n] > levels[strongest] ? n : strongest;
+        }
+
+        var gap = pitch >= 2 ? 1 : 0;
+        var cells = pitch - gap;
+        var left = (width - (pitch * levels.Length - gap)) / 2;
+        for (var n = 0; n < levels.Length; n++)
+        {
+            var start = left + n * pitch;
+            var kind = n == strongest && levels[n] > 0.3f ? SpectrumFrame.Hot : SpectrumFrame.Normal;
+            var level = Math.Clamp((int)Math.Round(levels[n] * 8), 0, 8);
+            for (var i = 0; i < cells; i++)
+            {
+                frame.Bottom[start + i] = Blocks[level];
+                frame.BottomKind[start + i] = kind;
+            }
+
+            var name = names[n];
+            if (name.Length <= cells)
+            {
+                var at = start + (cells - name.Length) / 2;
+                for (var i = 0; i < name.Length; i++)
+                {
+                    frame.Top[at + i] = name[i];
+                    frame.TopKind[at + i] = kind;
+                }
+            }
+        }
+
+        return frame;
+    }
+
     private static void Bars(SpectrumFrame frame, float[] bands, int width, bool gaps, bool hot)
     {
         for (var i = 0; i < width; i++)

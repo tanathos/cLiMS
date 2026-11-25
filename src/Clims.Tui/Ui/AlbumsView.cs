@@ -638,6 +638,19 @@ public sealed partial class AlbumsView : PaintView
     /// <summary>Only a change of the link under the pointer repaints: the covers must not be redrawn for every cell it crosses.</summary>
     protected override void OnPointerMoved()
     {
+        if (Grid)
+        {
+            // The covers are not redrawn for any movement that does not change what lights up.
+            var part = HoverPart();
+            if (part != _hoverPanel)
+            {
+                _hoverPanel = part;
+                SetNeedsDraw();
+            }
+
+            return;
+        }
+
         var link = Pointer is { } p ? LinkAt(p.X, p.Y) : null;
         if (link != _hoverLink)
         {
@@ -709,6 +722,16 @@ public sealed partial class AlbumsView : PaintView
         for (var i = FirstVisible(); i < _albums.Count && _tops[i] <= row; i++)
         {
             var album = _albums[i];
+            if (play && row < _tops[i] + CoverRows && x >= 1 && x < 1 + CoverCols)
+            {
+                // A double click on the cover plays the album: the queue is replaced and the first track starts.
+                _selAlbum = i;
+                _selTrack = 0;
+                SetNeedsDraw();
+                PlayRequested?.Invoke(album, catalog.TracksOf(album.Id), 0);
+                return;
+            }
+
             if (row == _tops[i] + 1)
             {
                 var (_, parts) = Details(album, catalog.Summary(album.Id).Genres);

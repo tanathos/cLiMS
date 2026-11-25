@@ -20,6 +20,8 @@ public sealed class VismuxClient : IVisualSource, IDisposable
     private readonly Action<string>? _log;
     private readonly object _gate = new();
     private readonly float[] _pending = new float[LiveSpectrum.Bands];
+    private readonly float[] _pendingChroma = new float[Chromagram.Notes];
+    private float _pendingBeat;
     private long _lastFrameTicks;
     private volatile bool _lastRunning;
     private volatile bool _heard;
@@ -71,6 +73,37 @@ public sealed class VismuxClient : IVisualSource, IDisposable
         }
 
         return true;
+    }
+
+    public bool TakeChroma(float[] chroma)
+    {
+        if (State != VisualState.Live || chroma.Length < Chromagram.Notes)
+        {
+            return false;
+        }
+
+        lock (_gate)
+        {
+            Array.Copy(_pendingChroma, chroma, Chromagram.Notes);
+            Array.Clear(_pendingChroma);
+        }
+
+        return true;
+    }
+
+    public float TakeBeat()
+    {
+        if (State != VisualState.Live)
+        {
+            return 0;
+        }
+
+        lock (_gate)
+        {
+            var beat = _pendingBeat;
+            _pendingBeat = 0;
+            return beat;
+        }
     }
 
     public void Dispose()
@@ -147,6 +180,9 @@ public sealed class VismuxClient : IVisualSource, IDisposable
         var ring = new SampleRing();
         var spectrum = new LiveSpectrum();
         var levels = new float[LiveSpectrum.Bands];
+        var chromagram = new Chromagram();
+        var chroma = new float[Chromagram.Notes];
+        var onsets = new OnsetDetector();
         var clock = Stopwatch.StartNew();
         var lastAnalysis = TimeSpan.FromSeconds(-1); // not MinValue: the subtraction below would overflow
         try
@@ -183,20 +219,35 @@ public sealed class VismuxClient : IVisualSource, IDisposable
                 Interlocked.Exchange(ref _lastFrameTicks, Stopwatch.GetTimestamp());
                 _lastRunning = frame.Running;
                 _heard = true;
+
+                // Every datagram, not only 30 times a second: a hit is over in a few milliseconds.
+                var hit = onsets.Advance(ring, frame.BufIndex, frame.BufSize, frame.Rate);
+                if (hit > 0 && frame.Running)
+                {
+                    lock (_gate)
+                    {
+                        _pendingBeat = Math.Max(_pendingBeat, hit);
+                    }
+                }
+
                 if (!frame.Running || clock.Elapsed - lastAnalysis < TimeSpan.FromSeconds(1.0 / FramesPerSecond))
                 {
                     continue;
                 }
 
                 lastAnalysis = clock.Elapsed;
-                if (spectrum.Analyze(ring, frame.BufIndex, frame.Rate, levels))
+                var banded = spectrum.Analyze(ring, frame.BufIndex, frame.Rate, levels);
+                var pitched = chromagram.Analyze(ring, frame.BufIndex, frame.Rate, chroma);
+                lock (_gate)
                 {
-                    lock (_gate)
+                    for (var b = 0; b < LiveSpectrum.Bands && banded; b++)
                     {
-                        for (var b = 0; b < LiveSpectrum.Bands; b++)
-                        {
-                            _pending[b] = Math.Max(_pending[b], levels[b]);
-                        }
+                        _pending[b] = Math.Max(_pending[b], levels[b]);
+                    }
+
+                    for (var p = 0; p < Chromagram.Notes && pitched; p++)
+                    {
+                        _pendingChroma[p] = Math.Max(_pendingChroma[p], chroma[p]);
                     }
                 }
             }

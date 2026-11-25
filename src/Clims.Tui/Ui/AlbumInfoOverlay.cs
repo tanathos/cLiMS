@@ -279,7 +279,7 @@ public sealed class AlbumInfoOverlay : PaintView
         if (ShowSpectrum && Feed is { IsLive: true } live)
         {
             live.Update(track);
-            PutSpectrum(x, y, width, SpectrumStyle, live.Levels);
+            PutSpectrum(x, y, width, SpectrumStyle, live);
         }
         else if (now.IsRemote)
         {
@@ -290,7 +290,7 @@ public sealed class AlbumInfoOverlay : PaintView
         {
             if (feed.Update(track))
             {
-                PutSpectrum(x, y, width, SpectrumStyle, feed.Levels);
+                PutSpectrum(x, y, width, SpectrumStyle, feed);
             }
             else if (Waves is not null)
             {

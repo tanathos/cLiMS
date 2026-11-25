@@ -24,7 +24,32 @@ public sealed partial class AlbumsView
         PanelCover,
         Close,
         Play,
+        PanelArtist,
+        PanelYear,
         Track,
+    }
+
+    /// <summary>The part of the open panel under the pointer that lights up (the play icon, the artist, the year); None for the rest.</summary>
+    private GridPart _hoverPanel;
+
+    /// <summary>What lights up under the pointer: the play icon, the artist or the year of the open panel; None for anything else.</summary>
+    private GridPart HoverPart()
+    {
+        var part = Pointer is { } at ? GridLocate(at.X, at.Y).Part : GridPart.None;
+        return part is GridPart.Play or GridPart.PanelArtist or GridPart.PanelYear ? part : GridPart.None;
+    }
+
+    /// <summary>
+    /// The artist and the year under the album's title in the open panel, as the text to draw and where it starts. The artist is cut
+    /// to the room there is; the year follows after a space, as "(2000)", and is cut too.
+    /// </summary>
+    private (string Artist, string Year, int YearX) PanelWho(CatalogAlbum album)
+    {
+        var room = PanelTextW;
+        var artist = ShowArtist && album.ArtistName.Length > 0 ? Clip(album.ArtistName, room) : "";
+        var yearX = PanelTextX + artist.Length + (artist.Length > 0 ? 1 : 0);
+        var year = album.Year > 0 ? Clip($"({album.Year})", Math.Max(0, PanelTextX + room - yearX)) : "";
+        return (artist, year, yearX);
     }
 
     private readonly record struct GridTarget(int Album, GridPart Part, int Track = -1);
@@ -217,6 +242,12 @@ public sealed partial class AlbumsView
         _backdrop = AlbumBackdrop.Make(CoverArt.Source.TryGet(key), CoverArt.Backdrop, Math.Max(1, W - 1), height);
         Claim(0, top, Math.Max(1, W - 1), height);
         _backdropTop = top;
+
+        // The cells the cover's image is in are not written, and while the image stays where it is, neither are the ones next to
+        // it: rewriting those (a repaint for the pointer on a link, say) makes the terminal erase the image's left edge column.
+        var still = SixelIsStill(key, PanelCoverX, contentTop, CoverCols, CoverRows, CoverPlace.Library);
+        var keepFrom = still ? PanelCoverX - 1 : PanelCoverX;
+        var keepTo = PanelCoverX + CoverCols + (still ? 1 : 0);
         for (var rel = 0; rel < height; rel++)
         {
             var y = top + rel;
@@ -229,15 +260,15 @@ public sealed partial class AlbumsView
             var x = 0;
             while (x < W - 1)
             {
-                if (inCover && x >= PanelCoverX && x < PanelCoverX + CoverCols)
+                if (inCover && x >= keepFrom && x < keepTo)
                 {
-                    x = PanelCoverX + CoverCols;
+                    x = keepTo;
                     continue;
                 }
 
                 var colour = BackAt(x, y);
                 var end = x + 1;
-                while (end < W - 1 && !(inCover && end >= PanelCoverX && end < PanelCoverX + CoverCols) && BackAt(end, y) == colour)
+                while (end < W - 1 && !(inCover && end >= keepFrom && end < keepTo) && BackAt(end, y) == colour)
                 {
                     end++;
                 }
@@ -257,16 +288,21 @@ public sealed partial class AlbumsView
         var textW = PanelTextW;
         var title = Clip(album.Title, Math.Max(1, textW - 4));
         PutBack(textX, contentTop, title, Theme.Fg, TextStyle.Bold);
-        PutBack(textX + title.Length + 2, contentTop, "▶", Theme.Accent);
+        _hoverPanel = HoverPart(); // also after a scroll, which moves things under a pointer that did not
+        PutBack(textX + title.Length + 2, contentTop, "▶", _hoverPanel == GridPart.Play ? Theme.HoverFg : Theme.Accent);
         PutBack(W - 4, contentTop, "✕", Theme.FgDim);
 
-        var who = ShowArtist && album.ArtistName.Length > 0 ? album.ArtistName : "";
-        if (album.Year > 0)
+        // The artist and the year are links to the Library (underlined, and lit while the pointer is on them).
+        var (artist, year, yearX) = PanelWho(album);
+        if (artist.Length > 0)
         {
-            who += (who.Length > 0 ? " " : "") + $"({album.Year})";
+            PutBack(textX, contentTop + 1, artist, _hoverPanel == GridPart.PanelArtist ? Theme.HoverFg : Theme.Accent, TextStyle.Underline);
         }
 
-        PutBack(textX, contentTop + 1, Clip(who, textW), Theme.Accent);
+        if (year.Length > 0)
+        {
+            PutBack(yearX, contentTop + 1, year, _hoverPanel == GridPart.PanelYear ? Theme.HoverFg : Theme.Accent, TextStyle.Underline);
+        }
 
         if (tracks.Count == 0)
         {
@@ -410,6 +446,20 @@ public sealed partial class AlbumsView
             }
         }
 
+        if (content == 1)
+        {
+            var (artist, year, yearX) = PanelWho(album);
+            if (artist.Length > 0 && x >= textX && x < textX + artist.Length)
+            {
+                return new GridTarget(_expanded, GridPart.PanelArtist);
+            }
+
+            if (year.Length > 0 && x >= yearX && x < yearX + year.Length)
+            {
+                return new GridTarget(_expanded, GridPart.PanelYear);
+            }
+        }
+
         var line = content - 3;
         var colW = Math.Max(10, PanelTextW / 2);
         var col = (x - textX) / colW;
@@ -496,6 +546,12 @@ public sealed partial class AlbumsView
                 Select(target.Album);
                 SetNeedsDraw();
                 ArtistClicked?.Invoke(album);
+                break;
+            case GridPart.PanelArtist:
+                ArtistClicked?.Invoke(album);
+                break;
+            case GridPart.PanelYear:
+                YearClicked?.Invoke(album.Year);
                 break;
             case GridPart.Close:
                 ToggleExpanded(target.Album);

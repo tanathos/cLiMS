@@ -27,6 +27,7 @@ public sealed class MainWindow : Window
     private readonly AlbumRefresher _refresher;
     private readonly HeaderBar _header;
     private readonly TabStrip _tabs;
+    private readonly MessageLine _messages;
     private readonly PlayedView _played;
     private readonly InfoDialog? _infoDialog;
     private bool _infoDialogVisible;
@@ -103,6 +104,8 @@ public sealed class MainWindow : Window
         SetScheme(Theme.Dark);
 
         _header = new HeaderBar(player, () => catalog.Status) { X = 0, Y = 0 };
+        // Questions and notices: the blank bottom row of the header, right above the tabs.
+        _messages = new MessageLine { X = 0, Y = HeaderBar.Rows - 1, Width = Dim.Fill(), Height = 1 };
         _tabs = new TabStrip("Search", "Library", "Queue", "Recently added", "Genres", "Online", "Played", "Random albums") { X = 0, Y = HeaderBar.Rows, Width = Dim.Fill(), Height = 1 };
 
         _search = new SearchTab();
@@ -138,7 +141,9 @@ public sealed class MainWindow : Window
 
         // The full-screen view draws its own copy of the waveform or spectrum (it has its own feed: reading the live one empties it).
         _info.Waves = _waves;
-        _info.Feed = new SpectrumFeed(player, _waves) { Live = _live };
+        var beatPulse = settings?.Current.Ui.Visualizer.BeatPulse ?? false;
+        _footer.BeatPulse = beatPulse;
+        _info.Feed = new SpectrumFeed(player, _waves) { Live = _live, BeatPulse = beatPulse };
         _info.ShowVisualizer = settings?.Current.Ui.Visualizer.FullScreen ?? false;
         _info.GrayscaleOnPause = settings?.Current.Ui.Covers.FullScreenGrayOnPause ?? false;
         SyncVisualizer();
@@ -183,7 +188,7 @@ public sealed class MainWindow : Window
         _info.Height = Dim.Fill();
         _info.Visible = false;
 
-        Add(_header, _header.Search, _tabs);
+        Add(_header, _header.Search, _messages, _tabs);
         Add(_pages);
         Add(_help);
         if (_settings is not null)
@@ -278,6 +283,14 @@ public sealed class MainWindow : Window
         _footer.AlbumClicked += album => ShowInLibrary(album, scrollToAlbum: true);
         _search.ArtistChosen += artist =>
         {
+            // LMS also lists people who only appear on tracks (guests, "Band/Guest" credits). The Library's artist list is the Album
+            // Artist list, so there is nothing to open: say so and stay on the results.
+            if (_catalog.Current is { } index && index.AlbumCountOf(artist.Id) == 0)
+            {
+                Notice($"{artist.Name} has no album of its own: it only appears on tracks.");
+                return;
+            }
+
             _tabs.Selected = 1;
             _library.SelectArtist(artist.Id);
             _library.Artists.SetFocus();
@@ -345,7 +358,7 @@ public sealed class MainWindow : Window
                 ShowInLibrary(album, scrollToAlbum: false);
             }
         };
-        _queue.ClearRequested += () => _tabs.ShowPrompt(
+        _queue.ClearRequested += () => _messages.ShowPrompt(
             "Clear the whole queue? Playback stops.",
             new PromptChoice('Y', "Clear", _player.ClearQueue),
             new PromptChoice('N', "No", () => { }));
@@ -358,7 +371,7 @@ public sealed class MainWindow : Window
             }
 
             // Loading a queue restarts the stream, which is audible as a gap: say so before doing it.
-            _tabs.ShowPrompt(
+            _messages.ShowPrompt(
                 $"Replace the queue with \"{saved.Name}\"? The music restarts (not gapless).",
                 new PromptChoice('Y', "Replace", () => _player.PlaySaved(saved, true)),
                 new PromptChoice('N', "No", () => { }));
@@ -615,7 +628,7 @@ public sealed class MainWindow : Window
 
     private void Notice(string text)
     {
-        _tabs.ShowNotice(text);
+        _messages.ShowNotice(text);
         _noticeUntil = DateTime.UtcNow + NoticeDuration;
     }
 
@@ -669,7 +682,7 @@ public sealed class MainWindow : Window
         var text = prompt.Reason == SyncPromptReason.FirstBuild
             ? $"Library not synced yet ({prompt.Detail}). Sync now?"
             : $"Server library changed ({prompt.Detail}). Resync now?";
-        _tabs.ShowPrompt(text, new PromptChoice('Y', "Sync now", StartSync), new PromptChoice('L', "Later", _catalog.DeferSync));
+        _messages.ShowPrompt(text, new PromptChoice('Y', "Sync now", StartSync), new PromptChoice('L', "Later", _catalog.DeferSync));
     }
 
     /// <summary>F5 or a click on the status: ask whether to resync, or whether to cancel a running sync.</summary>
@@ -684,12 +697,12 @@ public sealed class MainWindow : Window
         }
         else if (status.State == SyncState.Syncing)
         {
-            _tabs.ShowPrompt(label + ". Cancel it?", new PromptChoice('Y', "Cancel sync", _catalog.CancelSync), new PromptChoice('N', "Keep going", () => { }));
+            _messages.ShowPrompt(label + ". Cancel it?", new PromptChoice('Y', "Cancel sync", _catalog.CancelSync), new PromptChoice('N', "Keep going", () => { }));
         }
         else
         {
             var text = status.State == SyncState.Synced ? $"Synced {HeaderBar.Age(status.SyncedAt, now)}" : label;
-            _tabs.ShowPrompt(text + ", resync now?", new PromptChoice('Y', "Resync", StartSync), new PromptChoice('N', "No", () => { }));
+            _messages.ShowPrompt(text + ", resync now?", new PromptChoice('Y', "Resync", StartSync), new PromptChoice('N', "No", () => { }));
         }
     }
 
@@ -702,7 +715,7 @@ public sealed class MainWindow : Window
             return;
         }
 
-        _tabs.ShowPrompt(
+        _messages.ShowPrompt(
             $"Replace the queue with {items.Count} random tracks of {what}? The music restarts (not gapless).",
             new PromptChoice('Y', "Replace", () => _player.PlayTracks(items, true)),
             new PromptChoice('N', "No", () => { }));
@@ -798,9 +811,9 @@ public sealed class MainWindow : Window
         if (_noticeUntil != DateTime.MinValue && now > _noticeUntil)
         {
             _noticeUntil = DateTime.MinValue;
-            if (_tabs.Choices.Count == 0)
+            if (_messages.Choices.Count == 0)
             {
-                _tabs.ClearMessage();
+                _messages.ClearMessage();
             }
         }
 
@@ -1031,7 +1044,7 @@ public sealed class MainWindow : Window
         }
 
         // Esc in the results clears the search and goes back to the tab the user came from.
-        if (key == Key.Esc && _tabs.Selected == 0 && _tabs.Choices.Count == 0)
+        if (key == Key.Esc && _tabs.Selected == 0 && _messages.Choices.Count == 0)
         {
             LeaveSearch();
             key.Handled = true;
@@ -1041,11 +1054,11 @@ public sealed class MainWindow : Window
         var ch = key.AsRune.Value is > 32 and < 0xFFFF ? (char)key.AsRune.Value : '\0';
 
         // A pending question (sync now?) takes its answer keys before anything else.
-        if (_tabs.Choices.Count > 0)
+        if (_messages.Choices.Count > 0)
         {
-            if ((key == Key.Enter && _tabs.Answer(_tabs.Choices[0].Key))
-                || (key == Key.Esc && _tabs.Answer(_tabs.Choices[^1].Key))
-                || (ch != '\0' && _tabs.Answer(ch)))
+            if ((key == Key.Enter && _messages.Answer(_messages.Choices[0].Key))
+                || (key == Key.Esc && _messages.Answer(_messages.Choices[^1].Key))
+                || (ch != '\0' && _messages.Answer(ch)))
             {
                 key.Handled = true;
                 return;
@@ -1525,6 +1538,12 @@ public sealed class MainWindow : Window
         SetNeedsDraw();
         _footer.WaveformStyle = settings.Ui.Waveform.Style;
         _footer.SpectrumStyle = settings.Ui.Visualizer.Style;
+        _footer.BeatPulse = settings.Ui.Visualizer.BeatPulse;
+        if (_info.Feed is { } feed)
+        {
+            feed.BeatPulse = settings.Ui.Visualizer.BeatPulse;
+        }
+
         _info.ShowVisualizer = settings.Ui.Visualizer.FullScreen;
         _info.GrayscaleOnPause = settings.Ui.Covers.FullScreenGrayOnPause;
         SyncVisualizer();

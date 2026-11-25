@@ -380,17 +380,35 @@ public abstract class PaintView : View
     }
 
     /// <summary>Draws a spectrum over two rows: <paramref name="bands"/> stretched over <paramref name="width"/> cells, in the given style.</summary>
-    protected void PutSpectrum(int x, int y, int width, SpectrumStyle style, float[] bands)
+    /// <summary>Draws the spectrum of a feed (as it is after its last update) in the given style, with its beat flash.</summary>
+    protected void PutSpectrum(int x, int y, int width, SpectrumStyle style, SpectrumFeed feed)
     {
-        var rows = SpectrumGlyphs.Render(style, bands, width);
-        PutSpectrumRow(x, y, rows.Top, rows.TopKind);
-        PutSpectrumRow(x, y + 1, rows.Bottom, rows.BottomKind);
+        if (style != SpectrumStyle.Chromagram)
+        {
+            PutSpectrum(x, y, SpectrumGlyphs.Render(style, feed.Levels, width), feed.Pulse);
+        }
+        else if (feed.HasChroma)
+        {
+            PutSpectrum(x, y, SpectrumGlyphs.Chroma(feed.Chroma, width), feed.Pulse);
+        }
+        else
+        {
+            // The notes come from the samples of the player; the spectrum computed from the file has no such thing.
+            Put(x, y, Clip("The chromagram needs the live feed from the player (see Live spectrum in the README)", width), Theme.Dim);
+        }
+    }
+
+    /// <param name="pulse">How strongly a beat is showing, 0 to 1: the bars rest dimmer and flash to the full accent colour. Null: steady colour.</param>
+    private void PutSpectrum(int x, int y, SpectrumFrame rows, float? pulse)
+    {
+        var bar = Theme.Mix(Theme.Accent, Theme.Bg, pulse is { } p ? 0.4 * (1 - Math.Clamp(p, 0f, 1f)) : 0.2);
+        PutSpectrumRow(x, y, rows.Top, rows.TopKind, bar);
+        PutSpectrumRow(x, y + 1, rows.Bottom, rows.BottomKind, bar);
     }
 
     /// <summary>Writes one row of a spectrum, a run of cells of the same kind at a time.</summary>
-    private void PutSpectrumRow(int x, int y, char[] chars, byte[] kinds)
+    private void PutSpectrumRow(int x, int y, char[] chars, byte[] kinds, Color bar)
     {
-        var bar = Theme.Mix(Theme.Accent, Theme.Bg, 0.2);
         var start = 0;
         for (var i = 1; i <= chars.Length; i++)
         {
@@ -505,6 +523,17 @@ public abstract class PaintView : View
             }
         }
     }
+
+    /// <summary>
+    /// True when the sixel of this cover was placed in these cells by the last frame and is not sent again (a view with
+    /// <see cref="StableSixels"/>). The cells right next to it must then not be rewritten either: the terminal erases the edge
+    /// column of an image when a neighbouring cell is written.
+    /// </summary>
+    protected bool SixelIsStill(CoverKey key, int x, int y, int cols, int rows, CoverPlace place) =>
+        StableSixels
+        && CoverArt.UsesSixel(place)
+        && CoverArt.Source.TryGet(key) is { } image
+        && _blanked.ContainsKey($"{x},{y},{cols},{rows}|{image.Label}|{CoverArt.Style(place)}");
 
     /// <summary>
     /// Shows <paramref name="image"/> as a sixel in the given cells. False (nothing drawn) when a sixel cannot be used: no

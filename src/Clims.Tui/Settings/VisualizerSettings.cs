@@ -14,6 +14,9 @@ public sealed record VisualizerSettings
     /// <summary>True: the full-screen album view also shows the waveform or spectrum, above the progress bars and under the lyrics.</summary>
     public bool FullScreen { get; init; }
 
+    /// <summary>True: the spectrum bars rest dimmer and flash on the beat of the music.</summary>
+    public bool BeatPulse { get; init; }
+
     /// <summary>The port vismux listens on.</summary>
     public int Port { get; init; } = 23483;
 }
