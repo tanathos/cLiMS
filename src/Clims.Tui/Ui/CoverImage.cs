@@ -135,8 +135,45 @@ public sealed class CoverImage : IDisposable
         return _gray = new CoverImage(bitmap, Label + "|gray");
     }
 
+    private readonly Dictionary<(Color Color, int Width), CoverImage> _framed = new();
+
+    /// <summary>
+    /// The same picture with a frame drawn over its edge, made on first use and kept with this one. It keeps the label: the
+    /// cells and the place of the picture are the same, only its pixels are sent again.
+    /// </summary>
+    /// <param name="color">Colour of the frame.</param>
+    /// <param name="share">Width of the frame as a share of the picture's width.</param>
+    public CoverImage Framed(Color color, double share)
+    {
+        var width = Math.Max(1, (int)Math.Round(_source.Width * share));
+        if (_framed.TryGetValue((color, width), out var framed))
+        {
+            return framed;
+        }
+
+        var bitmap = new SKBitmap(_source.Width, _source.Height);
+        using (var canvas = new SKCanvas(bitmap))
+        using (var paint = new SKPaint { Color = new SKColor((byte)color.R, (byte)color.G, (byte)color.B) })
+        using (var image = SKImage.FromBitmap(_source))
+        {
+            canvas.DrawImage(image, 0, 0, new SKSamplingOptions());
+            float w = _source.Width, h = _source.Height;
+            canvas.DrawRect(SKRect.Create(0, 0, w, width), paint);
+            canvas.DrawRect(SKRect.Create(0, h - width, w, width), paint);
+            canvas.DrawRect(SKRect.Create(0, 0, width, h), paint);
+            canvas.DrawRect(SKRect.Create(w - width, 0, width, h), paint);
+        }
+
+        return _framed[(color, width)] = new CoverImage(bitmap, Label);
+    }
+
     public void Dispose()
     {
+        foreach (var framed in _framed.Values)
+        {
+            framed.Dispose();
+        }
+
         _gray?.Dispose();
         _source.Dispose();
     }

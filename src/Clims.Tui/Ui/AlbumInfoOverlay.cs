@@ -169,7 +169,7 @@ public sealed class AlbumInfoOverlay : PaintView
         // One column of margin on the left, one row above and below.
         const int left = 1;
         var top = 1 + (Math.Max(2, H - 2) - rows) / 2;
-        var big = new CoverKey(album.ArtworkId, album.Id, Big: true);
+        var big = new CoverKey(album.ArtworkId, album.Id, CoverResolution.Big);
         var small = new CoverKey(album.ArtworkId, album.Id);
         // The large picture takes a moment to arrive: show the list-size one meanwhile.
         WantCover(big);

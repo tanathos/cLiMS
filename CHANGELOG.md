@@ -3,6 +3,14 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- **Mosaic of played albums:** `F7` on the Played tab (or Settings → History → *Albums view*, `History.AlbumsView`) shows the albums of the last week and month as covers only, the most listened first, larger for two listens and larger again for three or more. With Sixel covers the two larger sizes are fetched at 600 px, cached under their own rules (`Cache.Covers.Medium`).
+
+### Changed
+
+- **Footer key legend:** keys and descriptions are drawn in two shades, `F5` and `F6` are left out (both stay in the `?` help), and `?` comes last, with the label *help*.
+
 ## [0.9.5] - 2026-11-24
 
 ### Added

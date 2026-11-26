@@ -1195,6 +1195,12 @@ public sealed class MainWindow : Window
                     _played.ResetCovers();
                     _played.SetNeedsDraw();
                 }
+                else if (key == Key.F7 && _played.Visible)
+                {
+                    // Albums of the Played tab: grid or mosaic. For this session only.
+                    CoverArt.PlayedLayout = CoverArt.PlayedLayout == PlayedLayout.Grid ? PlayedLayout.Mosaic : PlayedLayout.Grid;
+                    _played.LayoutChanged();
+                }
                 else if (key == Key.F7)
                 {
                     // Album layout of the Library and Recently added tabs: list or grid. For this session only.
@@ -1533,6 +1539,7 @@ public sealed class MainWindow : Window
     {
         CoverArt.Apply(settings.Ui.Covers);
         CoverArt.ApplyLayout(settings.Ui);
+        CoverArt.PlayedLayout = settings.History.AlbumsView;
         Theme.Apply(settings.Ui.Theme);
         SetScheme(Theme.Dark);
         SetNeedsDraw();
@@ -1551,6 +1558,7 @@ public sealed class MainWindow : Window
         _library.Albums.LayoutChanged();
         _recent.Albums.LayoutChanged();
         _random.Albums.LayoutChanged();
+        _played.LayoutChanged();
         RefreshPlayed();
         // The cover (and a sixel waveform) are the same images in new cells: take them off the screen so they are sent again.
         SixelCovers.Release(_footer);

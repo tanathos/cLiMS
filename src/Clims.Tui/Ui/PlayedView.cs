@@ -1,5 +1,6 @@
 using System.Globalization;
 using Clims.Catalog;
+using Clims.Tui.Settings;
 using Terminal.Gui.Drivers;
 using Terminal.Gui.Input;
 
@@ -10,8 +11,9 @@ namespace Clims.Tui.Ui;
 /// the tracks of the last few days (a setting), and the albums listened to (half of them or more) in the last 7 and the last 30 days.
 /// The albums are a grid of covers (as in the Library's grid layout) with title, artist and how often the album was listened to; no tracklists.
 /// Enter or a double click opens the album in the Library, a right click offers Play / Enqueue. Tab switches the list too (the arrows move over the covers).
+/// The albums can also be shown as a mosaic (see PlayedView.Mosaic.cs).
 /// </summary>
-public sealed class PlayedView : PaintView
+public sealed partial class PlayedView : PaintView
 {
     private const int HeadRows = 2;
 
@@ -44,6 +46,9 @@ public sealed class PlayedView : PaintView
     private IReadOnlyList<PlayRecord> _tracks = Array.Empty<PlayRecord>();
     private IReadOnlyList<AlbumListen> _week = Array.Empty<AlbumListen>();
     private IReadOnlyList<AlbumListen> _month = Array.Empty<AlbumListen>();
+    private IReadOnlyList<AlbumListen> _weekByListens = Array.Empty<AlbumListen>();
+    private IReadOnlyList<AlbumListen> _monthByListens = Array.Empty<AlbumListen>();
+    private PlayedLayout _shownLayout = CoverArt.PlayedLayout;
     private DateTimeOffset _now = DateTimeOffset.Now;
     private int _trackDays = 3;
     private int _percent = 50;
@@ -90,7 +95,17 @@ public sealed class PlayedView : PaintView
     /// <summary>Rows of one line of the list: a track, or a cover with its text and a blank row.</summary>
     private int ItemHeight => OnList ? 1 : CoverRows + TextRows + 1;
 
-    private int TotalRows => (Count + Cols - 1) / Cols * ItemHeight;
+    private int TotalRows => OnMosaic ? Mosaic().Height : (Count + Cols - 1) / Cols * ItemHeight;
+
+    /// <summary>The albums of the list on show in the order shown: the latest first in the grid, the most listened first in the mosaic.</summary>
+    private IReadOnlyList<AlbumListen> Albums => AlbumsIn(CoverArt.PlayedLayout);
+
+    private IReadOnlyList<AlbumListen> AlbumsIn(PlayedLayout layout) => _section == Section.Week
+        ? layout == PlayedLayout.Mosaic ? _weekByListens : _week
+        : layout == PlayedLayout.Mosaic ? _monthByListens : _month;
+
+    /// <summary>The list as it was ordered before the layout changed.</summary>
+    private IReadOnlyList<AlbumListen> ShownBefore() => AlbumsIn(_shownLayout);
 
     private int Count => _section switch
     {
@@ -132,6 +147,9 @@ public sealed class PlayedView : PaintView
         _tracks = PlayHistory.Tracks(plays, now.AddDays(-_trackDays));
         _week = PlayHistory.Albums(plays, now.AddDays(-7), listenPercent);
         _month = PlayHistory.Albums(plays, now.AddDays(-30), listenPercent);
+        _weekByListens = ByListens(_week);
+        _monthByListens = ByListens(_month);
+        _shownLayout = CoverArt.PlayedLayout;
         _playGenres = catalog is null ? new() : plays.Select(p => (p, GenresOfPlay(catalog, p))).ToList();
         var lookup = _playGenres.ToDictionary(x => x.Play, x => x.Genres, ReferenceEqualityComparer.Instance as IEqualityComparer<PlayRecord>);
         _genres = catalog is null ? Array.Empty<GenrePlays>() : PlayHistory.Genres(plays, DateTimeOffset.MinValue, play => lookup[play]);
@@ -141,6 +159,9 @@ public sealed class PlayedView : PaintView
         _selected = Math.Clamp(_selected, 0, Math.Max(0, Count - 1));
         SetNeedsDraw();
     }
+
+    /// <summary>The most listened first; among equals the order given (the latest first) is kept.</summary>
+    private static IReadOnlyList<AlbumListen> ByListens(IReadOnlyList<AlbumListen> albums) => albums.OrderByDescending(a => a.InWindow).ToList();
 
     private IReadOnlyList<string> GenresOfPlay(MusicCatalog catalog, PlayRecord play)
     {
@@ -223,7 +244,7 @@ public sealed class PlayedView : PaintView
         }
 
         var cols = Cols;
-        for (var row = _offset / ItemHeight; row * cols < Count; row++)
+        for (var row = _offset / ItemHeight; !OnMosaic && row * cols < Count; row++)
         {
             var top = HeadRows + row * ItemHeight - _offset;
             if (top >= HeadRows + ListRows)
@@ -244,9 +265,14 @@ public sealed class PlayedView : PaintView
                 }
                 else
                 {
-                    PaintAlbum((_section == Section.Week ? _week : _month)[i], i, top, c);
+                    PaintAlbum(Albums[i], i, top, c);
                 }
             }
+        }
+
+        if (OnMosaic)
+        {
+            PaintMosaic();
         }
 
         // The heading stays where it is: drawn last, over whatever scrolled up under it.
@@ -306,7 +332,8 @@ public sealed class PlayedView : PaintView
     private int DetailRows => Math.Max(1, H - DetailTop - 1);
 
     /// <summary>Rows of the main list: all of them, or the top half while the plays of a genre are shown.</summary>
-    private int ListRows => _section == Section.Genres && _detail.Count > 0 && H > HeadRows + 8 ? Math.Max(3, (H - HeadRows) / 2) : H - HeadRows;
+    private int ListRows => _section == Section.Genres && _detail.Count > 0 && H > HeadRows + 8 ? Math.Max(3, (H - HeadRows) / 2)
+        : OnMosaic ? Math.Max(1, H - HeadRows - 1) : H - HeadRows;
 
     private void OpenDetail()
     {
@@ -440,8 +467,7 @@ public sealed class PlayedView : PaintView
         var selected = index == _selected;
         var attr = selected ? (HasFocus ? Theme.Selected : Theme.SelectedDim) : Theme.Normal;
         var room = Math.Max(1, slotW - 2);
-        var count = listen.Total > listen.InWindow ? $"{listen.InWindow}× ({listen.Total} in total)" : $"{listen.InWindow}×";
-        var lines = new[] { Clip(listen.Album, room), Clip(listen.Artist, room), Clip($"{count} · {Ago(listen.LastListen, _now)}", room) };
+        var lines = new[] { Clip(listen.Album, room), Clip(listen.Artist, room), Clip($"{Listens(listen)} · {Ago(listen.LastListen, _now)}", room) };
 
         // Every cell of the text rows is written (a cover that was here a moment ago must not show through) and claimed.
         for (var r = 0; r < TextRows; r++)
@@ -462,6 +488,10 @@ public sealed class PlayedView : PaintView
             Put(slotX + (slotW - lines[r].Length) / 2, y, lines[r], style);
         }
     }
+
+    private static string Listens(AlbumListen listen) =>
+        listen.Total > listen.InWindow ? $"{listen.InWindow}× ({listen.Total} in total)" : $"{listen.InWindow}×";
+
     /// <summary>"Today 14:32", "Yesterday 21:05", else "Mon 10 Nov 18:40" (local times).</summary>
     public static string When(DateTimeOffset at, DateTimeOffset now)
     {
@@ -502,6 +532,12 @@ public sealed class PlayedView : PaintView
     {
         if (Count == 0)
         {
+            return;
+        }
+
+        if (OnMosaic)
+        {
+            SelectTile(_selected + delta);
             return;
         }
 
@@ -574,7 +610,7 @@ public sealed class PlayedView : PaintView
             return (album, tracks, at);
         }
 
-        var listen = (_section == Section.Week ? _week : _month)[_selected];
+        var listen = Albums[_selected];
         return Resolve(listen.AlbumId, listen.Artist, listen.Album) is { } a ? (a, catalog.TracksOf(a.Id), -1) : null;
     }
 
@@ -662,6 +698,11 @@ public sealed class PlayedView : PaintView
             return true;
         }
 
+        if (OnMosaic && MosaicKey(key))
+        {
+            return true;
+        }
+
         var cols = Cols;
         var page =Math.Max(1, ListRows / ItemHeight) * cols;
         switch (key.KeyCode)
@@ -728,7 +769,7 @@ public sealed class PlayedView : PaintView
 
         if (mouse.Flags.HasFlag(MouseFlags.WheeledDown) || mouse.Flags.HasFlag(MouseFlags.WheeledUp))
         {
-            var step = mouse.Flags.HasFlag(MouseFlags.WheeledDown) ? 3 : -3;
+            var step = (mouse.Flags.HasFlag(MouseFlags.WheeledDown) ? 1 : -1) * (OnMosaic ? WheelRows : 3);
             if (DetailOpen && mouse.Position is { } wheel && wheel.Y > DetailTop)
             {
                 _detailOffset = Math.Clamp(_detailOffset + step, 0, Math.Max(0, _detail.Count - DetailRows));
@@ -828,8 +869,8 @@ public sealed class PlayedView : PaintView
 
             if (p.Y >= HeadRows && p.X < W - 1)
             {
-                var index = (p.Y - HeadRows + _offset) / ItemHeight * Cols + Math.Min(Cols - 1, p.X / SlotW);
-                if (index < Count)
+                var index = OnMosaic ? TileAt(p.X, p.Y) : (p.Y - HeadRows + _offset) / ItemHeight * Cols + Math.Min(Cols - 1, p.X / SlotW);
+                if (index >= 0 && index < Count)
                 {
                     _selected = index;
                     SetNeedsDraw();

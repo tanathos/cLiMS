@@ -22,6 +22,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Clims.Waveform.Tests" />
     <InternalsVisibleTo Include="Clims.Visualizer" />
+    <InternalsVisibleTo Include="Clims.ChordProbe" />
   </ItemGroup>
 
 </Project>

@@ -55,6 +55,9 @@ public static class CoverArt
     /// <summary>The background of the grid layout's tracklist panel.</summary>
     public static GridBackdrop Backdrop { get; set; } = GridBackdrop.Pixellated;
 
+    /// <summary>How the Played tab shows its albums (F7 changes it for the session).</summary>
+    public static PlayedLayout PlayedLayout { get; set; } = PlayedLayout.Grid;
+
     /// <summary>Takes the album layout and the panel background from the settings.</summary>
     public static void ApplyLayout(UiSettings ui)
     {

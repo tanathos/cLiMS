@@ -37,6 +37,30 @@ public class CoverImageTests
     }
 
     [Fact]
+    public void Framed_colours_the_edge_only_and_keeps_the_label()
+    {
+        var pixels = new Color[10, 10];
+        for (var x = 0; x < 10; x++)
+        {
+            for (var y = 0; y < 10; y++)
+            {
+                pixels[x, y] = Theme.Rgb(0, 0, 0);
+            }
+        }
+
+        using var image = CoverImage.FromPixels(pixels, "cover");
+
+        var framed = image.Framed(Theme.Rgb(255, 0, 0), 0.2);
+
+        Assert.Equal(255, framed.Pixel(10, 10, 0, 0).R);
+        Assert.Equal(255, framed.Pixel(10, 10, 9, 5).R);
+        Assert.Equal(0, framed.Pixel(10, 10, 5, 5).R);
+        Assert.Equal(0, image.Pixel(10, 10, 0, 0).R);
+        Assert.Equal(image.Label, framed.Label);
+        Assert.Same(framed, image.Framed(Theme.Rgb(255, 0, 0), 0.2));
+    }
+
+    [Fact]
     public void Grayscale_is_made_once_and_has_its_own_label()
     {
         using var image = Colourful();

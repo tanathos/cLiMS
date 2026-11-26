@@ -12,6 +12,9 @@ public sealed record CoverCacheSettings
     /// <summary>Covers in lists and the player (300 px).</summary>
     public CoverCacheTier Normal { get; init; } = new(30);
 
+    /// <summary>The large covers of the Played mosaic (600 px).</summary>
+    public CoverCacheTier Medium { get; init; } = new(30, 200);
+
     /// <summary>The full-screen cover (900 px, about 144 KB each), so by default only the last 50 are kept.</summary>
     public CoverCacheTier Big { get; init; } = new(30, 50);
 }

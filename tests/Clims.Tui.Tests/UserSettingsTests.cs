@@ -15,6 +15,8 @@ public class UserSettingsTests
 
         Assert.True(covers.Enabled);
         Assert.Equal(30, covers.Normal.TtlDays);
+        Assert.Equal(30, covers.Medium.TtlDays);
+        Assert.Equal(200, covers.Medium.MaxEntries);
         Assert.Equal(30, covers.Big.TtlDays);
         Assert.Equal(50, covers.Big.MaxEntries);
     }

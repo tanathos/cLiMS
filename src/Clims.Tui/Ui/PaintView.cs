@@ -54,6 +54,9 @@ public abstract class PaintView : View
     /// <summary>Rows at the top that scrolling content must not draw into (a pinned heading): covers stay below them.</summary>
     protected virtual int ClipTop => 0;
 
+    /// <summary>Rows at the bottom that covers must stay out of (a pinned status line).</summary>
+    protected virtual int ClipBottom => 0;
+
     /// <summary>Cells holding a sixel that has not moved (a view that is not <see cref="StableSixels"/>): the per-frame clear skips them.</summary>
     protected virtual System.Drawing.Rectangle? StillCells => null;
 
@@ -503,7 +506,7 @@ public abstract class PaintView : View
         for (var r = 0; r < rows; r++)
         {
             var cy = y + r;
-            if (cy < ClipTop || cy >= H)
+            if (cy < ClipTop || cy >= H - ClipBottom)
             {
                 continue;
             }
@@ -541,7 +544,7 @@ public abstract class PaintView : View
     /// </summary>
     protected bool DrawSixel(CoverImage image, int x, int y, int cols, int rows, CoverMode style = CoverMode.Sixel)
     {
-        var inside = x >= 0 && y >= ClipTop && x + cols <= W && y + rows <= H;
+        var inside = x >= 0 && y >= ClipTop && x + cols <= W && y + rows <= H - ClipBottom;
         if (!inside || !SixelCovers.Available || (Dimmed && Dimmable) || (Dimmable && InHole(ViewportToScreen(new System.Drawing.Point(x, y)), cols, rows)))
         {
             return false;

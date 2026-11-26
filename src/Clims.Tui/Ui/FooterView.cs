@@ -84,14 +84,12 @@ public sealed class FooterView : PaintView
         _buttons.Clear();
         _wave = (0, 0);
         _still = null;
-        const string fullHint = "Space play/pause  ←/→ ±10 s  Alt+n/p track  +/- volume  / search  1-8 tabs  ? help  F5 sync  F6 library view  Ctrl+Q quit";
-        const string shortHint = "Space  ←/→  Alt+n/p  +/-  /  1-8  ?  F5  F6  Ctrl+Q";
         if (_player.Current is not { } now)
         {
             _seek = _totalBox = (0, 0);
             Put(1, 0, Clip(_player.Problem ?? "Nothing playing", W - 2), _player.Problem is null ? Theme.Dim : new Attribute(Theme.Warn, Theme.Bg));
             PaintControls(1);
-            PaintHint(1, fullHint, shortHint);
+            PaintHint(1);
             return;
         }
 
@@ -139,14 +137,34 @@ public sealed class FooterView : PaintView
         }
 
         PaintControls(x0);
-        PaintHint(x0, fullHint, shortHint);
+        PaintHint(x0);
     }
 
-    /// <summary>The key legend on the last row; the descriptions are dropped when the full text does not fit.</summary>
-    private void PaintHint(int x0, string full, string compact)
+    /// <summary>The key legend of the last row, in the order shown.</summary>
+    private static readonly (string Key, string Label)[] Hints =
+    [
+        ("Space", "play/pause"), ("←/→", "±10 s"), ("Alt+n/p", "track"), ("+/-", "volume"),
+        ("/", "search"), ("1-8", "tabs"), ("Ctrl+Q", "quit"), ("?", "help"),
+    ];
+
+    /// <summary>The keys on the last row, with what each does, or the keys alone where there is no room for that.</summary>
+    private void PaintHint(int x0)
     {
-        var room = PaintVersion(x0) - x0;
-        Put(x0, 5, Clip(full.Length <= room ? full : compact, room), Theme.Dim);
+        var end = PaintVersion(x0);
+        var full = Hints.Sum(h => h.Key.Length + 1 + h.Label.Length) + 2 * (Hints.Length - 1) <= end - x0;
+        var key = new Attribute(Theme.Mix(Theme.Fg, Theme.Bg, 0.25), Theme.Bg);
+        var label = new Attribute(Theme.Mix(Theme.Fg, Theme.Bg, 0.5), Theme.Bg);
+        var x = x0;
+        foreach (var (name, does) in Hints)
+        {
+            x = Put(x, 5, Clip(name, end - x), key);
+            if (full)
+            {
+                x = Put(x, 5, " " + does, label);
+            }
+
+            x += 2;
+        }
     }
 
     /// <summary>The user clicked the cover: show the playing album full screen.</summary>

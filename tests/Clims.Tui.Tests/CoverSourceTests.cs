@@ -193,12 +193,36 @@ public class CoverSourceTests
         {
             var handler = new Handler((_, _) => Task.FromResult(Ok()));
             using var source = new LmsCoverSource(new HttpClient(handler), Base, cache: () => store, clock: () => T0);
-            var big = new CoverKey("a1", 0, Big: true);
+            var big = new CoverKey("a1", 0, CoverResolution.Big);
             source.Want(new object(), new[] { big });
             await Eventually(() => source.TryGet(big) is not null);
 
             Assert.Equal(1, store.Count(900));
             Assert.Equal(0, store.Count(300));
+        }
+        finally
+        {
+            Cleanup(folder);
+        }
+    }
+
+    [Fact]
+    public async Task The_medium_cover_is_asked_for_at_600_pixels_and_cached_under_that_size()
+    {
+        var (folder, store) = TempCache();
+        try
+        {
+            Uri? seen = null;
+            var client = new HttpClient(new CapturingHandler(new Handler((_, _) => Task.FromResult(Ok())), u => seen = u));
+            using var source = new LmsCoverSource(client, Base, cache: () => store, clock: () => T0);
+            var medium = new CoverKey("a1", 0, CoverResolution.Medium);
+            source.Want(new object(), new[] { medium });
+            await Eventually(() => source.TryGet(medium) is not null);
+
+            Assert.Equal("http://lms.test:9000/music/a1/cover_600x600_o.jpg", seen!.ToString());
+            Assert.Equal(1, store.Count(600));
+            Assert.Equal(0, store.Count(300));
+            Assert.Null(source.TryGet(Key("a1")));
         }
         finally
         {
@@ -215,7 +239,7 @@ public class CoverSourceTests
             var noBig = new Clims.Tui.CoverCacheSettings { Big = new Clims.Tui.CoverCacheTier(0) };
             using (var source = new LmsCoverSource(new HttpClient(new Handler((_, _) => Task.FromResult(Ok()))), Base, cache: () => store, cacheSettings: noBig))
             {
-                var big = new CoverKey("a1", 0, Big: true);
+                var big = new CoverKey("a1", 0, CoverResolution.Big);
                 source.Want(new object(), new[] { big, Key("a1") });
                 await Eventually(() => source.TryGet(big) is not null && source.TryGet(Key("a1")) is not null);
             }

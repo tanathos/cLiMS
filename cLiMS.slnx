@@ -13,6 +13,7 @@
     <Project Path="src/Clims.Waveform/Clims.Waveform.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/Clims.ChordProbe/Clims.ChordProbe.csproj" />
     <Project Path="tools/Clims.VismuxProbe/Clims.VismuxProbe.csproj" />
   </Folder>
   <Folder Name="/tests/">

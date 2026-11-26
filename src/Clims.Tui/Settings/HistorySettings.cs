@@ -8,4 +8,7 @@ public sealed record HistorySettings
 
     /// <summary>How much of an album (50, 75 or 100 percent of its tracks) must be played for it to count as listened to.</summary>
     public int ListenPercent { get; init; } = 50;
+
+    /// <summary>How the albums of the week and month are shown: <see cref="PlayedLayout.Grid"/> or <see cref="PlayedLayout.Mosaic"/>.</summary>
+    public PlayedLayout AlbumsView { get; init; } = PlayedLayout.Grid;
 }

@@ -14,8 +14,12 @@ namespace Clims.Tui.Ui;
 /// </summary>
 public sealed class LmsCoverSource : ICoverSource, IDisposable
 {
-    private const int RequestSize = 300;
-    private const int BigRequestSize = 900;
+    /// <summary>Pixels of a <see cref="CoverResolution.Normal"/> cover.</summary>
+    public const int NormalSize = 300;
+
+    private const int MediumSize = 600;
+    private const int BigSize = 900;
+    private const string MediumSuffix = "|medium";
     private const string BigSuffix = "|big";
     private static readonly TimeSpan FailureBackoff = TimeSpan.FromSeconds(30);
 
@@ -79,7 +83,7 @@ public sealed class LmsCoverSource : ICoverSource, IDisposable
             return null;
         }
 
-        id = Id(key.ArtworkId, key.Big);
+        id = Id(key.ArtworkId, key.Resolution);
 
         lock (_gate)
         {
@@ -97,7 +101,7 @@ public sealed class LmsCoverSource : ICoverSource, IDisposable
     /// <inheritdoc />
     public void Want(object owner, IReadOnlyCollection<CoverKey> keys)
     {
-        var ids = keys.Where(k => k.ArtworkId is not null).Select(k => Id(k.ArtworkId!, k.Big)).ToHashSet();
+        var ids = keys.Where(k => k.ArtworkId is not null).Select(k => Id(k.ArtworkId!, k.Resolution)).ToHashSet();
         List<string> start;
         lock (_gate)
         {
@@ -138,7 +142,18 @@ public sealed class LmsCoverSource : ICoverSource, IDisposable
         }
     }
 
-    private static string Id(string artworkId, bool big) => big ? artworkId + BigSuffix : artworkId;
+    private static string Id(string artworkId, CoverResolution resolution) => resolution switch
+    {
+        CoverResolution.Medium => artworkId + MediumSuffix,
+        CoverResolution.Big => artworkId + BigSuffix,
+        _ => artworkId,
+    };
+
+    /// <summary>What an id made by <see cref="Id"/> asks for: the server's artwork id, the pixels and the cache rules.</summary>
+    private (string ArtworkId, int Size, CoverCacheTier Tier) Parse(string id) =>
+        id.EndsWith(BigSuffix, StringComparison.Ordinal) ? (id[..^BigSuffix.Length], BigSize, _cacheSettings.Big)
+        : id.EndsWith(MediumSuffix, StringComparison.Ordinal) ? (id[..^MediumSuffix.Length], MediumSize, _cacheSettings.Medium)
+        : (id, NormalSize, _cacheSettings.Normal);
 
     private async Task FetchAsync(string id)
     {
@@ -164,11 +179,8 @@ public sealed class LmsCoverSource : ICoverSource, IDisposable
                 }
             }
 
-            var big = id.EndsWith(BigSuffix, StringComparison.Ordinal);
-            var plain = big ? id[..^BigSuffix.Length] : id;
-            var size = big ? BigRequestSize : RequestSize;
+            var (plain, size, tier) = Parse(id);
             // Disk first (off the UI thread), then the server; only an image that decodes is stored.
-            var tier = big ? _cacheSettings.Big : _cacheSettings.Normal;
             // A stream's artwork (an address on the server, not a library cover id) changes with the song: not kept on disk.
             var remote = plain.StartsWith('/');
             var store = _cacheSettings.Enabled && tier.Active && !remote ? _disk?.Invoke() : null;

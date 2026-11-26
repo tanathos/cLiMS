@@ -29,6 +29,7 @@ public sealed class HelpOverlay : PaintView
         ("A  N", "The same for the whole album (Library and Recently added tabs)"),
         ("F6", "Library view: Album Artist / Genre / Year"),
         ("F7", "Library and Recently added: list or grid of covers. Grid: a click on a cover or Enter opens its tracklist under the row (Esc or another click closes it)"),
+        ("F7", "Played albums: grid or mosaic (covers only, more listens make a larger cover; the bottom line names the album)"),
         ("Album view (click the player's cover)", ""),
         ("Up  Down  PgUp  PgDn", "Scroll the lyrics (the mouse wheel too); synced lyrics follow the music again after 8 s"),
         ("[  ]", "Shift the timing of synced lyrics by -0.5 s / +0.5 s"),
