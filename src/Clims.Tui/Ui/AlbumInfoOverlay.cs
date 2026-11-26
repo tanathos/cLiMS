@@ -178,14 +178,10 @@ public sealed class AlbumInfoOverlay : PaintView
 
         var x = left + cols + 5;
         var width = W - x - 3;
-        var hint = "Esc close";
-        if (_lyrics is { Instrumental: false })
-        {
-            hint += "  ·  ↑↓ scroll";
-        }
+        (string Key, string Label)[] keys = _lyrics is { Instrumental: false } ? [("Esc", "close"), ("↑↓", "scroll")] : [("Esc", "close")];
 
         Put(W - 2, 0, "X", Over(W - 2, W - 1, 0) ? Theme.Hover : new Attribute(Theme.Fg, Theme.Bg, TextStyle.Bold));
-        Put(x, H - 2, Clip(hint, W - x), dim); // one empty line below it, so it does not touch the border
+        PutLegend(x, H - 2, Math.Max(0, W - x), keys, Theme.Bg, "  ·  "); // one empty line below it, so it does not touch the border
         if (width < 8)
         {
             return;

@@ -661,6 +661,34 @@ public abstract class PaintView : View
         AddStr(new string(' ', x1 - x0));
     }
 
+    /// <summary>
+    /// A key legend: "key label" parts with a separator between them, in the colours every legend shares, cut off after
+    /// <paramref name="width"/> cells. A part may lack its key (a remark). Returns the column after it.
+    /// </summary>
+    protected int PutLegend(int x, int y, int width, IReadOnlyList<(string Key, string Label)> items, Color back, string separator = " · ")
+    {
+        var end = x + width;
+        var key = Theme.LegendKey(back);
+        var label = Theme.LegendLabel(back);
+        for (var i = 0; i < items.Count; i++)
+        {
+            var (name, does) = items[i];
+            if (i > 0)
+            {
+                x = Put(x, y, Clip(separator, end - x), label);
+            }
+
+            x = Put(x, y, Clip(name, end - x), key);
+            x = Put(x, y, Clip(name.Length > 0 ? " " + does : does, end - x), label);
+        }
+
+        return x;
+    }
+
+    /// <summary>Cells <see cref="PutLegend"/> takes for the parts when nothing is cut off.</summary>
+    protected static int LegendWidth(IReadOnlyList<(string Key, string Label)> items, string separator = " · ") =>
+        items.Sum(i => i.Key.Length + (i.Key.Length > 0 ? 1 : 0) + i.Label.Length) + separator.Length * Math.Max(0, items.Count - 1);
+
     protected static string Clip(string s, int width) =>
         width <= 0 ? "" : s.Length <= width ? s : width == 1 ? "…" : DropSplitSurrogates(s[..(width - 1)]) + "…";
 

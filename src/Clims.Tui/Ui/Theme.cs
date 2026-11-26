@@ -70,6 +70,12 @@ public static class Theme
 
     public static Attribute Heading => new(Accent, Bg);
 
+    /// <summary>A key of a key legend, on the background it is drawn on. Every legend uses this and <see cref="LegendLabel"/>.</summary>
+    public static Attribute LegendKey(Color back) => new(Accent, back);
+
+    /// <summary>What a key of a key legend does: dimmer than the key.</summary>
+    public static Attribute LegendLabel(Color back) => new(Mix(Fg, back, 0.5), back);
+
     public static Attribute Selected => new(Fg, BgSelected);
 
     public static Attribute SelectedDim => new(Fg, BgSelectedDim);

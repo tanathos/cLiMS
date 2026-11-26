@@ -24,7 +24,7 @@ public sealed class HelpOverlay : PaintView
         ("?  Ctrl+Q", "This help / Quit"),
         ("Library and search results", ""),
         ("Enter  double click", "Play (replaces the queue, restarts the stream), open an artist or genre; a single click only selects"),
-        ("Right click", "Menu on a cover or track: Play, Enqueue; on a cover also Info (artist and album details, biography from Wikipedia; in it r refreshes, Tab+Enter or a click opens a link; Esc closes)"),
+        ("Right click", "Menu on a cover or track: Play, Enqueue, Play similar and Enqueue similar (25, 50 or 100 random tracks of the same genres and near years; Play replaces the queue); on a cover also Info (artist and album details, biography from Wikipedia; in it r refreshes, Tab+Enter or a click opens a link; Esc closes)"),
         ("a  n", "Add the highlighted track to the end of the queue / play it next (gapless)"),
         ("A  N", "The same for the whole album (Library and Recently added tabs)"),
         ("F6", "Library view: Album Artist / Genre / Year"),
@@ -78,12 +78,14 @@ public sealed class HelpOverlay : PaintView
 
     protected override void Paint()
     {
-        var attr = new Attribute(Theme.Fg, Theme.BgAlt);
-        var head = new Attribute(Theme.Accent, Theme.BgAlt);
+        var attr = Theme.LegendLabel(Theme.BgAlt);
+        var head = new Attribute(Theme.Accent, Theme.BgAlt, Terminal.Gui.Drawing.TextStyle.Bold);
         var dim = new Attribute(Theme.FgDim, Theme.BgAlt);
         var scrolls = RowCount > Room;
         _offset = Math.Clamp(_offset, 0, Math.Max(0, RowCount - Room));
-        Put(2, 1, "cLiMS keys   (press ? or Esc to close)" + (scrolls ? "   ↑ ↓ PgUp PgDn scroll" : ""), head);
+        var title = Put(2, 1, "cLiMS keys   ", head);
+        PutLegend(title, 1, Math.Max(0, W - title - 2),
+            scrolls ? [("? or Esc", "close"), ("↑ ↓ PgUp PgDn", "scroll")] : [("? or Esc", "close")], Theme.BgAlt);
 
         var row = 0;
         void Emit(Action<int> draw)
@@ -112,7 +114,7 @@ public sealed class HelpOverlay : PaintView
 
             Emit(y =>
             {
-                Put(4, y, keys, new Attribute(Theme.Warn, Theme.BgAlt));
+                Put(4, y, keys, Theme.LegendKey(Theme.BgAlt));
                 Put(26, y, Clip(what, W - 28), attr);
             });
         }

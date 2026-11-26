@@ -152,8 +152,8 @@ public sealed class FooterView : PaintView
     {
         var end = PaintVersion(x0);
         var full = Hints.Sum(h => h.Key.Length + 1 + h.Label.Length) + 2 * (Hints.Length - 1) <= end - x0;
-        var key = new Attribute(Theme.Mix(Theme.Fg, Theme.Bg, 0.25), Theme.Bg);
-        var label = new Attribute(Theme.Mix(Theme.Fg, Theme.Bg, 0.5), Theme.Bg);
+        var key = Theme.LegendKey(Theme.Bg);
+        var label = Theme.LegendLabel(Theme.Bg);
         var x = x0;
         foreach (var (name, does) in Hints)
         {

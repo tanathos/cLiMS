@@ -264,8 +264,23 @@ public sealed class InfoDialog : PaintView
             });
         }
 
-        var hint = _note ?? (_lines.Count > _textRows ? "Esc close  ·  ↑↓ scroll  ·  Tab/click links  ·  r refresh" : "Esc close  ·  Tab/click links  ·  r refresh");
-        Put(W - 2 - hint.Length - 1, H - 1, " " + hint + " ", new Attribute(Theme.FgDim, Theme.BgAlt));
+        PaintHint();
+    }
+
+    /// <summary>The note of the moment, else the keys, at the right end of the bottom border.</summary>
+    private void PaintHint()
+    {
+        const string separator = "  ·  ";
+        (string Key, string Label)[] keys = _lines.Count > _textRows
+            ? [("Esc", "close"), ("↑↓", "scroll"), ("Tab/click", "links"), ("r", "refresh")]
+            : [("Esc", "close"), ("Tab/click", "links"), ("r", "refresh")];
+        var width = _note?.Length ?? LegendWidth(keys, separator);
+        var blank = Theme.LegendLabel(Theme.BgAlt);
+        var x = Put(W - 2 - width - 1, H - 1, " ", blank);
+        x = _note is { } note
+            ? Put(x, H - 1, note, new Attribute(Theme.FgDim, Theme.BgAlt))
+            : PutLegend(x, H - 1, width, keys, Theme.BgAlt, separator);
+        Put(x, H - 1, " ", blank);
     }
 
     /// <summary>

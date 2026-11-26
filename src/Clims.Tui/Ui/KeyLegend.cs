@@ -15,20 +15,5 @@ public sealed class KeyLegend : PaintView
         }
     }
 
-    protected override void Paint()
-    {
-        var x = 1;
-        var key = new Attribute(Theme.Accent, Theme.Bg);
-        var label = new Attribute(Theme.FgDim, Theme.Bg);
-        for (var i = 0; i < _items.Count; i++)
-        {
-            if (i > 0)
-            {
-                x = Put(x, 0, " · ", label);
-            }
-
-            x = Put(x, 0, _items[i].Key + " ", key);
-            x = Put(x, 0, _items[i].Label, label);
-        }
-    }
+    protected override void Paint() => PutLegend(1, 0, Math.Max(0, W - 1), _items, Theme.Bg);
 }

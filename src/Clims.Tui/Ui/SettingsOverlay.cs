@@ -140,7 +140,8 @@ public sealed class SettingsOverlay : PaintView
         var dim = new Attribute(Theme.FgDim, Theme.Bg);
         var text = Theme.Normal;
         Put(2, 1, "cLiMS settings", head);
-        Put(18, 1, Clip("Esc close · Tab next tab · ↑↓ select · ←→ change · Enter change or edit · changes are saved at once", W - 20), dim);
+        PutLegend(18, 1, Math.Max(0, W - 20),
+            [("Esc", "close"), ("Tab", "next tab"), ("↑↓", "select"), ("←→", "change"), ("Enter", "change or edit"), ("", "changes are saved at once")], Theme.Bg);
 
         var items = _model.Items;
         _offset = Math.Clamp(_offset, 0, Math.Max(0, items.Count - Room));
@@ -208,7 +209,7 @@ public sealed class SettingsOverlay : PaintView
         }
         else
         {
-            Put(2, H - 2, Clip(KeyHint(), W - 4), dim);
+            PutLegend(2, H - 2, Math.Max(0, W - 4), KeyHint(), Theme.Bg);
         }
 
         if (_model.RestartNeeded)
@@ -240,14 +241,14 @@ public sealed class SettingsOverlay : PaintView
         _ => new Attribute(Theme.Warn, Theme.Bg),
     };
 
-    private string KeyHint() => _model.Current?.Kind switch
+    private (string Key, string Label)[] KeyHint() => _model.Current?.Kind switch
     {
-        SettingKind.Server => "Enter connect now · u opens at start · e rename · d remove",
-        SettingKind.Text when _model.CanPickColor => "Enter type #RRGGBB (empty: the theme's colour) · p or click ✎ open the colour picker",
-        SettingKind.Text => "Enter edit",
-        SettingKind.Action => "Enter add a server",
-        SettingKind.Info or SettingKind.Heading or null => "",
-        _ => "←→ or Enter change",
+        SettingKind.Server => [("Enter", "connect now"), ("u", "opens at start"), ("e", "rename"), ("d", "remove")],
+        SettingKind.Text when _model.CanPickColor => [("Enter", "type #RRGGBB (empty: the theme's colour)"), ("p or click ✎", "open the colour picker")],
+        SettingKind.Text => [("Enter", "edit")],
+        SettingKind.Action => [("Enter", "add a server")],
+        SettingKind.Info or SettingKind.Heading or null => [],
+        _ => [("←→ or Enter", "change")],
     };
 
     /// <summary>Handles a key. False when it is not one of the page's (the main window then ignores it as well while the page is open).</summary>

@@ -218,9 +218,7 @@ public sealed class MainWindow : Window
         _library.Albums.ContextRequested += OnAlbumContext;
         _recent.Albums.ContextRequested += OnAlbumContext;
         _library.GroupContextRequested += OnGroupContext;
-        _search.List.ContextRequested += (item, at) => OpenMenu(
-            [new MenuEntry("Play", _search.List.ActivateSelected), new MenuEntry("Enqueue", () => _search.List.RequestQueue(QueueAction.Add))],
-            at);
+        _search.List.ContextRequested += OnSearchContext;
         _footer.SourceName = _info.SourceName = SourceOf;
         _info.Player = player;
         _footer.CoverClicked += OpenInfo;
@@ -1279,8 +1277,72 @@ public sealed class MainWindow : Window
         var from = Math.Max(0, index);
         IReadOnlyList<CatalogTrack> chosen = index >= 0 ? new[] { tracks[index] } : tracks;
         OpenMenu(
-            WithInfo([new MenuEntry("Play", () => Play(album, tracks, from)), new MenuEntry("Enqueue", () => OnQueueRequested(QueueAction.Add, album, chosen, from))], album),
+            WithInfo([new MenuEntry("Play", () => Play(album, tracks, from)), new MenuEntry("Enqueue", () => OnQueueRequested(QueueAction.Add, album, chosen, from)), .. SimilarEntries(album, chosen, at)], album),
             at);
+    }
+
+    /// <summary>"Play similar…" and "Enqueue similar…": each opens a second menu, where the first was, asking how many tracks.</summary>
+    private IReadOnlyList<MenuEntry> SimilarEntries(CatalogAlbum album, IReadOnlyList<CatalogTrack> seed, System.Drawing.Point at)
+    {
+        MenuEntry Entry(string label, bool replace) => new(label, () => OpenMenu(
+            [.. GenresTab.Sizes.Select(n => new MenuEntry($"{n} tracks", () => AddSimilar(album, seed, n, replace)))],
+            at));
+
+        return [Entry("Play similar…", true), Entry("Enqueue similar…", false)];
+    }
+
+    /// <summary>
+    /// Random tracks like <paramref name="seed"/> (one track, or an album's): they replace the queue and start playing, or
+    /// are appended to it. Replacing does not ask first: the menu said "Play".
+    /// </summary>
+    private void AddSimilar(CatalogAlbum album, IReadOnlyList<CatalogTrack> seed, int count, bool replace)
+    {
+        if (_catalog.Current is not { } catalog || seed.Count == 0)
+        {
+            Notice("The tracks are still loading.");
+            return;
+        }
+
+        if (!SimilarTracks.HasGenre(catalog, seed))
+        {
+            Notice("The selection has no genre, so there is nothing to match.");
+            return;
+        }
+
+        // When appending, what is queued is not picked again; a queue about to be replaced rules nothing out.
+        var queued = replace ? [] : _player.Queue.Select(q => q.Track.Id);
+        var items = SimilarTracks.Pick(catalog, album.Year, seed, count, queued, Random.Shared);
+        if (items.Count == 0)
+        {
+            Notice(replace ? "No similar tracks." : "No similar tracks that are not queued already.");
+            return;
+        }
+
+        _player.PlayTracks(items, replace);
+    }
+
+    /// <summary>The menu of a search result: an album or a track can also be matched with similar tracks.</summary>
+    private void OnSearchContext(ResultItem item, System.Drawing.Point at)
+    {
+        var entries = new List<MenuEntry>
+        {
+            new("Play", _search.List.ActivateSelected),
+            new("Enqueue", () => _search.List.RequestQueue(QueueAction.Add)),
+        };
+        if (_catalog.Current is { } catalog)
+        {
+            if (item.Data is CatalogAlbum album)
+            {
+                entries.AddRange(SimilarEntries(album, catalog.TracksOf(album.Id), at));
+            }
+            else if (item.Data is CatalogTrack track && catalog.Album(track.AlbumId) is { } owner)
+            {
+                // The library's own row of the track, when there is one: a hit from the server may carry less.
+                entries.AddRange(SimilarEntries(owner, [catalog.TracksOf(owner.Id).FirstOrDefault(t => t.Id == track.Id) ?? track], at));
+            }
+        }
+
+        OpenMenu(entries, at);
     }
 
     /// <summary>The entries of an album's menu, with Info after them when the lookups are available.</summary>

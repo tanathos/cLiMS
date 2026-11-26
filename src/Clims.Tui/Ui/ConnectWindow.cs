@@ -222,9 +222,9 @@ public sealed class ConnectWindow : Window
             var other = new Attribute(Theme.Fg, Theme.BgAlt);
             Put(FieldX, ButtonY, ConnectLabel, button);
             Put(FieldX + ConnectLabel.Length + 2, ButtonY, EscapeLabel, other);
-            Put(LabelX, ButtonY + 2, _w._allowDemo
-                ? "Tab next field · Enter connect · Esc demo mode (nothing is saved) · Ctrl+Q quit"
-                : "Tab next field · Enter connect · Esc keep the current server", dim);
+            PutLegend(LabelX, ButtonY + 2, Math.Max(0, W - LabelX), _w._allowDemo
+                ? [("Tab", "next field"), ("Enter", "connect"), ("Esc", "demo mode (nothing is saved)"), ("Ctrl+Q", "quit")]
+                : [("Tab", "next field"), ("Enter", "connect"), ("Esc", "keep the current server")], Theme.Bg);
         }
 
         protected override bool OnMouseEvent(Mouse mouse)

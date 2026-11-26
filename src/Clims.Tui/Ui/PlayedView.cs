@@ -296,7 +296,10 @@ public sealed partial class PlayedView : PaintView
 
         var top = DetailTop;
         FillRow(top, 0, W, Theme.Normal);
-        Put(1, top, Clip($"─ Plays of {_detailTitle} ({_detail.Count}) · Esc close · Tab switch · Enter play · t opens ", Math.Max(1, W - 3)).PadRight(Math.Max(0, W - 3), '─'), Theme.Dim);
+        var width = Math.Max(0, W - 3);
+        var end = Put(1, top, Clip($"─ Plays of {_detailTitle} ({_detail.Count}) · ", width), Theme.Dim);
+        end = PutLegend(end, top, Math.Max(0, 1 + width - end), [("Esc", "close"), ("Tab", "switch"), ("Enter", "play"), ("t", "opens")], Theme.Bg);
+        Put(end, top, (" " + new string('─', width))[..Math.Max(0, 1 + width - end)], Theme.Dim);
         var rows = DetailRows;
         _detailSelected = Math.Clamp(_detailSelected, 0, Math.Max(0, _detail.Count - 1));
         _detailOffset = Math.Clamp(_detailOffset, 0, Math.Max(0, _detail.Count - rows));
